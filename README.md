@@ -9,6 +9,8 @@ Implemented so far, against the architecture epic
   shared packages and local development environment.
 - [#2](https://github.com/pmhood/level-zero/issues/2) — the canonical `Project` and
   `Entity` domain model that every Workbench tool reads and writes.
+- [#3](https://github.com/pmhood/level-zero/issues/3) — entity relationships and
+  creative lineage, including idea promotion and generation provenance.
 
 ## Requirements
 
@@ -93,10 +95,16 @@ look. A new tool is a new _view_ over these, never a new store.
 
 ```text
 Project ──owns──> Entity (type, name, description, status, tags, data, currentVersionId)
+                    │
+                    └──EntityRelationship(relation, metadata)──> Entity
 ```
 
 Entity types: `idea`, `design_pillar`, `character`, `location`, `faction`,
 `mechanic`, `system`, `asset_reference`, `scene`, `document`, `prototype`, `build`.
+
+Relations: `contains`, `references`, `inspired_by`, `generated_from`,
+`derived_from`, `promoted_to`, `depends_on`, `implements`, `appears_in`,
+`belongs_to`, `replaces`.
 
 Rules that hold across the codebase:
 
@@ -111,6 +119,16 @@ Rules that hold across the codebase:
   probe for the existence of rows it may not see.
 - **Archive, never delete.** Archiving flips a status and hides the entity from
   listings. The row stays, so relationships and lineage that point at it survive.
+- **Relationships are rows, not foreign keys.** A character links to a faction, a
+  location, a mechanic and an asset reference without any of them being copied or
+  owned. Edges are directional and read source-first: `A contains B`.
+- **Lineage is history, not opinion.** `inspired_by`, `generated_from`,
+  `derived_from`, `promoted_to` and `replaces` record how something came to
+  exist, so they cannot be unlinked (409). Structural relations can be edited
+  freely.
+- **Promotion is additive.** Promoting an idea into a mechanic creates a new
+  entity and a `promoted_to` edge. The idea is untouched — it is still an idea,
+  and it can be promoted more than once.
 - **Domain logic lives in the domain.** `EntityService` and `ProjectService` are
   plain classes over storage ports. Controllers call them; nothing calls a
   repository or Drizzle directly, and no page component contains a rule.
@@ -138,6 +156,11 @@ Listing accepts `type`, `status`, `tag` (repeated or comma-separated),
 `search`, `includeArchived`, `limit` and `offset`, and returns
 `{ items, total }` so a UI can page without losing the count. Tag matching is
 case-insensitive; `PATCH` replaces `data` wholesale so a field can be removed.
+
+The relationships endpoint returns `{ entity, outgoing, incoming }`, with the
+entity on the far end of every edge resolved and its status included — archived
+neighbours stay visible rather than vanishing from the graph. It accepts
+`direction` (`outgoing`/`incoming`/`both`) and `relation` filters.
 
 Domain errors map to HTTP in one place: `NotFoundError` → 404,
 `ValidationError` → 400, `ConflictError` → 409, each with a stable `error` code
@@ -185,8 +208,22 @@ The Postgres probe reads a migrated table, so an un-migrated database reports
 4. Add UI under `apps/web/src`, reusing `@level-zero/ui` primitives.
 
 Before adding a table for a new kind of game object, check whether it is an
-`Entity` type instead. Duplicating entity identity in a feature-specific store is
-the thing this architecture exists to prevent.
+`Entity` type instead, and whether the link you need is an `EntityRelationship`
+rather than a foreign key. Duplicating entity identity in a feature-specific
+store is the thing this architecture exists to prevent.
+
+### Guarantees the database enforces
+
+Some rules are constraints rather than code, so they hold even for a caller that
+bypasses the services:
+
+- Relationship endpoints are referenced by `(entity_id, project_id)`, so an edge
+  joining two projects **cannot be written at all**.
+- Those references are `ON DELETE RESTRICT`, so an entity that lineage points at
+  cannot be deleted out from under its history. Deleting a whole project still
+  works, because the cascade removes the edges first.
+- A unique constraint on `(source, target, relation)` stops duplicate edges, and
+  a check constraint stops an entity relating to itself.
 
 > **NestJS gotcha:** constructor injection relies on `design:paramtypes` metadata,
 > which TypeScript only emits for _value_ imports. `@typescript-eslint/consistent-type-imports`

@@ -5,6 +5,13 @@ import {
   type EntityRepository,
 } from '../entity/entity-repository';
 import { type Project } from '../project/project';
+import { type EntityRelationship } from '../relationship/entity-relationship';
+import {
+  type EntityRelationshipRepository,
+  type RelationshipListFilter,
+  type RelationshipPage,
+} from '../relationship/entity-relationship-repository';
+import { type RelationType } from '../relationship/relation-type';
 import {
   type ProjectListFilter,
   type ProjectPage,
@@ -132,5 +139,75 @@ export class InMemoryEntityRepository implements EntityRepository {
     }
     this.rows.set(entity.id, structuredClone(entity));
     return structuredClone(entity);
+  }
+}
+
+/** In-memory `EntityRelationshipRepository` for tests. */
+export class InMemoryEntityRelationshipRepository implements EntityRelationshipRepository {
+  private readonly rows = new Map<string, EntityRelationship>();
+
+  constructor(seed: readonly EntityRelationship[] = []) {
+    for (const relationship of seed) this.rows.set(relationship.id, structuredClone(relationship));
+  }
+
+  async insert(relationship: EntityRelationship): Promise<EntityRelationship> {
+    this.rows.set(relationship.id, structuredClone(relationship));
+    return structuredClone(relationship);
+  }
+
+  async findById(projectId: string, relationshipId: string): Promise<EntityRelationship | null> {
+    const relationship = this.rows.get(relationshipId);
+    if (!relationship || relationship.projectId !== projectId) return null;
+    return structuredClone(relationship);
+  }
+
+  async listForEntity(
+    projectId: string,
+    entityId: string,
+    filter: RelationshipListFilter,
+  ): Promise<RelationshipPage> {
+    const direction = filter.direction ?? 'both';
+
+    const matches = [...this.rows.values()]
+      .filter((edge) => edge.projectId === projectId)
+      .filter((edge) => {
+        if (direction === 'outgoing') return edge.sourceEntityId === entityId;
+        if (direction === 'incoming') return edge.targetEntityId === entityId;
+        return edge.sourceEntityId === entityId || edge.targetEntityId === entityId;
+      })
+      .filter((edge) => !filter.relations || filter.relations.includes(edge.relation))
+      .sort(byNewest);
+
+    const offset = filter.offset ?? 0;
+    const limit = filter.limit ?? matches.length;
+
+    return {
+      items: matches.slice(offset, offset + limit).map((edge) => structuredClone(edge)),
+      total: matches.length,
+    };
+  }
+
+  async findDuplicate(
+    projectId: string,
+    sourceEntityId: string,
+    targetEntityId: string,
+    relation: RelationType,
+  ): Promise<EntityRelationship | null> {
+    const match = [...this.rows.values()].find(
+      (edge) =>
+        edge.projectId === projectId &&
+        edge.sourceEntityId === sourceEntityId &&
+        edge.targetEntityId === targetEntityId &&
+        edge.relation === relation,
+    );
+    return match ? structuredClone(match) : null;
+  }
+
+  async delete(projectId: string, relationshipId: string): Promise<void> {
+    const relationship = this.rows.get(relationshipId);
+    if (!relationship || relationship.projectId !== projectId) {
+      throw new NotFoundError('Relationship', relationshipId);
+    }
+    this.rows.delete(relationshipId);
   }
 }

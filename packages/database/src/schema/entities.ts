@@ -1,6 +1,6 @@
 import { ENTITY_STATUSES, ENTITY_TYPES } from '@level-zero/domain';
 import { sql } from 'drizzle-orm';
-import { index, jsonb, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { index, jsonb, pgEnum, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 
 import { projects } from './projects';
 
@@ -43,6 +43,10 @@ export const entities = pgTable(
     index('entities_project_status_idx').on(table.projectId, table.status),
     index('entities_project_created_at_idx').on(table.projectId, table.createdAt),
     index('entities_tags_idx').using('gin', table.tags),
+    // Lets relationship rows carry a composite foreign key on
+    // (entity_id, project_id), which is what makes a cross-project edge
+    // impossible to write rather than merely discouraged.
+    unique('entities_id_project_id_key').on(table.id, table.projectId),
   ],
 );
 

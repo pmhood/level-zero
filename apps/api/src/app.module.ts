@@ -7,6 +7,7 @@ import { HealthModule } from './health/health.module';
 import { DatabaseModule } from './infrastructure/database.module';
 import { RedisModule } from './infrastructure/redis.module';
 import { ProjectsModule } from './projects/projects.module';
+import { RelationshipsModule } from './relationships/relationships.module';
 
 /**
  * Root of the modular monolith.
@@ -24,6 +25,7 @@ import { ProjectsModule } from './projects/projects.module';
     HealthModule,
     ProjectsModule,
     EntitiesModule,
+    RelationshipsModule,
   ],
 })
 export class AppModule {}

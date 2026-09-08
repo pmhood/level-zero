@@ -1,1 +1,5 @@
-export { InMemoryEntityRepository, InMemoryProjectRepository } from './in-memory-repositories';
+export {
+  InMemoryEntityRelationshipRepository,
+  InMemoryEntityRepository,
+  InMemoryProjectRepository,
+} from './in-memory-repositories';

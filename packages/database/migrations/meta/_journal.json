@@ -15,6 +15,13 @@
       "when": 1788908011937,
       "tag": "0001_projects_and_entities",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788910126988,
+      "tag": "0002_entity_relationships",
+      "breakpoints": true
     }
   ]
 }

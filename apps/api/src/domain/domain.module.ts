@@ -1,13 +1,17 @@
 import {
+  DrizzleEntityRelationshipRepository,
   DrizzleEntityRepository,
   DrizzleProjectRepository,
   type DatabaseClient,
 } from '@level-zero/database';
 import {
+  EntityRelationshipService,
   EntityService,
+  LineageService,
   ProjectService,
   systemClock,
   uuidIdGenerator,
+  type EntityRelationshipRepository,
   type EntityRepository,
   type EntityServiceDeps,
   type ProjectRepository,
@@ -20,6 +24,7 @@ import { DATABASE_CLIENT } from '../infrastructure/database.module';
 
 export const PROJECT_REPOSITORY = Symbol('PROJECT_REPOSITORY');
 export const ENTITY_REPOSITORY = Symbol('ENTITY_REPOSITORY');
+export const RELATIONSHIP_REPOSITORY = Symbol('RELATIONSHIP_REPOSITORY');
 export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
 
 /**
@@ -62,8 +67,40 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
         deps: EntityServiceDeps,
       ): EntityService => new EntityService(entities, projects, deps),
     },
+    {
+      provide: RELATIONSHIP_REPOSITORY,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: DatabaseClient): EntityRelationshipRepository =>
+        new DrizzleEntityRelationshipRepository(client.db),
+    },
+    {
+      provide: EntityRelationshipService,
+      inject: [RELATIONSHIP_REPOSITORY, ENTITY_REPOSITORY, DOMAIN_DEPS],
+      useFactory: (
+        relationships: EntityRelationshipRepository,
+        entities: EntityRepository,
+        deps: EntityServiceDeps,
+      ): EntityRelationshipService => new EntityRelationshipService(relationships, entities, deps),
+    },
+    {
+      provide: LineageService,
+      inject: [EntityService, EntityRelationshipService],
+      useFactory: (
+        entities: EntityService,
+        relationships: EntityRelationshipService,
+      ): LineageService => new LineageService(entities, relationships),
+    },
     { provide: APP_FILTER, useClass: DomainExceptionFilter },
   ],
-  exports: [ProjectService, EntityService, PROJECT_REPOSITORY, ENTITY_REPOSITORY, DOMAIN_DEPS],
+  exports: [
+    ProjectService,
+    EntityService,
+    EntityRelationshipService,
+    LineageService,
+    PROJECT_REPOSITORY,
+    ENTITY_REPOSITORY,
+    RELATIONSHIP_REPOSITORY,
+    DOMAIN_DEPS,
+  ],
 })
 export class DomainModule {}

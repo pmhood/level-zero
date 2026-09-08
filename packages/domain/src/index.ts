@@ -64,3 +64,35 @@ export {
   type EntityRepository,
 } from './entity/entity-repository';
 export { EntityService, type EntityServiceDeps } from './entity/entity-service';
+
+export {
+  LINEAGE_RELATION_TYPES,
+  RELATION_TYPES,
+  isLineageRelation,
+  isRelationType,
+  type LineageRelationType,
+  type RelationType,
+} from './relationship/relation-type';
+export {
+  createEntityRelationship,
+  type CreateEntityRelationshipInput,
+  type EntityRelationship,
+} from './relationship/entity-relationship';
+export {
+  type EntityRelationshipRepository,
+  type RelationshipDirection,
+  type RelationshipListFilter,
+  type RelationshipPage,
+} from './relationship/entity-relationship-repository';
+export {
+  EntityRelationshipService,
+  type EntityNeighborhood,
+  type LinkInput,
+  type NeighborEdge,
+  type RelationshipServiceDeps,
+} from './relationship/entity-relationship-service';
+export {
+  LineageService,
+  type PromoteEntityInput,
+  type PromotionResult,
+} from './relationship/lineage-service';

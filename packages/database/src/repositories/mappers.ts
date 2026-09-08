@@ -1,6 +1,10 @@
-import { type Entity, type Project } from '@level-zero/domain';
+import { type Entity, type EntityRelationship, type Project } from '@level-zero/domain';
 
 import { type EntityRow, type NewEntityRow } from '../schema/entities';
+import {
+  type EntityRelationshipRow,
+  type NewEntityRelationshipRow,
+} from '../schema/entity-relationships';
 import { type NewProjectRow, type ProjectRow } from '../schema/projects';
 
 export function toProject(row: ProjectRow): Project {
@@ -58,6 +62,34 @@ export function toEntityRow(entity: Entity): NewEntityRow {
     createdAt: entity.createdAt,
     updatedAt: entity.updatedAt,
     archivedAt: entity.archivedAt,
+  };
+}
+
+export function toEntityRelationship(row: EntityRelationshipRow): EntityRelationship {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    sourceEntityId: row.sourceEntityId,
+    targetEntityId: row.targetEntityId,
+    relation: row.relation,
+    metadata: row.metadata,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export function toEntityRelationshipRow(
+  relationship: EntityRelationship,
+): NewEntityRelationshipRow {
+  return {
+    id: relationship.id,
+    projectId: relationship.projectId,
+    sourceEntityId: relationship.sourceEntityId,
+    targetEntityId: relationship.targetEntityId,
+    relation: relationship.relation,
+    metadata: relationship.metadata,
+    createdAt: relationship.createdAt,
+    updatedAt: relationship.updatedAt,
   };
 }
 
