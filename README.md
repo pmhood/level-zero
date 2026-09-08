@@ -2,10 +2,13 @@
 
 Workbench — a connected game-development workspace, built as a **modular monolith**.
 
-This repository is the bootstrap slice ([#13](https://github.com/pmhood/level-zero/issues/13)):
-the monorepo, the API, the worker, the shared packages, and the local development
-environment that the rest of the architecture ([#1](https://github.com/pmhood/level-zero/issues/1))
-is built on.
+Implemented so far, against the architecture epic
+([#1](https://github.com/pmhood/level-zero/issues/1)):
+
+- [#13](https://github.com/pmhood/level-zero/issues/13) — the monorepo, API, worker,
+  shared packages and local development environment.
+- [#2](https://github.com/pmhood/level-zero/issues/2) — the canonical `Project` and
+  `Entity` domain model that every Workbench tool reads and writes.
 
 ## Requirements
 
@@ -55,6 +58,11 @@ setup is visible immediately.
 
 Scope a command to one workspace with `pnpm --filter @level-zero/api <script>`.
 
+Most tests are pure unit tests, but the repository adapters are covered by
+integration tests against real Postgres, so `pnpm test` expects
+`pnpm infra:up && pnpm db:migrate` to have run first. CI does the same against
+service containers.
+
 ## Layout
 
 ```text
@@ -64,14 +72,76 @@ apps/
   worker/     Independently executable background process
 
 packages/
-  domain/     Framework-free domain model and shared kernel
-  database/   Drizzle schema, migrations, Postgres + Redis clients
+  domain/     Framework-free domain model, services and storage ports
+  database/   Drizzle schema, migrations, repository adapters, Postgres + Redis clients
   ai/         Capability-based AI contracts; vendor SDKs live behind them
   ui/         Shared Tailwind + Radix primitives (consumed as source)
   config/     Environment schemas and validation
 
 infra/        Docker Compose for local Postgres and Redis
 ```
+
+Dependencies point one way: `apps/*` → `packages/database` → `packages/domain`. The
+domain defines the storage _ports_; the database package provides the Postgres
+adapters. Nothing points back into an app.
+
+## The domain model
+
+A project is a graph of **canonical entities**. A character, a mechanic, a location
+and a loose idea are all `Entity` rows: one identity, one lifecycle, one place to
+look. A new tool is a new _view_ over these, never a new store.
+
+```text
+Project ──owns──> Entity (type, name, description, status, tags, data, currentVersionId)
+```
+
+Entity types: `idea`, `design_pillar`, `character`, `location`, `faction`,
+`mechanic`, `system`, `asset_reference`, `scene`, `document`, `prototype`, `build`.
+
+Rules that hold across the codebase:
+
+- **One table, many types.** Type-specific fields live in `data` (JSONB), so an
+  early experiment can change shape without a migration. Add a type-specific
+  _table_ only when a field needs constraints or indexes that JSONB cannot give.
+- **Assets and generations are not entities.** `asset_reference` is an entity that
+  _points at_ an asset; the asset itself is a separate concept (issue #5).
+- **Project scoping is structural.** Every repository method takes `projectId`, and
+  every statement carries it — including lookups by primary key. Reading another
+  project's entity reports "not found" rather than "forbidden", so a caller cannot
+  probe for the existence of rows it may not see.
+- **Archive, never delete.** Archiving flips a status and hides the entity from
+  listings. The row stays, so relationships and lineage that point at it survive.
+- **Domain logic lives in the domain.** `EntityService` and `ProjectService` are
+  plain classes over storage ports. Controllers call them; nothing calls a
+  repository or Drizzle directly, and no page component contains a rule.
+
+`@level-zero/domain/testing` ships in-memory repositories so services and
+controllers can be tested without a database. The Postgres adapters are covered
+separately by integration tests against real Postgres.
+
+### API
+
+| Endpoint                                                                  | Purpose                                               |
+| ------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `POST   /api/projects`                                                    | Create a project                                      |
+| `GET    /api/projects`                                                    | List projects (`status`, `search`, `limit`, `offset`) |
+| `GET    /api/projects/:projectId`                                         | Read a project                                        |
+| `PATCH  /api/projects/:projectId`                                         | Update name/description                               |
+| `POST   /api/projects/:projectId/archive` · `/restore`                    | Change project state                                  |
+| `POST   /api/projects/:projectId/entities`                                | Create an entity                                      |
+| `GET    /api/projects/:projectId/entities`                                | List/filter entities                                  |
+| `GET    /api/projects/:projectId/entities/:entityId`                      | Read an entity                                        |
+| `PATCH  /api/projects/:projectId/entities/:entityId`                      | Update an entity                                      |
+| `POST   /api/projects/:projectId/entities/:entityId/archive` · `/restore` | Change entity state                                   |
+
+Listing accepts `type`, `status`, `tag` (repeated or comma-separated),
+`search`, `includeArchived`, `limit` and `offset`, and returns
+`{ items, total }` so a UI can page without losing the count. Tag matching is
+case-insensitive; `PATCH` replaces `data` wholesale so a field can be removed.
+
+Domain errors map to HTTP in one place: `NotFoundError` → 404,
+`ValidationError` → 400, `ConflictError` → 409, each with a stable `error` code
+and structured `details`.
 
 ## Architecture rules
 
@@ -106,10 +176,17 @@ The Postgres probe reads a migrated table, so an un-migrated database reports
 
 ## Adding a feature module
 
-1. Put the model and rules in `packages/domain` (no framework imports).
-2. Add tables to `packages/database/src/schema`, then `pnpm db:generate`.
-3. Add a NestJS module under `apps/api/src`, and register it in `app.module.ts`.
+1. Put the model and rules in `packages/domain` (no framework imports), including
+   the storage port the feature needs.
+2. Add tables to `packages/database/src/schema` and an adapter under
+   `src/repositories`, then `pnpm db:generate`.
+3. Wire the service in `apps/api/src/domain/domain.module.ts` and add a NestJS
+   module with its controller, registered in `app.module.ts`.
 4. Add UI under `apps/web/src`, reusing `@level-zero/ui` primitives.
+
+Before adding a table for a new kind of game object, check whether it is an
+`Entity` type instead. Duplicating entity identity in a feature-specific store is
+the thing this architecture exists to prevent.
 
 > **NestJS gotcha:** constructor injection relies on `design:paramtypes` metadata,
 > which TypeScript only emits for _value_ imports. `@typescript-eslint/consistent-type-imports`

@@ -8,6 +8,13 @@
       "when": 1788901781263,
       "tag": "0000_bootstrap_app_metadata",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788908011937,
+      "tag": "0001_projects_and_entities",
+      "breakpoints": true
     }
   ]
 }

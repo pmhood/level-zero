@@ -3,10 +3,10 @@ import { Card, CardDescription, CardHeader, CardTitle } from '@level-zero/ui';
 import { SystemStatus } from '@/components/system-status';
 
 const nextUp = [
-  { issue: '#2', title: 'Canonical Project and Entity domain model' },
   { issue: '#3', title: 'Entity relationships and creative lineage' },
   { issue: '#4', title: 'Entity versioning and creative branching' },
   { issue: '#5', title: 'Asset model and object storage' },
+  { issue: '#11', title: 'First Project and Idea Lab vertical slice' },
 ];
 
 export default function HomePage() {

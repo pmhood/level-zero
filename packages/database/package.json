@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@level-zero/config": "workspace:*",
+    "@level-zero/domain": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "ioredis": "^5.11.1",
     "pg": "^8.23.0"
