@@ -90,6 +90,62 @@ export function createEntity(input: CreateEntityInput, deps: EntityFactoryDeps):
 }
 
 /**
+ * The part of an entity that is *creative content* rather than identity.
+ *
+ * Versions store one of these. Ids, project ownership and timestamps are the
+ * entity's identity and do not belong in a snapshot.
+ */
+export interface EntitySnapshot {
+  name: string;
+  description: string | null;
+  status: EntityStatus;
+  tags: string[];
+  data: Record<string, unknown>;
+}
+
+/** Captures the entity's current content, deep-copied so it cannot drift. */
+export function snapshotEntity(entity: Entity): EntitySnapshot {
+  return {
+    name: entity.name,
+    description: entity.description,
+    status: entity.status,
+    tags: [...entity.tags],
+    data: structuredClone(entity.data),
+  };
+}
+
+/**
+ * Returns a new entity carrying `snapshot`'s content.
+ *
+ * Used by restore, branch and promote. Identity, timestamps and
+ * `currentVersionId` are the entity's own and are not overwritten here.
+ */
+export function applyEntitySnapshot(
+  entity: Entity,
+  snapshot: EntitySnapshot,
+  deps: { clock: Clock },
+): Entity {
+  return {
+    ...entity,
+    name: requireText('name', snapshot.name, MAX_ENTITY_NAME_LENGTH),
+    description: optionalText('description', snapshot.description, MAX_ENTITY_DESCRIPTION_LENGTH),
+    status: requireOneOf('status', snapshot.status, ['draft', 'active'] as const),
+    tags: normalizeTags(snapshot.tags),
+    data: requireJsonObject('data', snapshot.data),
+    updatedAt: deps.clock.now(),
+  };
+}
+
+/** Moves the entity's pointer to the version that is now current. */
+export function withCurrentVersion(
+  entity: Entity,
+  versionId: string,
+  deps: { clock: Clock },
+): Entity {
+  return { ...entity, currentVersionId: versionId, updatedAt: deps.clock.now() };
+}
+
+/**
  * Returns a new entity with the patch applied; the input is never mutated.
  *
  * `data` is replaced wholesale rather than deep-merged, so a caller can remove

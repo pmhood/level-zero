@@ -51,10 +51,14 @@ export {
   MAX_ENTITY_NAME_LENGTH,
   applyEntityUpdate,
   archiveEntity,
+  applyEntitySnapshot,
   createEntity,
   restoreEntity,
+  snapshotEntity,
+  withCurrentVersion,
   type CreateEntityInput,
   type Entity,
+  type EntitySnapshot,
   type EntityStatus,
   type UpdateEntityInput,
 } from './entity/entity';
@@ -96,3 +100,32 @@ export {
   type PromoteEntityInput,
   type PromotionResult,
 } from './relationship/lineage-service';
+
+export {
+  DEFAULT_BRANCH,
+  MAX_BRANCH_NAME_LENGTH,
+  VERSION_REASONS,
+  createEntityVersion,
+  type CreateEntityVersionInput,
+  type EntityVersion,
+  type VersionReason,
+} from './version/entity-version';
+export {
+  type EntityVersionRepository,
+  type VersionListFilter,
+  type VersionPage,
+} from './version/entity-version-repository';
+export {
+  compareVersions,
+  diffSnapshots,
+  type FieldChange,
+  type VersionComparison,
+} from './version/compare';
+export {
+  EntityVersionService,
+  type BranchInput,
+  type CommitVersionInput,
+  type EntityHistory,
+  type PromoteVersionInput,
+  type VersionServiceDeps,
+} from './version/entity-version-service';

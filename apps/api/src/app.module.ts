@@ -8,6 +8,7 @@ import { DatabaseModule } from './infrastructure/database.module';
 import { RedisModule } from './infrastructure/redis.module';
 import { ProjectsModule } from './projects/projects.module';
 import { RelationshipsModule } from './relationships/relationships.module';
+import { VersionsModule } from './versions/versions.module';
 
 /**
  * Root of the modular monolith.
@@ -26,6 +27,7 @@ import { RelationshipsModule } from './relationships/relationships.module';
     ProjectsModule,
     EntitiesModule,
     RelationshipsModule,
+    VersionsModule,
   ],
 })
 export class AppModule {}

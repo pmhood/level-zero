@@ -17,6 +17,12 @@ import {
   type ProjectPage,
   type ProjectRepository,
 } from '../project/project-repository';
+import { type EntityVersion } from '../version/entity-version';
+import {
+  type EntityVersionRepository,
+  type VersionListFilter,
+  type VersionPage,
+} from '../version/entity-version-repository';
 import { NotFoundError } from '../shared/errors';
 
 /** Newest first, with the id as a stable tiebreaker. */
@@ -209,5 +215,74 @@ export class InMemoryEntityRelationshipRepository implements EntityRelationshipR
       throw new NotFoundError('Relationship', relationshipId);
     }
     this.rows.delete(relationshipId);
+  }
+}
+
+/** In-memory `EntityVersionRepository` for tests. Insert-only, like the real one. */
+export class InMemoryEntityVersionRepository implements EntityVersionRepository {
+  private readonly rows = new Map<string, EntityVersion>();
+
+  constructor(seed: readonly EntityVersion[] = []) {
+    for (const version of seed) this.rows.set(version.id, structuredClone(version));
+  }
+
+  async insert(version: EntityVersion): Promise<EntityVersion> {
+    this.rows.set(version.id, structuredClone(version));
+    return structuredClone(version);
+  }
+
+  async findById(projectId: string, versionId: string): Promise<EntityVersion | null> {
+    const version = this.rows.get(versionId);
+    if (!version || version.projectId !== projectId) return null;
+    return structuredClone(version);
+  }
+
+  async listForEntity(
+    projectId: string,
+    entityId: string,
+    filter: VersionListFilter,
+  ): Promise<VersionPage> {
+    const matches = this.forEntity(projectId, entityId)
+      .filter((version) => !filter.branchName || version.branchName === filter.branchName)
+      .sort((a, b) => b.versionNumber - a.versionNumber);
+
+    const offset = filter.offset ?? 0;
+    const limit = filter.limit ?? matches.length;
+
+    return {
+      items: matches.slice(offset, offset + limit).map((version) => structuredClone(version)),
+      total: matches.length,
+    };
+  }
+
+  async latestVersionNumber(projectId: string, entityId: string): Promise<number> {
+    return this.forEntity(projectId, entityId).reduce(
+      (highest, version) => Math.max(highest, version.versionNumber),
+      0,
+    );
+  }
+
+  async findBranchTip(
+    projectId: string,
+    entityId: string,
+    branchName: string,
+  ): Promise<EntityVersion | null> {
+    const tip = this.forEntity(projectId, entityId)
+      .filter((version) => version.branchName === branchName)
+      .sort((a, b) => b.versionNumber - a.versionNumber)[0];
+
+    return tip ? structuredClone(tip) : null;
+  }
+
+  async listBranches(projectId: string, entityId: string): Promise<string[]> {
+    return [
+      ...new Set(this.forEntity(projectId, entityId).map((version) => version.branchName)),
+    ].sort();
+  }
+
+  private forEntity(projectId: string, entityId: string): EntityVersion[] {
+    return [...this.rows.values()].filter(
+      (version) => version.projectId === projectId && version.entityId === entityId,
+    );
   }
 }

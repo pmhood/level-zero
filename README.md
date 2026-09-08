@@ -11,6 +11,8 @@ Implemented so far, against the architecture epic
   `Entity` domain model that every Workbench tool reads and writes.
 - [#3](https://github.com/pmhood/level-zero/issues/3) — entity relationships and
   creative lineage, including idea promotion and generation provenance.
+- [#4](https://github.com/pmhood/level-zero/issues/4) — entity versioning and
+  creative branching: commit, compare, restore, branch and promote.
 
 ## Requirements
 
@@ -96,7 +98,9 @@ look. A new tool is a new _view_ over these, never a new store.
 ```text
 Project ──owns──> Entity (type, name, description, status, tags, data, currentVersionId)
                     │
-                    └──EntityRelationship(relation, metadata)──> Entity
+                    ├──EntityRelationship(relation, metadata)──> Entity
+                    │
+                    └──EntityVersion(number, parent, branch, snapshot, reason)
 ```
 
 Entity types: `idea`, `design_pillar`, `character`, `location`, `faction`,
@@ -129,6 +133,17 @@ Rules that hold across the codebase:
 - **Promotion is additive.** Promoting an idea into a mechanic creates a new
   entity and a `promoted_to` edge. The idea is untouched — it is still an idea,
   and it can be promoted more than once.
+- **The entity is the working copy; versions are what you chose to keep.**
+  Editing an entity does not write a version, so autosave and undo (issue #14)
+  cannot flood history. `commit` records the current content;
+  `Entity.currentVersionId` is the pointer, like a branch HEAD.
+- **History is append-only.** Restore, branch and promote all _add_ a version.
+  Restoring version 1 creates a new version whose parent is whatever was
+  current, so everything made after version 1 is still there and still
+  reachable. Nothing rewrites or removes a version row.
+- **Versions form a DAG.** `parentVersionId` is the edge, `branchName` labels the
+  line of work, and `versionNumber` orders them within the entity — enough to
+  draw a branch graph without a second query.
 - **Domain logic lives in the domain.** `EntityService` and `ProjectService` are
   plain classes over storage ports. Controllers call them; nothing calls a
   repository or Drizzle directly, and no page component contains a rule.
@@ -161,6 +176,10 @@ The relationships endpoint returns `{ entity, outgoing, incoming }`, with the
 entity on the far end of every edge resolved and its status included — archived
 neighbours stay visible rather than vanishing from the graph. It accepts
 `direction` (`outgoing`/`incoming`/`both`) and `relation` filters.
+
+The versions endpoint returns `{ entityId, currentVersionId, branches, versions,
+total }`. Comparison is field-level and looks _inside_ type-specific data, so a
+history view can say `data.drainPerSecond changed` rather than `data changed`.
 
 Domain errors map to HTTP in one place: `NotFoundError` → 404,
 `ValidationError` → 400, `ConflictError` → 409, each with a stable `error` code
@@ -224,6 +243,12 @@ bypasses the services:
   works, because the cascade removes the edges first.
 - A unique constraint on `(source, target, relation)` stops duplicate edges, and
   a check constraint stops an entity relating to itself.
+- Version rows are referenced by their children and by the entity they belong
+  to, both `ON DELETE RESTRICT`, so no piece of history can be deleted while
+  something descends from it.
+- A unique constraint on `(entity_id, version_number)` keeps numbering monotonic
+  even if two commits race: the loser fails with a 409 rather than reusing a
+  number.
 
 > **NestJS gotcha:** constructor injection relies on `design:paramtypes` metadata,
 > which TypeScript only emits for _value_ imports. `@typescript-eslint/consistent-type-imports`

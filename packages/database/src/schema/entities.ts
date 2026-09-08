@@ -1,7 +1,18 @@
 import { ENTITY_STATUSES, ENTITY_TYPES } from '@level-zero/domain';
 import { sql } from 'drizzle-orm';
-import { index, jsonb, pgEnum, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import {
+  index,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+  type AnyPgColumn,
+} from 'drizzle-orm/pg-core';
 
+import { entityVersions } from './entity-versions';
 import { projects } from './projects';
 
 export const entityTypeEnum = pgEnum('entity_type', ENTITY_TYPES);
@@ -30,8 +41,15 @@ export const entities = pgTable(
       .notNull()
       .default(sql`'{}'::text[]`),
     data: jsonb('data').$type<Record<string, unknown>>().notNull().default({}),
-    /** Populated by the entity versioning work in issue #4. */
-    currentVersionId: uuid('current_version_id'),
+    /**
+     * The entity's active version, like a branch HEAD. Null until the entity
+     * has been versioned at all.
+     */
+    // `entities` and `entity_versions` reference each other, so the return type
+    // is annotated explicitly to break TypeScript's inference cycle.
+    currentVersionId: uuid('current_version_id').references((): AnyPgColumn => entityVersions.id, {
+      onDelete: 'set null',
+    }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     archivedAt: timestamp('archived_at', { withTimezone: true }),

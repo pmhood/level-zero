@@ -1,18 +1,21 @@
 import {
   DrizzleEntityRelationshipRepository,
   DrizzleEntityRepository,
+  DrizzleEntityVersionRepository,
   DrizzleProjectRepository,
   type DatabaseClient,
 } from '@level-zero/database';
 import {
   EntityRelationshipService,
   EntityService,
+  EntityVersionService,
   LineageService,
   ProjectService,
   systemClock,
   uuidIdGenerator,
   type EntityRelationshipRepository,
   type EntityRepository,
+  type EntityVersionRepository,
   type EntityServiceDeps,
   type ProjectRepository,
 } from '@level-zero/domain';
@@ -25,6 +28,7 @@ import { DATABASE_CLIENT } from '../infrastructure/database.module';
 export const PROJECT_REPOSITORY = Symbol('PROJECT_REPOSITORY');
 export const ENTITY_REPOSITORY = Symbol('ENTITY_REPOSITORY');
 export const RELATIONSHIP_REPOSITORY = Symbol('RELATIONSHIP_REPOSITORY');
+export const VERSION_REPOSITORY = Symbol('VERSION_REPOSITORY');
 export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
 
 /**
@@ -90,16 +94,33 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
         relationships: EntityRelationshipService,
       ): LineageService => new LineageService(entities, relationships),
     },
+    {
+      provide: VERSION_REPOSITORY,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: DatabaseClient): EntityVersionRepository =>
+        new DrizzleEntityVersionRepository(client.db),
+    },
+    {
+      provide: EntityVersionService,
+      inject: [VERSION_REPOSITORY, ENTITY_REPOSITORY, DOMAIN_DEPS],
+      useFactory: (
+        versions: EntityVersionRepository,
+        entities: EntityRepository,
+        deps: EntityServiceDeps,
+      ): EntityVersionService => new EntityVersionService(versions, entities, deps),
+    },
     { provide: APP_FILTER, useClass: DomainExceptionFilter },
   ],
   exports: [
     ProjectService,
     EntityService,
     EntityRelationshipService,
+    EntityVersionService,
     LineageService,
     PROJECT_REPOSITORY,
     ENTITY_REPOSITORY,
     RELATIONSHIP_REPOSITORY,
+    VERSION_REPOSITORY,
     DOMAIN_DEPS,
   ],
 })

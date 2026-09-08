@@ -1,10 +1,16 @@
-import { type Entity, type EntityRelationship, type Project } from '@level-zero/domain';
+import {
+  type Entity,
+  type EntityRelationship,
+  type EntityVersion,
+  type Project,
+} from '@level-zero/domain';
 
 import { type EntityRow, type NewEntityRow } from '../schema/entities';
 import {
   type EntityRelationshipRow,
   type NewEntityRelationshipRow,
 } from '../schema/entity-relationships';
+import { type EntityVersionRow, type NewEntityVersionRow } from '../schema/entity-versions';
 import { type NewProjectRow, type ProjectRow } from '../schema/projects';
 
 export function toProject(row: ProjectRow): Project {
@@ -90,6 +96,38 @@ export function toEntityRelationshipRow(
     metadata: relationship.metadata,
     createdAt: relationship.createdAt,
     updatedAt: relationship.updatedAt,
+  };
+}
+
+export function toEntityVersion(row: EntityVersionRow): EntityVersion {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    entityId: row.entityId,
+    versionNumber: row.versionNumber,
+    parentVersionId: row.parentVersionId,
+    branchName: row.branchName,
+    snapshot: row.snapshot,
+    reason: row.reason,
+    metadata: row.metadata,
+    createdBy: row.createdBy,
+    createdAt: row.createdAt,
+  };
+}
+
+export function toEntityVersionRow(version: EntityVersion): NewEntityVersionRow {
+  return {
+    id: version.id,
+    projectId: version.projectId,
+    entityId: version.entityId,
+    versionNumber: version.versionNumber,
+    parentVersionId: version.parentVersionId,
+    branchName: version.branchName,
+    snapshot: version.snapshot,
+    reason: version.reason,
+    metadata: version.metadata,
+    createdBy: version.createdBy,
+    createdAt: version.createdAt,
   };
 }
 
