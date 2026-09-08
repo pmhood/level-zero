@@ -1,0 +1,10 @@
+@import 'tailwindcss';
+@import '@level-zero/ui/styles.css';
+
+/* Shared UI is compiled from source, so Tailwind has to scan it too. */
+@source '../../../../packages/ui/src';
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+}

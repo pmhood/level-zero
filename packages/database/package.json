@@ -1,0 +1,42 @@
+{
+  "name": "@level-zero/database",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Data-store access for the monorepo: Postgres schema/migrations and the Redis connection factory.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "migrations"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/scripts/migrate.ts",
+    "db:studio": "drizzle-kit studio",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@level-zero/config": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "ioredis": "^5.11.1",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@types/pg": "^8.11.10",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.23.13",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.0"
+  }
+}
