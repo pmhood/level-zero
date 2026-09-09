@@ -11,8 +11,8 @@ import { useProject } from './use-projects';
 
 /**
  * The project overview shell: sidebar, topbar and the fluid workspace, shared
- * by every project tool (spec section 5). Overview, Idea Lab and the GDD are
- * the only destinations that exist so far.
+ * by every project tool (spec section 5). Overview, Idea Lab, Mechanics and
+ * the GDD are the destinations that exist so far.
  */
 export function ProjectShell({ projectId, children }: { projectId: string; children: ReactNode }) {
   const projectQuery = useProject(projectId);

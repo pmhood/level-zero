@@ -4,6 +4,7 @@ import {
   AppSidebar,
   DocumentIcon,
   IdeaLabIcon,
+  MechanicsIcon,
   OverviewIcon,
   type SidebarNavItem,
 } from '@level-zero/ui';
@@ -43,6 +44,7 @@ export function ProjectSidebar({
   const pathname = usePathname();
   const overviewHref = `/projects/${projectId}`;
   const ideaLabHref = `/projects/${projectId}/idea-lab`;
+  const mechanicsHref = `/projects/${projectId}/mechanics`;
   const gddHref = `/projects/${projectId}/gdd`;
 
   const items: SidebarNavItem[] = [
@@ -59,6 +61,13 @@ export function ProjectSidebar({
       label: 'Idea Lab',
       icon: <IdeaLabIcon className="size-4" />,
       active: pathname?.startsWith(ideaLabHref) ?? false,
+    },
+    {
+      key: 'mechanics',
+      href: mechanicsHref,
+      label: 'Mechanics',
+      icon: <MechanicsIcon className="size-4" />,
+      active: pathname?.startsWith(mechanicsHref) ?? false,
     },
     {
       key: 'gdd',

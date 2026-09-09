@@ -12,6 +12,16 @@ export const Input = React.forwardRef<
   return <input ref={ref} className={cn(fieldClassName, 'h-[34px] px-3', className)} {...props} />;
 });
 
+/** A native select wearing the section 17 input style — same height, same focus ring. */
+export const Select = React.forwardRef<
+  HTMLSelectElement,
+  React.SelectHTMLAttributes<HTMLSelectElement>
+>(function Select({ className, ...props }, ref) {
+  return (
+    <select ref={ref} className={cn(fieldClassName, 'h-[34px] px-2.5', className)} {...props} />
+  );
+});
+
 export const Textarea = React.forwardRef<
   HTMLTextAreaElement,
   React.TextareaHTMLAttributes<HTMLTextAreaElement>

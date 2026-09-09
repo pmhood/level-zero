@@ -3,27 +3,13 @@
 import type { NeighborEdge } from '@level-zero/domain';
 import { Tag } from '@level-zero/ui';
 
-import { entityTypeLabel } from '@/features/entities/entity-presentation';
-
-const RELATION_LABELS: Record<string, string> = {
-  promoted_to: 'Promoted to',
-  contains: 'Contains',
-  references: 'References',
-  inspired_by: 'Inspired by',
-  generated_from: 'Generated from',
-  derived_from: 'Derived from',
-  depends_on: 'Depends on',
-  implements: 'Implements',
-  appears_in: 'Appears in',
-  belongs_to: 'Belongs to',
-  replaces: 'Replaces',
-};
+import { entityTypeLabel, relationLabel } from '@/features/entities/entity-presentation';
 
 function EdgeRow({ edge }: { edge: NeighborEdge }) {
   const label =
     edge.direction === 'outgoing'
-      ? (RELATION_LABELS[edge.relationship.relation] ?? edge.relationship.relation)
-      : `${RELATION_LABELS[edge.relationship.relation] ?? edge.relationship.relation} by`;
+      ? relationLabel(edge.relationship.relation)
+      : `${relationLabel(edge.relationship.relation)} by`;
 
   return (
     <li className="flex items-center justify-between gap-2 rounded-md border border-border-subtle bg-raised px-3 py-2">

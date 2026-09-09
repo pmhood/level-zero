@@ -68,6 +68,27 @@ export const HistoryIcon = createIcon(
   </>,
 );
 
+/** `assets/icons/mechanics.svg` */
+export const MechanicsIcon = createIcon(
+  <>
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M18.5 5.5l-1.7 1.7M7.2 16.8l-1.7 1.7" />
+    <circle cx="12" cy="12" r="7" />
+  </>,
+);
+
+/** `assets/icons/link.svg` */
+export const LinkIcon = createIcon(
+  <>
+    <path d="m9.5 14.5 5-5" />
+    <path d="M7.2 16.8 5.5 18.5a3.5 3.5 0 1 1-5-5L5 9" />
+    <path d="M16.8 7.2 18.5 5.5a3.5 3.5 0 1 1 5 5L19 15" />
+  </>,
+);
+
+/** `assets/icons/chevron-right.svg` */
+export const ChevronRightIcon = createIcon(<path d="m9 6 6 6-6 6" />);
+
 /** `assets/icons/gdd.svg` */
 export const DocumentIcon = createIcon(
   <>
