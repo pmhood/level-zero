@@ -160,11 +160,12 @@ Project ──owns──> Entity (type, name, description, status, tags, data, c
 ```
 
 Entity types: `idea`, `design_pillar`, `character`, `location`, `faction`,
-`mechanic`, `system`, `asset_reference`, `scene`, `document`, `prototype`, `build`.
+`region`, `lore`, `event`, `hazard`, `culture`, `technology`, `mechanic`,
+`system`, `asset_reference`, `scene`, `document`, `prototype`, `build`.
 
 Relations: `contains`, `references`, `inspired_by`, `generated_from`,
 `derived_from`, `promoted_to`, `depends_on`, `implements`, `appears_in`,
-`belongs_to`, `replaces`.
+`belongs_to`, `controls`, `replaces`.
 
 Rules that hold across the codebase:
 

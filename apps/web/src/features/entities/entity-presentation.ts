@@ -3,7 +3,7 @@ import type { StatusTone } from '@level-zero/ui';
 
 /**
  * Display labels for canonical entity types, shared by any tool that lists or
- * links entities (Idea Lab today, Characters/Mechanics/World later).
+ * links entities (Idea Lab, Mechanics, World, ...).
  */
 const ENTITY_TYPE_LABELS: Record<EntityType, string> = {
   idea: 'Idea',
@@ -11,6 +11,12 @@ const ENTITY_TYPE_LABELS: Record<EntityType, string> = {
   character: 'Character',
   location: 'Location',
   faction: 'Faction',
+  region: 'Region',
+  lore: 'Lore',
+  event: 'Event',
+  hazard: 'Hazard',
+  culture: 'Culture',
+  technology: 'Technology',
   mechanic: 'Mechanic',
   system: 'System',
   asset_reference: 'Asset Reference',
@@ -36,6 +42,7 @@ const RELATION_LABELS: Record<RelationType, string> = {
   implements: 'Implements',
   appears_in: 'Appears in',
   belongs_to: 'Belongs to',
+  controls: 'Controls',
   replaces: 'Replaces',
 };
 
