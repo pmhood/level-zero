@@ -5,6 +5,7 @@ import {
   type EntityVersion,
   type Generation,
   type Project,
+  type PrototypeVersion,
 } from '@level-zero/domain';
 
 import { type AssetRow, type NewAssetRow } from '../schema/assets';
@@ -16,6 +17,12 @@ import {
 } from '../schema/entity-relationships';
 import { type EntityVersionRow, type NewEntityVersionRow } from '../schema/entity-versions';
 import { type NewProjectRow, type ProjectRow } from '../schema/projects';
+import {
+  type NewPrototypeEntityVersionRow,
+  type NewPrototypeVersionRow,
+  type PrototypeEntityVersionRow,
+  type PrototypeVersionRow,
+} from '../schema/prototype-versions';
 
 export function toProject(row: ProjectRow): Project {
   return {
@@ -229,6 +236,62 @@ export function toGenerationRow(generation: Generation): NewGenerationRow {
     completedAt: generation.completedAt,
     createdBy: generation.createdBy,
   };
+}
+
+/**
+ * A prototype version is stored across two tables: the row itself and one
+ * member row per pinned entity version, which the caller passes in already
+ * ordered by `position`.
+ */
+export function toPrototypeVersion(
+  row: PrototypeVersionRow,
+  members: readonly PrototypeEntityVersionRow[],
+): PrototypeVersion {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    prototypeId: row.prototypeId,
+    versionNumber: row.versionNumber,
+    name: row.name,
+    status: row.status,
+    notes: row.notes,
+    buildAssetId: row.buildAssetId,
+    members: members.map((member) => ({
+      entityId: member.entityId,
+      entityVersionId: member.entityVersionId,
+    })),
+    createdBy: row.createdBy,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export function toPrototypeVersionRow(version: PrototypeVersion): NewPrototypeVersionRow {
+  return {
+    id: version.id,
+    projectId: version.projectId,
+    prototypeId: version.prototypeId,
+    versionNumber: version.versionNumber,
+    name: version.name,
+    status: version.status,
+    notes: version.notes,
+    buildAssetId: version.buildAssetId,
+    createdBy: version.createdBy,
+    createdAt: version.createdAt,
+    updatedAt: version.updatedAt,
+  };
+}
+
+export function toPrototypeEntityVersionRows(
+  version: PrototypeVersion,
+): NewPrototypeEntityVersionRow[] {
+  return version.members.map((member, position) => ({
+    prototypeVersionId: version.id,
+    projectId: version.projectId,
+    entityId: member.entityId,
+    entityVersionId: member.entityVersionId,
+    position,
+  }));
 }
 
 /**

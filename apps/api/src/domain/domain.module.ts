@@ -5,6 +5,7 @@ import {
   DrizzleEntityVersionRepository,
   DrizzleGenerationRepository,
   DrizzleProjectRepository,
+  DrizzlePrototypeVersionRepository,
   type DatabaseClient,
 } from '@level-zero/database';
 import {
@@ -15,6 +16,7 @@ import {
   GenerationService,
   LineageService,
   ProjectService,
+  PrototypeService,
   systemClock,
   uuidIdGenerator,
   type AssetRepository,
@@ -25,6 +27,7 @@ import {
   type GenerationRepository,
   type ObjectStorageProvider,
   type ProjectRepository,
+  type PrototypeVersionRepository,
 } from '@level-zero/domain';
 import { Global, Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
@@ -39,6 +42,7 @@ export const RELATIONSHIP_REPOSITORY = Symbol('RELATIONSHIP_REPOSITORY');
 export const VERSION_REPOSITORY = Symbol('VERSION_REPOSITORY');
 export const ASSET_REPOSITORY = Symbol('ASSET_REPOSITORY');
 export const GENERATION_REPOSITORY = Symbol('GENERATION_REPOSITORY');
+export const PROTOTYPE_VERSION_REPOSITORY = Symbol('PROTOTYPE_VERSION_REPOSITORY');
 export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
 
 /**
@@ -161,6 +165,30 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
       ): GenerationService =>
         new GenerationService(generations, projects, entities, assets, lineage, deps),
     },
+    {
+      provide: PROTOTYPE_VERSION_REPOSITORY,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: DatabaseClient): PrototypeVersionRepository =>
+        new DrizzlePrototypeVersionRepository(client.db),
+    },
+    {
+      provide: PrototypeService,
+      inject: [
+        PROTOTYPE_VERSION_REPOSITORY,
+        EntityService,
+        VERSION_REPOSITORY,
+        ASSET_REPOSITORY,
+        DOMAIN_DEPS,
+      ],
+      useFactory: (
+        prototypeVersions: PrototypeVersionRepository,
+        entities: EntityService,
+        versions: EntityVersionRepository,
+        assets: AssetRepository,
+        deps: EntityServiceDeps,
+      ): PrototypeService =>
+        new PrototypeService(prototypeVersions, entities, versions, assets, deps),
+    },
     { provide: APP_FILTER, useClass: DomainExceptionFilter },
   ],
   exports: [
@@ -171,12 +199,14 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     LineageService,
     AssetService,
     GenerationService,
+    PrototypeService,
     PROJECT_REPOSITORY,
     ENTITY_REPOSITORY,
     RELATIONSHIP_REPOSITORY,
     VERSION_REPOSITORY,
     ASSET_REPOSITORY,
     GENERATION_REPOSITORY,
+    PROTOTYPE_VERSION_REPOSITORY,
     DOMAIN_DEPS,
   ],
 })
