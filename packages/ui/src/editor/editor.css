@@ -163,3 +163,13 @@
 .tiptap-surface .suggestion {
   color: var(--color-primary);
 }
+
+/*
+ * The passage a pending AI suggestion is about. A view decoration, not a mark:
+ * nothing about an unaccepted suggestion is allowed into the stored JSON.
+ */
+.tiptap-surface .lz-ai-target {
+  background-color: var(--lz-ai-muted);
+  box-shadow: inset 0 -1px 0 0 var(--lz-ai-border);
+  border-radius: 2px;
+}

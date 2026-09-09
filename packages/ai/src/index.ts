@@ -29,6 +29,7 @@ export { EchoAiProvider } from './echo-provider';
 export {
   ANTHROPIC_DEFAULT_MAX_TOKENS,
   ANTHROPIC_DEFAULT_MODEL,
+  ANTHROPIC_DEFAULT_TIMEOUT_MS,
   AnthropicProvider,
   type AnthropicProviderOptions,
 } from './anthropic-provider';

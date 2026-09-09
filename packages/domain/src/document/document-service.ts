@@ -8,11 +8,13 @@ import { type EntityVersion, type VersionReason } from '../version/entity-versio
 import { type EntityVersionService } from '../version/entity-version-service';
 import {
   DOCUMENT_CONTENT_KEY,
+  DOCUMENT_VERSION_GENERATION_KEY,
   DOCUMENT_VERSION_NAME_KEY,
   DOCUMENT_VERSION_REASONS,
   MAX_DOCUMENT_VERSION_NAME_LENGTH,
   documentContent,
   documentData,
+  documentVersionGenerationId,
   documentVersionName,
   emptyDocumentContent,
   requireDocumentContent,
@@ -35,6 +37,8 @@ export interface SnapshotDocumentInput {
   /** Label for the snapshot, e.g. "Vertical slice review". */
   name?: string | null;
   reason?: DocumentVersionReason;
+  /** The generation behind an `ai_edit`, so the version says where it came from. */
+  generationId?: string | null;
   createdBy?: string | null;
 }
 
@@ -52,6 +56,8 @@ export interface DocumentVersion {
   name: string | null;
   /** Why the version exists — `restore` is recorded by restoring, never asked for. */
   reason: VersionReason;
+  /** The generation an accepted AI edit came from; null for every other version. */
+  generationId: string | null;
   parentVersionId: string | null;
   createdBy: string | null;
   createdAt: Date;
@@ -173,10 +179,14 @@ export class DocumentService {
   ): Promise<DocumentVersion> {
     const entity = await this.requireDocument(projectId, documentId);
     const name = optionalText('name', input.name, MAX_DOCUMENT_VERSION_NAME_LENGTH);
+    const generationId = optionalText('generationId', input.generationId, 200);
 
     const version = await this.versions.commit(projectId, entity.id, {
       reason: requireOneOf('reason', input.reason ?? 'manual', DOCUMENT_VERSION_REASONS),
-      metadata: name === null ? {} : { [DOCUMENT_VERSION_NAME_KEY]: name },
+      metadata: {
+        ...(name === null ? {} : { [DOCUMENT_VERSION_NAME_KEY]: name }),
+        ...(generationId === null ? {} : { [DOCUMENT_VERSION_GENERATION_KEY]: generationId }),
+      },
       createdBy: input.createdBy,
     });
 
@@ -314,6 +324,7 @@ function toDocumentVersion(
     versionNumber: version.versionNumber,
     name: documentVersionName(version),
     reason: version.reason,
+    generationId: documentVersionGenerationId(version),
     parentVersionId: version.parentVersionId,
     createdBy: version.createdBy,
     createdAt: version.createdAt,

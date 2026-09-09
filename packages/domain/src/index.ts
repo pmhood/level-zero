@@ -327,14 +327,18 @@ export { ActivityService, type ActivityServiceDeps } from './activity/activity-s
 
 export {
   DOCUMENT_CONTENT_KEY,
+  DOCUMENT_VERSION_GENERATION_KEY,
   DOCUMENT_VERSION_NAME_KEY,
   DOCUMENT_VERSION_REASONS,
   MAX_DOCUMENT_VERSION_NAME_LENGTH,
+  MIN_AI_EDIT_VERSION_LENGTH,
   documentContent,
   documentData,
   documentPlainText,
+  documentVersionGenerationId,
   documentVersionName,
   emptyDocumentContent,
+  isSignificantAiEdit,
   requireDocumentContent,
   type DocumentContent,
   type DocumentVersionReason,

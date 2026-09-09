@@ -56,6 +56,14 @@ export const SearchIcon = createIcon(
   </>,
 );
 
+/** `assets/icons/sparkles.svg` — the mark on every AI/generative affordance. */
+export const SparklesIcon = createIcon(
+  <>
+    <path d="m12 2.8 1.3 4.4 4.4 1.3-4.4 1.3L12 14.2l-1.3-4.4-4.4-1.3 4.4-1.3L12 2.8Z" />
+    <path d="m18.5 14.2.7 2.2 2.2.7-2.2.7-.7 2.2-.7-2.2-2.2-.7 2.2-.7.7-2.2Z" />
+  </>,
+);
+
 /** `assets/icons/close.svg` */
 export const CloseIcon = createIcon(<path d="M6 6l12 12M18 6 6 18" />);
 

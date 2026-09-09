@@ -37,6 +37,7 @@ export {
   OverviewIcon,
   PlusIcon,
   SearchIcon,
+  SparklesIcon,
 } from './icons';
 export { RichTextEditor, type RichTextEditorProps } from './editor/rich-text-editor';
 export {
@@ -47,6 +48,17 @@ export {
   type ToolbarGroup,
 } from './editor/editor-modes';
 export { createEditorExtensions, type EditorExtensionOptions } from './editor/editor-extensions';
+/**
+ * Inline AI editing is switched on with `RichTextEditor`'s `ai` prop, so what
+ * a caller needs is the shape of that prop. The extension, the decoration, the
+ * hook and the content rebuilding stay inside `./editor`.
+ */
+export type {
+  AcceptedAiEdit,
+  AiEditingOptions,
+  AiSuggestionRequest,
+  AiSuggestionResponse,
+} from './editor/use-ai-suggestion';
 export { EditorToolbar, type EditorToolbarProps } from './editor/editor-toolbar';
 export { MarkdownPaste, looksLikeMarkdown } from './editor/markdown-paste';
 export { SaveStatusLabel, type SaveStatusLabelProps } from './editor/save-status-label';

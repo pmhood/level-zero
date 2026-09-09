@@ -23,6 +23,13 @@ export const sharedEnvSchema = z.object({
   REDIS_URL: z.string().min(1, 'REDIS_URL is required').startsWith('redis'),
   /** Directory local asset bytes are written under. See `@level-zero/storage`. */
   STORAGE_LOCAL_ROOT: z.string().min(1).default('./.data/assets'),
+  /**
+   * Enables the Anthropic adapter for text capabilities. Without it the echo
+   * provider is registered instead, so local development still runs end to
+   * end. Both the API — which answers inline editor suggestions in the request
+   * — and the worker read it.
+   */
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
 });
 
 export const apiEnvSchema = sharedEnvSchema.extend({
@@ -32,11 +39,6 @@ export const apiEnvSchema = sharedEnvSchema.extend({
 
 export const workerEnvSchema = sharedEnvSchema.extend({
   WORKER_PORT: port.default(3002),
-  /**
-   * Enables the Anthropic adapter for text capabilities. Without it the worker
-   * registers the echo provider instead, so local development still runs.
-   */
-  ANTHROPIC_API_KEY: z.string().min(1).optional(),
 });
 
 /** Variables the browser bundle is allowed to see. */

@@ -1,4 +1,5 @@
 import type { Entity, EntityType } from '@level-zero/domain';
+import type { JSONContent } from '@level-zero/ui';
 
 /** Node names, shared by the extensions, the commands and the tests. */
 export const ENTITY_MENTION_NODE = 'entityMention';
@@ -69,6 +70,22 @@ export function entityReferenceLabel(
   storedLabel: string | null,
 ): string | null {
   return resolved.state === 'found' ? resolved.entity.name : storedLabel;
+}
+
+/**
+ * The entities a set of reference nodes points at.
+ *
+ * The editor hands over the mention nodes inside a passage without knowing
+ * what they are; this reads the ids back out, so an AI request about that
+ * passage names the entities it mentions as deliberate context rather than
+ * hoping the relationship walk finds them.
+ */
+export function referencedEntityIds(nodes: JSONContent[]): string[] {
+  const ids = nodes
+    .map((node) => node.attrs?.entityId)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+
+  return [...new Set(ids)];
 }
 
 export interface EntitySearchOptions {

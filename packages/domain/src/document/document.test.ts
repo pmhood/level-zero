@@ -6,11 +6,14 @@ import { ValidationError } from '../shared/errors';
 import { sequentialIdGenerator } from '../shared/id';
 import { createEntityVersion } from '../version/entity-version';
 import {
+  MIN_AI_EDIT_VERSION_LENGTH,
   documentContent,
   documentData,
   documentPlainText,
+  documentVersionGenerationId,
   documentVersionName,
   emptyDocumentContent,
+  isSignificantAiEdit,
   requireDocumentContent,
   type DocumentContent,
 } from './document';
@@ -145,5 +148,47 @@ describe('documentPlainText', () => {
 
   it('reads an empty document as an empty string', () => {
     expect(documentPlainText(emptyDocumentContent())).toBe('');
+  });
+});
+
+describe('documentVersionGenerationId', () => {
+  const version = (metadata: Record<string, unknown>) =>
+    createEntityVersion(
+      {
+        projectId: 'project-1',
+        entityId: 'entity-1',
+        versionNumber: 1,
+        parentVersionId: null,
+        snapshot: { name: 'GDD', description: null, status: 'draft', tags: [], data: {} },
+        reason: 'ai_edit',
+        metadata,
+      },
+      deps,
+    );
+
+  it('reads the generation an accepted AI edit came from', () => {
+    expect(documentVersionGenerationId(version({ generationId: 'gen_1' }))).toBe('gen_1');
+  });
+
+  it('is null for a version that did not come from a generation', () => {
+    expect(documentVersionGenerationId(version({ name: 'Pillars locked' }))).toBeNull();
+  });
+});
+
+describe('isSignificantAiEdit', () => {
+  const paragraph = 'x'.repeat(MIN_AI_EDIT_VERSION_LENGTH);
+
+  it('is a tweak when a sentence is polished, so autosave keeps it and history does not', () => {
+    expect(isSignificantAiEdit('Oxygen runs out.', 'The oxygen runs out fast.')).toBe(false);
+  });
+
+  it('earns a version when a section is rewritten', () => {
+    expect(isSignificantAiEdit(paragraph, 'Cut to nothing.')).toBe(true);
+    expect(isSignificantAiEdit('Expand this.', paragraph)).toBe(true);
+  });
+
+  it('ignores surrounding whitespace either side', () => {
+    expect(isSignificantAiEdit(`  ${paragraph}  `, '')).toBe(true);
+    expect(isSignificantAiEdit('   ', '   ')).toBe(false);
   });
 });

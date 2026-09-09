@@ -26,7 +26,27 @@ export const DOCUMENT_CONTENT_KEY = 'content';
 /** Key of the label a snapshot was taken under, within an `EntityVersion`'s metadata. */
 export const DOCUMENT_VERSION_NAME_KEY = 'name';
 
+/**
+ * Key of the generation an `ai_edit` snapshot came from, within the metadata.
+ *
+ * A `Generation` records what was asked and which provider answered; this is
+ * the other half of the same story — the body as it stood once the answer was
+ * accepted. Keeping the link here rather than adding an output field to the
+ * generation means the change is retained where it actually happened, and a
+ * suggestion the writer rejected leaves no trace in the project at all.
+ */
+export const DOCUMENT_VERSION_GENERATION_KEY = 'generationId';
+
 export const MAX_DOCUMENT_VERSION_NAME_LENGTH = 200;
+
+/**
+ * How much prose an accepted AI edit has to move before it earns a version.
+ *
+ * Roughly a paragraph. Tightening one sentence is ordinary writing and belongs
+ * in autosave with everything else; rewriting a section is the kind of change
+ * a writer wants to be able to come back from.
+ */
+export const MIN_AI_EDIT_VERSION_LENGTH = 240;
 
 /**
  * Why a document snapshot exists.
@@ -118,4 +138,25 @@ export function documentData(
 export function documentVersionName(version: Pick<EntityVersion, 'metadata'>): string | null {
   const name = version.metadata[DOCUMENT_VERSION_NAME_KEY];
   return typeof name === 'string' ? name : null;
+}
+
+/** The generation an accepted AI edit came from, or null for any other snapshot. */
+export function documentVersionGenerationId(
+  version: Pick<EntityVersion, 'metadata'>,
+): string | null {
+  const generationId = version.metadata[DOCUMENT_VERSION_GENERATION_KEY];
+  return typeof generationId === 'string' ? generationId : null;
+}
+
+/**
+ * Whether an accepted AI edit is worth a permanent version.
+ *
+ * The editor autosaves an accepted suggestion like any other edit; this is the
+ * separate question of whether it also earns a row in the history list. A
+ * writer accepting a dozen small tweaks should end up with a dozen saved
+ * changes and no version spam, which is why size — not the act of accepting —
+ * decides.
+ */
+export function isSignificantAiEdit(replaced: string, accepted: string): boolean {
+  return Math.max(replaced.trim().length, accepted.trim().length) >= MIN_AI_EDIT_VERSION_LENGTH;
 }
