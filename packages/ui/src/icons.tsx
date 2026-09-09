@@ -67,3 +67,12 @@ export const HistoryIcon = createIcon(
     <path d="M12 7v5l3 2" />
   </>,
 );
+
+/** `assets/icons/gdd.svg` */
+export const DocumentIcon = createIcon(
+  <>
+    <rect x="4" y="3.5" width="16" height="17" rx="2" />
+    <path d="M8 7h8M8 11h8M8 15h5" />
+    <path d="M6.5 6v2M6.5 10v2M6.5 14v2" />
+  </>,
+);

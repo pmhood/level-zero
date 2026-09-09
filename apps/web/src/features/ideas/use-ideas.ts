@@ -1,11 +1,20 @@
 'use client';
 
-import type { CreateEntityInput, PromoteEntityInput, UpdateEntityInput } from '@level-zero/domain';
+import type {
+  CreateEntityInput,
+  Entity,
+  PromoteEntityInput,
+  UpdateEntityInput,
+} from '@level-zero/domain';
+import type { JSONContent } from '@level-zero/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import * as api from '@/lib/api';
 
 export type IdeaTab = 'ideas' | 'archived';
+
+/** Field of an idea's `data` its rich-text notes are stored in. */
+export const IDEA_NOTES_FIELD = 'notes';
 
 export interface IdeaFilters {
   tab: IdeaTab;
@@ -54,6 +63,23 @@ export function useUpdateIdea(projectId: string) {
     mutationFn: ({ entityId, patch }: { entityId: string; patch: UpdateEntityInput }) =>
       api.updateEntity(projectId, entityId, patch),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ideasKeys.all(projectId) }),
+  });
+}
+
+/**
+ * Autosaves the notes attached to one idea.
+ *
+ * `data` is replaced wholesale by the API, so the rest of it is carried over.
+ * Unlike the other mutations this does not invalidate the idea list: notes
+ * save while somebody is typing and nothing in the grid renders them, so a
+ * refetch per pause would buy nothing.
+ */
+export function useSaveIdeaNotes(projectId: string) {
+  return useMutation({
+    mutationFn: ({ idea, notes }: { idea: Entity; notes: JSONContent }) =>
+      api.updateEntity(projectId, idea.id, {
+        data: { ...idea.data, [IDEA_NOTES_FIELD]: notes },
+      }),
   });
 }
 

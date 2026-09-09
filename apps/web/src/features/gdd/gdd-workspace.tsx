@@ -1,0 +1,167 @@
+'use client';
+
+import type { Entity } from '@level-zero/domain';
+import {
+  Button,
+  EmptyState,
+  RichTextEditor,
+  SaveStatusLabel,
+  WorkspaceHeader,
+  useEditorAutosave,
+  type JSONContent,
+} from '@level-zero/ui';
+import { useCallback, useMemo, useRef, useState } from 'react';
+
+import { entityDocument } from '@/features/entities/entity-document';
+import { ApiRequestError } from '@/lib/api';
+
+import { documentOutline } from './document-outline';
+import {
+  GDD_CONTENT_FIELD,
+  useCreateGddDocument,
+  useGddDocument,
+  useSaveGddDocument,
+} from './use-gdd-document';
+
+function DocumentOutline({
+  content,
+  onSelect,
+}: {
+  content: JSONContent | null;
+  onSelect: (index: number) => void;
+}) {
+  const headings = useMemo(() => documentOutline(content), [content]);
+
+  return (
+    <nav
+      aria-label="Document outline"
+      className="hidden w-[220px] shrink-0 overflow-y-auto border-r border-border-subtle px-3 py-5 lg:block"
+    >
+      <p className="px-2 text-xs font-medium text-muted-foreground">Contents</p>
+      {headings.length === 0 ? (
+        <p className="mt-2 px-2 text-xs text-faint-foreground">
+          Headings you add show up here as the document&rsquo;s outline.
+        </p>
+      ) : (
+        <ul className="mt-2 space-y-0.5">
+          {headings.map((heading, index) => (
+            <li key={index}>
+              <button
+                type="button"
+                onClick={() => onSelect(index)}
+                style={{ paddingLeft: `${(heading.level - 1) * 12 + 8}px` }}
+                className="w-full truncate rounded-md py-1 pr-2 text-left text-xs text-muted-foreground hover:bg-hover hover:text-foreground"
+              >
+                {heading.text || 'Untitled section'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </nav>
+  );
+}
+
+function GddDocumentEditor({
+  projectId,
+  designDocument,
+}: {
+  projectId: string;
+  designDocument: Entity;
+}) {
+  const [content, setContent] = useState(() => entityDocument(designDocument, GDD_CONTENT_FIELD));
+  const saveDocument = useSaveGddDocument(projectId);
+  const surfaceRef = useRef<HTMLDivElement>(null);
+
+  const save = useCallback(
+    (content: JSONContent) => saveDocument.mutateAsync({ designDocument, content }),
+    [saveDocument, designDocument],
+  );
+  const autosave = useEditorAutosave(save);
+
+  function handleChange(next: JSONContent) {
+    setContent(next);
+    autosave.onChange(next);
+  }
+
+  function scrollToHeading(index: number) {
+    const headings = surfaceRef.current?.querySelectorAll('.tiptap-surface :is(h1, h2, h3)');
+    headings?.item(index)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  return (
+    <div className="flex h-full min-h-0">
+      <DocumentOutline content={content} onSelect={scrollToHeading} />
+
+      <div ref={surfaceRef} className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+        <WorkspaceHeader
+          title="GDD"
+          description="The canonical written design. Reference entities instead of restating them."
+        />
+
+        <div className="w-full max-w-[860px] px-4 pb-16 xl:px-5 2xl:px-6">
+          <RichTextEditor
+            mode="document"
+            label="Game design document"
+            content={content}
+            onChange={handleChange}
+            toolbarActions={<SaveStatusLabel status={autosave.status} error={autosave.error} />}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function GddWorkspace({ projectId }: { projectId: string }) {
+  const documentQuery = useGddDocument(projectId);
+  const createDocument = useCreateGddDocument(projectId);
+
+  if (documentQuery.isPending) {
+    return <p className="p-6 text-sm text-muted-foreground">Loading the design document…</p>;
+  }
+
+  if (documentQuery.isError) {
+    return (
+      <div className="p-6">
+        <EmptyState
+          title="Couldn't load the design document"
+          description={
+            documentQuery.error instanceof ApiRequestError
+              ? documentQuery.error.message
+              : 'Something went wrong talking to the API.'
+          }
+          actions={
+            <Button variant="secondary" onClick={() => documentQuery.refetch()}>
+              Try again
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
+
+  if (!documentQuery.data) {
+    return (
+      <div className="p-6">
+        <EmptyState
+          title="No design document yet"
+          description="Start the GDD and write the pillars, the core loop and the systems as they settle."
+          actions={
+            <Button onClick={() => createDocument.mutate()} disabled={createDocument.isPending}>
+              {createDocument.isPending ? 'Creating…' : 'Start the GDD'}
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
+
+  return (
+    <GddDocumentEditor
+      key={documentQuery.data.id}
+      projectId={projectId}
+      designDocument={documentQuery.data}
+    />
+  );
+}

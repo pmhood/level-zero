@@ -118,6 +118,12 @@ Design system spec §1 names the intended additions — Radix, shadcn/ui, Lucide
 TanStack Table, React Flow, tldraw, TipTap, Monaco, Recharts, cmdk — and says not to introduce
 other UI frameworks without a clear need.
 
+**All rich text goes through `RichTextEditor` (`packages/ui/src/editor`).** GDDs, notes, lore,
+character backgrounds, idea descriptions and playtest write-ups are one editor in different
+`mode`s; a feature picks a mode, and passes custom nodes through `extensions` rather than
+assembling its own TipTap instance. Content is stored as TipTap JSON in the entity's `data` —
+never rendered HTML. Markdown is an import/export format only.
+
 ## Working in this repo
 
 - Commit subjects are imperative and unprefixed: `Add entity relationships and creative lineage`.

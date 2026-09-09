@@ -1,0 +1,165 @@
+/*
+ * Typography and block styling for the rich-text writing surface.
+ *
+ * The editor renders plain semantic HTML that no React component wraps, so
+ * these rules cannot be Tailwind utilities on an element. Values come from the
+ * type tokens in section 4 of the design system spec and are expressed with
+ * the shared theme variables, never raw hex.
+ */
+
+.tiptap-surface > * + * {
+  margin-top: 0.75em;
+}
+
+.tiptap-surface h1,
+.tiptap-surface h2,
+.tiptap-surface h3 {
+  font-weight: 600;
+  color: var(--color-foreground);
+}
+
+.tiptap-surface h1 {
+  font-size: 28px;
+  line-height: 34px;
+  font-weight: 700;
+  margin-top: 1.2em;
+}
+
+.tiptap-surface h2 {
+  font-size: 18px;
+  line-height: 24px;
+  margin-top: 1.4em;
+}
+
+.tiptap-surface h3 {
+  font-size: 15px;
+  line-height: 20px;
+  margin-top: 1.2em;
+}
+
+.tiptap-surface > *:first-child {
+  margin-top: 0;
+}
+
+.tiptap-surface a {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.tiptap-surface strong {
+  font-weight: 600;
+  color: var(--color-foreground);
+}
+
+.tiptap-surface ul,
+.tiptap-surface ol {
+  padding-left: 1.4em;
+}
+
+.tiptap-surface ul {
+  list-style: disc;
+}
+
+.tiptap-surface ol {
+  list-style: decimal;
+}
+
+.tiptap-surface li > * + * {
+  margin-top: 0.35em;
+}
+
+.tiptap-surface ul[data-type='taskList'] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.tiptap-surface ul[data-type='taskList'] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5em;
+}
+
+.tiptap-surface ul[data-type='taskList'] li > label {
+  margin-top: 0.2em;
+}
+
+.tiptap-surface blockquote {
+  border-left: 2px solid var(--color-border-strong);
+  padding-left: 1em;
+  color: var(--color-muted-foreground);
+}
+
+.tiptap-surface code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  background-color: var(--color-raised);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+
+.tiptap-surface pre {
+  background-color: var(--color-raised);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  padding: 0.75em 1em;
+  overflow-x: auto;
+}
+
+.tiptap-surface pre code {
+  background: none;
+  padding: 0;
+}
+
+.tiptap-surface hr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+}
+
+.tiptap-surface img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+.tiptap-surface table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  overflow: hidden;
+}
+
+.tiptap-surface th,
+.tiptap-surface td {
+  position: relative;
+  border: 1px solid var(--color-border);
+  padding: 0.4em 0.6em;
+  vertical-align: top;
+}
+
+.tiptap-surface th {
+  background-color: var(--color-raised);
+  font-weight: 600;
+  text-align: left;
+}
+
+.tiptap-surface .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--color-active);
+  pointer-events: none;
+}
+
+/* Placeholder text, shown while the document has nothing in it. */
+.tiptap-surface p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--color-faint-foreground);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* The `/` the writer typed, highlighted while the block menu is open. */
+.tiptap-surface .suggestion {
+  color: var(--color-primary);
+}

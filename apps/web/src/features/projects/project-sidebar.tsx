@@ -1,6 +1,12 @@
 'use client';
 
-import { AppSidebar, IdeaLabIcon, OverviewIcon, type SidebarNavItem } from '@level-zero/ui';
+import {
+  AppSidebar,
+  DocumentIcon,
+  IdeaLabIcon,
+  OverviewIcon,
+  type SidebarNavItem,
+} from '@level-zero/ui';
 import type { Route } from 'next';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -37,6 +43,7 @@ export function ProjectSidebar({
   const pathname = usePathname();
   const overviewHref = `/projects/${projectId}`;
   const ideaLabHref = `/projects/${projectId}/idea-lab`;
+  const gddHref = `/projects/${projectId}/gdd`;
 
   const items: SidebarNavItem[] = [
     {
@@ -52,6 +59,13 @@ export function ProjectSidebar({
       label: 'Idea Lab',
       icon: <IdeaLabIcon className="size-4" />,
       active: pathname?.startsWith(ideaLabHref) ?? false,
+    },
+    {
+      key: 'gdd',
+      href: gddHref,
+      label: 'GDD',
+      icon: <DocumentIcon className="size-4" />,
+      active: pathname?.startsWith(gddHref) ?? false,
     },
   ];
 
