@@ -3,6 +3,12 @@
  *
  * Edges are directional and read source-first: `A contains B`, `A inspired_by B`,
  * `A promoted_to B`.
+ *
+ * `controls` is held apart from both `contains` and `belongs_to`: a faction
+ * that holds a region neither physically contains it nor is a member of it,
+ * and folding control into `belongs_to` would only express it by writing the
+ * edge from the region — which reads as the region being *of* the faction, a
+ * different claim about the setting.
  */
 export const RELATION_TYPES = [
   'contains',
@@ -15,6 +21,7 @@ export const RELATION_TYPES = [
   'implements',
   'appears_in',
   'belongs_to',
+  'controls',
   'replaces',
 ] as const;
 

@@ -58,6 +58,7 @@ describe('relation types', () => {
       'implements',
       'appears_in',
       'belongs_to',
+      'controls',
       'replaces',
     ]);
   });

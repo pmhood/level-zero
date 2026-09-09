@@ -15,6 +15,7 @@ import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 
 import { CharactersIcon } from '@/features/characters/character-icons';
+import { WorldIcon } from '@/features/world/world-icon';
 
 /**
  * `AppSidebar.linkComponent` takes a plain `{ href: string }` component so
@@ -47,6 +48,7 @@ export function ProjectSidebar({
   const pathname = usePathname();
   const overviewHref = `/projects/${projectId}`;
   const ideaLabHref = `/projects/${projectId}/idea-lab`;
+  const worldHref = `/projects/${projectId}/world`;
   const charactersHref = `/projects/${projectId}/characters`;
   const mechanicsHref = `/projects/${projectId}/mechanics`;
   const gddHref = `/projects/${projectId}/gdd`;
@@ -66,6 +68,13 @@ export function ProjectSidebar({
       label: 'Idea Lab',
       icon: <IdeaLabIcon className="size-4" />,
       active: pathname?.startsWith(ideaLabHref) ?? false,
+    },
+    {
+      key: 'world',
+      href: worldHref,
+      label: 'World',
+      icon: <WorldIcon className="size-4" />,
+      active: pathname?.startsWith(worldHref) ?? false,
     },
     {
       key: 'characters',
