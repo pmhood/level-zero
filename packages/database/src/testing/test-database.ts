@@ -23,7 +23,7 @@ export function connectTestDatabase(): DatabaseClient {
   return createDatabaseClient({ connectionString, maxConnections: 4 });
 }
 
-/** Empties the domain tables. `projects` cascades to `entities`. */
+/** Empties the domain tables. `projects` cascades to `entities` and `assets`. */
 export async function truncateDomainTables(client: DatabaseClient): Promise<void> {
   await client.db.execute(sql`truncate table projects restart identity cascade`);
 }

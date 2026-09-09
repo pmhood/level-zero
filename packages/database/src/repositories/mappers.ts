@@ -1,10 +1,12 @@
 import {
+  type Asset,
   type Entity,
   type EntityRelationship,
   type EntityVersion,
   type Project,
 } from '@level-zero/domain';
 
+import { type AssetRow, type NewAssetRow } from '../schema/assets';
 import { type EntityRow, type NewEntityRow } from '../schema/entities';
 import {
   type EntityRelationshipRow,
@@ -128,6 +130,52 @@ export function toEntityVersionRow(version: EntityVersion): NewEntityVersionRow 
     metadata: version.metadata,
     createdBy: version.createdBy,
     createdAt: version.createdAt,
+  };
+}
+
+export function toAsset(row: AssetRow): Asset {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    kind: row.kind,
+    filename: row.filename,
+    mimeType: row.mimeType,
+    byteSize: row.byteSize,
+    storageKey: row.storageKey,
+    checksum: row.checksum,
+    width: row.width,
+    height: row.height,
+    durationSeconds: row.durationSeconds,
+    variant: row.variant,
+    sourceAssetId: row.sourceAssetId,
+    status: row.status,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    archivedAt: row.archivedAt,
+    createdBy: row.createdBy,
+  };
+}
+
+export function toAssetRow(asset: Asset): NewAssetRow {
+  return {
+    id: asset.id,
+    projectId: asset.projectId,
+    kind: asset.kind,
+    filename: asset.filename,
+    mimeType: asset.mimeType,
+    byteSize: asset.byteSize,
+    storageKey: asset.storageKey,
+    checksum: asset.checksum,
+    width: asset.width,
+    height: asset.height,
+    durationSeconds: asset.durationSeconds,
+    variant: asset.variant,
+    sourceAssetId: asset.sourceAssetId,
+    status: asset.status,
+    createdAt: asset.createdAt,
+    updatedAt: asset.updatedAt,
+    archivedAt: asset.archivedAt,
+    createdBy: asset.createdBy,
   };
 }
 

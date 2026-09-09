@@ -1,0 +1,250 @@
+import {
+  AssetService,
+  ProjectService,
+  createProject,
+  fixedClock,
+  sequentialIdGenerator,
+  type Project,
+} from '@level-zero/domain';
+import {
+  InMemoryAssetRepository,
+  InMemoryObjectStorageProvider,
+  InMemoryProjectRepository,
+} from '@level-zero/domain/testing';
+import { ValidationPipe, type INestApplication } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
+import { Test } from '@nestjs/testing';
+import request from 'supertest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import { DomainExceptionFilter } from '../common/domain-exception.filter';
+import { ProjectsController } from '../projects/projects.controller';
+import { AssetsController } from './assets.controller';
+
+const clock = fixedClock('2026-03-01T09:00:00.000Z');
+
+let app: INestApplication;
+let projectService: ProjectService;
+let project: Project;
+let otherProject: Project;
+
+beforeEach(async () => {
+  const deps = { clock, ids: sequentialIdGenerator('id') };
+  const projects = new InMemoryProjectRepository();
+  const assets = new InMemoryAssetRepository();
+  const storage = new InMemoryObjectStorageProvider();
+  projectService = new ProjectService(projects, deps);
+  const assetService = new AssetService(assets, projects, storage, deps);
+
+  const moduleRef = await Test.createTestingModule({
+    controllers: [ProjectsController, AssetsController],
+    providers: [
+      { provide: ProjectService, useValue: projectService },
+      { provide: AssetService, useValue: assetService },
+      { provide: APP_FILTER, useClass: DomainExceptionFilter },
+    ],
+  }).compile();
+
+  app = moduleRef.createNestApplication();
+  app.setGlobalPrefix('api');
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  await app.init();
+
+  project = await projects.insert(
+    createProject({ name: 'Deep Fathom' }, { clock, ids: sequentialIdGenerator('project-a') }),
+  );
+  otherProject = await projects.insert(
+    createProject({ name: 'Sky Wreck' }, { clock, ids: sequentialIdGenerator('project-b') }),
+  );
+});
+
+afterEach(async () => {
+  await app.close();
+});
+
+const http = () => request(app.getHttpServer());
+
+const pngBase64 = Buffer.from('pretend png bytes').toString('base64');
+
+describe('uploading an asset', () => {
+  it('stores metadata scoped to the project', async () => {
+    const response = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'kael.png',
+        mimeType: 'image/png',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      projectId: project.id,
+      kind: 'image',
+      filename: 'kael.png',
+      mimeType: 'image/png',
+      variant: 'source',
+      status: 'active',
+    });
+    expect(response.body.byteSize).toBe(Buffer.byteLength('pretend png bytes'));
+  });
+
+  it('rejects an unknown asset kind', async () => {
+    await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({ kind: 'spreadsheet', filename: 'x', mimeType: 'x', contentBase64: pngBase64 })
+      .expect(400);
+  });
+
+  it('rejects content that is not valid base64', async () => {
+    await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({ kind: 'image', filename: 'x', mimeType: 'x', contentBase64: 'not base64 at all!!' })
+      .expect(400);
+  });
+
+  it('returns 404 when the project does not exist', async () => {
+    await http()
+      .post('/api/projects/missing/assets')
+      .send({ kind: 'image', filename: 'x', mimeType: 'image/png', contentBase64: pngBase64 })
+      .expect(404);
+  });
+
+  it('returns 409 when the project is archived', async () => {
+    await projectService.archive(project.id);
+
+    const response = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({ kind: 'image', filename: 'x', mimeType: 'image/png', contentBase64: pngBase64 })
+      .expect(409);
+
+    expect(response.body).toMatchObject({ error: 'conflict' });
+  });
+});
+
+describe('retrieving an asset', () => {
+  it('reads metadata back through its project', async () => {
+    const created = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'kael.png',
+        mimeType: 'image/png',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+
+    const response = await http()
+      .get(`/api/projects/${project.id}/assets/${created.body.id}`)
+      .expect(200);
+
+    expect(response.body.filename).toBe('kael.png');
+  });
+
+  it('returns 404 when read through another project', async () => {
+    const created = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'kael.png',
+        mimeType: 'image/png',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+
+    await http().get(`/api/projects/${otherProject.id}/assets/${created.body.id}`).expect(404);
+  });
+
+  it('resolves a safe url', async () => {
+    const created = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'kael.png',
+        mimeType: 'image/png',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+
+    const response = await http()
+      .get(`/api/projects/${project.id}/assets/${created.body.id}/url`)
+      .expect(200);
+
+    expect(response.body.url).toContain(created.body.storageKey);
+  });
+
+  it('streams the exact uploaded bytes back with the recorded content type', async () => {
+    const created = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'kael.png',
+        mimeType: 'image/png',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+
+    const response = await http()
+      .get(`/api/projects/${project.id}/assets/${created.body.id}/content`)
+      .expect(200);
+
+    expect(response.headers['content-type']).toContain('image/png');
+    expect(response.body).toEqual(Buffer.from('pretend png bytes'));
+  });
+
+  it('never lists another project assets', async () => {
+    await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'kael.png',
+        mimeType: 'image/png',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+
+    const response = await http().get(`/api/projects/${otherProject.id}/assets`).expect(200);
+
+    expect(response.body.total).toBe(0);
+  });
+});
+
+describe('archiving and restoring an asset', () => {
+  it('archives an asset and hides it from the default listing', async () => {
+    const created = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'kael.png',
+        mimeType: 'image/png',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+
+    await http().post(`/api/projects/${project.id}/assets/${created.body.id}/archive`).expect(201);
+
+    const listed = await http().get(`/api/projects/${project.id}/assets`).expect(200);
+    expect(listed.body.total).toBe(0);
+
+    const restored = await http()
+      .post(`/api/projects/${project.id}/assets/${created.body.id}/restore`)
+      .expect(201);
+    expect(restored.body.status).toBe('active');
+  });
+
+  it('refuses to archive an asset through another project', async () => {
+    const created = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'kael.png',
+        mimeType: 'image/png',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+
+    await http()
+      .post(`/api/projects/${otherProject.id}/assets/${created.body.id}/archive`)
+      .expect(404);
+  });
+});

@@ -1,4 +1,5 @@
 import {
+  DrizzleAssetRepository,
   DrizzleEntityRelationshipRepository,
   DrizzleEntityRepository,
   DrizzleEntityVersionRepository,
@@ -6,6 +7,7 @@ import {
   type DatabaseClient,
 } from '@level-zero/database';
 import {
+  AssetService,
   EntityRelationshipService,
   EntityService,
   EntityVersionService,
@@ -13,10 +15,12 @@ import {
   ProjectService,
   systemClock,
   uuidIdGenerator,
+  type AssetRepository,
   type EntityRelationshipRepository,
   type EntityRepository,
   type EntityVersionRepository,
   type EntityServiceDeps,
+  type ObjectStorageProvider,
   type ProjectRepository,
 } from '@level-zero/domain';
 import { Global, Module } from '@nestjs/common';
@@ -24,11 +28,13 @@ import { APP_FILTER } from '@nestjs/core';
 
 import { DomainExceptionFilter } from '../common/domain-exception.filter';
 import { DATABASE_CLIENT } from '../infrastructure/database.module';
+import { OBJECT_STORAGE } from '../infrastructure/storage.module';
 
 export const PROJECT_REPOSITORY = Symbol('PROJECT_REPOSITORY');
 export const ENTITY_REPOSITORY = Symbol('ENTITY_REPOSITORY');
 export const RELATIONSHIP_REPOSITORY = Symbol('RELATIONSHIP_REPOSITORY');
 export const VERSION_REPOSITORY = Symbol('VERSION_REPOSITORY');
+export const ASSET_REPOSITORY = Symbol('ASSET_REPOSITORY');
 export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
 
 /**
@@ -109,6 +115,22 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
         deps: EntityServiceDeps,
       ): EntityVersionService => new EntityVersionService(versions, entities, deps),
     },
+    {
+      provide: ASSET_REPOSITORY,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: DatabaseClient): AssetRepository =>
+        new DrizzleAssetRepository(client.db),
+    },
+    {
+      provide: AssetService,
+      inject: [ASSET_REPOSITORY, PROJECT_REPOSITORY, OBJECT_STORAGE, DOMAIN_DEPS],
+      useFactory: (
+        assets: AssetRepository,
+        projects: ProjectRepository,
+        storage: ObjectStorageProvider,
+        deps: EntityServiceDeps,
+      ): AssetService => new AssetService(assets, projects, storage, deps),
+    },
     { provide: APP_FILTER, useClass: DomainExceptionFilter },
   ],
   exports: [
@@ -117,10 +139,12 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     EntityRelationshipService,
     EntityVersionService,
     LineageService,
+    AssetService,
     PROJECT_REPOSITORY,
     ENTITY_REPOSITORY,
     RELATIONSHIP_REPOSITORY,
     VERSION_REPOSITORY,
+    ASSET_REPOSITORY,
     DOMAIN_DEPS,
   ],
 })

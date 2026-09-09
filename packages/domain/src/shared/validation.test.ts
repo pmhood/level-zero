@@ -4,8 +4,11 @@ import { ValidationError } from './errors';
 import { normalizePaging } from './paging';
 import {
   normalizeTags,
+  optionalNonNegativeNumber,
+  optionalPositiveInt,
   optionalText,
   requireJsonObject,
+  requireNonNegativeInt,
   requireOneOf,
   requireText,
 } from './validation';
@@ -94,6 +97,61 @@ describe('requireJsonObject', () => {
     circular.self = circular;
 
     expect(() => requireJsonObject('data', circular)).toThrow(/JSON-serialisable/);
+  });
+});
+
+describe('requireNonNegativeInt', () => {
+  it('accepts zero and positive integers', () => {
+    expect(requireNonNegativeInt('byteSize', 0)).toBe(0);
+    expect(requireNonNegativeInt('byteSize', 1024)).toBe(1024);
+  });
+
+  it.each([
+    ['a negative number', -1],
+    ['a fraction', 1.5],
+    ['a non-number', '10'],
+    ['undefined', undefined],
+  ])('rejects %s', (_label, value) => {
+    expect(() => requireNonNegativeInt('byteSize', value)).toThrow(ValidationError);
+  });
+});
+
+describe('optionalPositiveInt', () => {
+  it('passes null and undefined through unchanged', () => {
+    expect(optionalPositiveInt('width', null)).toBeNull();
+    expect(optionalPositiveInt('width', undefined)).toBeNull();
+  });
+
+  it('accepts a positive integer', () => {
+    expect(optionalPositiveInt('width', 1920)).toBe(1920);
+  });
+
+  it.each([
+    ['zero', 0],
+    ['a negative number', -1],
+    ['a fraction', 1.5],
+  ])('rejects %s', (_label, value) => {
+    expect(() => optionalPositiveInt('width', value)).toThrow(ValidationError);
+  });
+});
+
+describe('optionalNonNegativeNumber', () => {
+  it('passes null and undefined through unchanged', () => {
+    expect(optionalNonNegativeNumber('durationSeconds', null)).toBeNull();
+    expect(optionalNonNegativeNumber('durationSeconds', undefined)).toBeNull();
+  });
+
+  it('accepts zero and fractional values', () => {
+    expect(optionalNonNegativeNumber('durationSeconds', 0)).toBe(0);
+    expect(optionalNonNegativeNumber('durationSeconds', 12.5)).toBe(12.5);
+  });
+
+  it.each([
+    ['a negative number', -0.1],
+    ['NaN', Number.NaN],
+    ['a non-number', '12'],
+  ])('rejects %s', (_label, value) => {
+    expect(() => optionalNonNegativeNumber('durationSeconds', value)).toThrow(ValidationError);
   });
 });
 
