@@ -1,6 +1,6 @@
 'use client';
 
-import type { Document } from '@level-zero/domain';
+import type { Document, Entity } from '@level-zero/domain';
 import {
   Button,
   EmptyState,
@@ -10,8 +10,16 @@ import {
   useEditorAutosave,
   type JSONContent,
 } from '@level-zero/ui';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { matchEntities } from '@/features/entities/entity-reference';
+import { EntityReferenceProvider } from '@/features/entities/entity-reference-context';
+import {
+  createEntityReferenceExtensions,
+  ENTITY_EMBED_COMMANDS,
+} from '@/features/entities/entity-reference-extensions';
+import { EntityReferenceInspector } from '@/features/entities/entity-reference-inspector';
+import { useReferenceableEntities } from '@/features/entities/use-entities';
 import { ApiRequestError } from '@/lib/api';
 
 import { documentOutline } from './document-outline';
@@ -68,6 +76,27 @@ function GddDocumentEditor({
   const saveDocument = useSaveGddDocument(projectId, designDocument.entity.id);
   const surfaceRef = useRef<HTMLDivElement>(null);
 
+  const entitiesQuery = useReferenceableEntities(projectId);
+  const entities = useMemo(() => entitiesQuery.data?.items ?? [], [entitiesQuery.data]);
+
+  // The reference the writer clicked is held by id, not by value, so the panel
+  // shows the entity as it is now rather than as it was when it was opened.
+  const [openEntityId, setOpenEntityId] = useState<string | null>(null);
+  const openEntity = entities.find((entity) => entity.id === openEntityId) ?? null;
+  const openReference = useCallback((entity: Entity) => setOpenEntityId(entity.id), []);
+
+  // The `@` menu is built once with the editor, but has to search the entities
+  // as they are now — so it reads the list through a ref, the same way the
+  // editor holds its change handler.
+  const entitiesRef = useRef(entities);
+  useEffect(() => {
+    entitiesRef.current = entities;
+  }, [entities]);
+
+  const [referenceExtensions] = useState(() =>
+    createEntityReferenceExtensions((query) => matchEntities(entitiesRef.current, query)),
+  );
+
   const save = useCallback(
     (content: JSONContent) => saveDocument.mutateAsync(content),
     [saveDocument],
@@ -85,26 +114,38 @@ function GddDocumentEditor({
   }
 
   return (
-    <div className="flex h-full min-h-0">
-      <DocumentOutline content={content} onSelect={scrollToHeading} />
+    <EntityReferenceProvider
+      entities={entities}
+      isPending={entitiesQuery.isPending}
+      onOpen={openReference}
+    >
+      <div className="flex h-full min-h-0">
+        <DocumentOutline content={content} onSelect={scrollToHeading} />
 
-      <div ref={surfaceRef} className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-        <WorkspaceHeader
-          title="GDD"
-          description="The canonical written design. Reference entities instead of restating them."
-        />
-
-        <div className="w-full max-w-[860px] px-4 pb-16 xl:px-5 2xl:px-6">
-          <RichTextEditor
-            mode="document"
-            label="Game design document"
-            content={content}
-            onChange={handleChange}
-            toolbarActions={<SaveStatusLabel status={autosave.status} error={autosave.error} />}
+        <div ref={surfaceRef} className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+          <WorkspaceHeader
+            title="GDD"
+            description="The canonical written design. Reference entities instead of restating them."
           />
+
+          <div className="w-full max-w-[860px] px-4 pb-16 xl:px-5 2xl:px-6">
+            <RichTextEditor
+              mode="document"
+              label="Game design document"
+              content={content}
+              onChange={handleChange}
+              extensions={referenceExtensions}
+              commands={ENTITY_EMBED_COMMANDS}
+              toolbarActions={<SaveStatusLabel status={autosave.status} error={autosave.error} />}
+            />
+          </div>
         </div>
+
+        {openEntity && (
+          <EntityReferenceInspector entity={openEntity} onClose={() => setOpenEntityId(null)} />
+        )}
       </div>
-    </div>
+    </EntityReferenceProvider>
   );
 }
 
