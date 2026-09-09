@@ -1,6 +1,7 @@
 export {
   InMemoryActivityRepository,
   InMemoryAssetRepository,
+  InMemoryEmbeddingProvider,
   InMemoryEntityRelationshipRepository,
   InMemoryEntityRepository,
   InMemoryEntityVersionRepository,
@@ -11,4 +12,5 @@ export {
   InMemoryObjectStorageProvider,
   InMemoryProjectRepository,
   InMemoryPrototypeVersionRepository,
+  InMemorySearchDocumentRepository,
 } from './in-memory-repositories';

@@ -71,6 +71,13 @@
       "when": 1788969466288,
       "tag": "0009_odd_blizzard",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788975628636,
+      "tag": "0010_soft_miek",
+      "breakpoints": true
     }
   ]
 }

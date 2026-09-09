@@ -79,6 +79,33 @@ export function documentContent(source: Pick<Entity, 'data'>): DocumentContent {
   return content.type === 'doc' ? content : emptyDocumentContent();
 }
 
+/**
+ * The body's prose, with its structure dropped.
+ *
+ * Every `text` node is collected in reading order, whatever node holds it, so a
+ * heading, a table cell and a custom node all contribute the words they show.
+ * Used for search indexing and for anything else that needs the document as
+ * plain text; rendering is still the editor's job.
+ */
+export function documentPlainText(content: DocumentContent): string {
+  const parts: string[] = [];
+
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const child of node) walk(child);
+      return;
+    }
+    if (typeof node !== 'object' || node === null) return;
+
+    const { text, content: children } = node as { text?: unknown; content?: unknown };
+    if (typeof text === 'string' && text.length > 0) parts.push(text);
+    if (children !== undefined) walk(children);
+  };
+
+  walk(content.content);
+  return parts.join(' ').replace(/\s+/g, ' ').trim();
+}
+
 /** The `data` for a document entity carrying `content`, keeping any other fields. */
 export function documentData(
   content: DocumentContent,

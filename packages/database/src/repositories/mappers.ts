@@ -8,6 +8,7 @@ import {
   type Job,
   type Project,
   type PrototypeVersion,
+  type SearchDocument,
 } from '@level-zero/domain';
 
 import { type ActivityRow, type NewActivityRow } from '../schema/activities';
@@ -21,6 +22,7 @@ import {
 import { type EntityVersionRow, type NewEntityVersionRow } from '../schema/entity-versions';
 import { type JobRow, type NewJobRow } from '../schema/jobs';
 import { type NewProjectRow, type ProjectRow } from '../schema/projects';
+import { type NewSearchDocumentRow, type SearchDocumentRow } from '../schema/search-documents';
 import {
   type NewPrototypeEntityVersionRow,
   type NewPrototypeVersionRow,
@@ -367,6 +369,48 @@ export function toActivityRow(activity: Activity): NewActivityRow {
     metadata: activity.metadata,
     actor: activity.actor,
     createdAt: activity.createdAt,
+  };
+}
+
+export function toSearchDocument(row: SearchDocumentRow): SearchDocument {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    sourceType: row.sourceType,
+    sourceId: row.sourceId,
+    entityType: row.entityType,
+    status: row.status,
+    tags: row.tags,
+    title: row.title,
+    body: row.body,
+    contentHash: row.contentHash,
+    embedding: row.embedding,
+    embeddingModel: row.embeddingModel,
+    embeddedHash: row.embeddedHash,
+    sourceVersionId: row.sourceVersionId,
+    sourceUpdatedAt: row.sourceUpdatedAt,
+    indexedAt: row.indexedAt,
+  };
+}
+
+export function toSearchDocumentRow(document: SearchDocument): NewSearchDocumentRow {
+  return {
+    id: document.id,
+    projectId: document.projectId,
+    sourceType: document.sourceType,
+    sourceId: document.sourceId,
+    entityType: document.entityType,
+    status: document.status,
+    tags: document.tags,
+    title: document.title,
+    body: document.body,
+    contentHash: document.contentHash,
+    embedding: document.embedding,
+    embeddingModel: document.embeddingModel,
+    embeddedHash: document.embeddedHash,
+    sourceVersionId: document.sourceVersionId,
+    sourceUpdatedAt: document.sourceUpdatedAt,
+    indexedAt: document.indexedAt,
   };
 }
 

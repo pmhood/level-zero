@@ -6,6 +6,7 @@ import { type Entity } from '../entity/entity';
 import { type EntityRepository } from '../entity/entity-repository';
 import { type ProjectRepository } from '../project/project-repository';
 import { type LineageService } from '../relationship/lineage-service';
+import { type SearchIndexer } from '../search/search-indexer';
 import { type Clock } from '../shared/clock';
 import { ConflictError, NotFoundError } from '../shared/errors';
 import { type IdGenerator } from '../shared/id';
@@ -80,6 +81,7 @@ export class GenerationService {
     private readonly lineage: LineageService,
     private readonly activity: ActivityService,
     private readonly deps: GenerationServiceDeps,
+    private readonly search?: SearchIndexer,
   ) {}
 
   /**
@@ -106,7 +108,7 @@ export class GenerationService {
     ]);
     await this.requireAssets(projectId, generation.inputAssetIds);
 
-    return this.generations.insert(generation);
+    return this.indexed(await this.generations.insert(generation));
   }
 
   /** Throws `NotFoundError` rather than returning null: callers want the record. */
@@ -158,7 +160,9 @@ export class GenerationService {
     input: DispatchGenerationInput,
   ): Promise<Generation> {
     const generation = await this.getById(projectId, generationId);
-    return this.generations.save(dispatchGeneration(generation, input, this.deps));
+    return this.indexed(
+      await this.generations.save(dispatchGeneration(generation, input, this.deps)),
+    );
   }
 
   /**
@@ -171,7 +175,7 @@ export class GenerationService {
     input: RedispatchGenerationInput,
   ): Promise<Generation> {
     const generation = await this.getById(projectId, generationId);
-    return this.generations.save(redispatchGeneration(generation, input));
+    return this.indexed(await this.generations.save(redispatchGeneration(generation, input)));
   }
 
   /**
@@ -211,7 +215,7 @@ export class GenerationService {
       actor: saved.createdBy,
     });
 
-    return saved;
+    return this.indexed(saved);
   }
 
   /** Keeps the request intact and records why the provider could not fulfil it. */
@@ -236,12 +240,18 @@ export class GenerationService {
       actor: failed.createdBy,
     });
 
-    return failed;
+    return this.indexed(failed);
   }
 
   async cancel(projectId: string, generationId: string): Promise<Generation> {
     const generation = await this.getById(projectId, generationId);
-    return this.generations.save(cancelGeneration(generation, this.deps));
+    return this.indexed(await this.generations.save(cancelGeneration(generation, this.deps)));
+  }
+
+  /** Hands the saved generation to the search index, when one is wired up. */
+  private async indexed(generation: Generation): Promise<Generation> {
+    await this.search?.generationChanged(generation);
+    return generation;
   }
 
   private async requireEntities(projectId: string, entityIds: readonly string[]): Promise<void> {

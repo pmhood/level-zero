@@ -2,6 +2,7 @@ import {
   AiProviderRegistry,
   AnthropicProvider,
   EchoAiProvider,
+  LocalEmbeddingProvider,
   LocalImageProvider,
 } from '@level-zero/ai';
 import { loadDotEnv, parseEnv, workerEnvSchema } from '@level-zero/config';
@@ -13,6 +14,7 @@ import {
   DrizzleGenerationRepository,
   DrizzleJobRepository,
   DrizzleProjectRepository,
+  DrizzleSearchDocumentRepository,
   checkPostgres,
   checkRedis,
   createDatabaseClient,
@@ -20,6 +22,8 @@ import {
   createJobEvents,
   createJobQueue,
   createRedisClient,
+  type JobDelivery,
+  type JobHandler,
 } from '@level-zero/database';
 import {
   ActivityService,
@@ -29,13 +33,16 @@ import {
   GenerationService,
   JobService,
   LineageService,
+  SearchIndexService,
   systemClock,
   uuidIdGenerator,
+  type JobKind,
 } from '@level-zero/domain';
 import { LocalObjectStorageProvider } from '@level-zero/storage';
 
 import { createGenerationJobHandler } from './generation-job';
 import { createWorkerRuntime, type WorkerProbe } from './runtime';
+import { createSearchIndexJobHandler } from './search-index-job';
 
 async function main(): Promise<void> {
   loadDotEnv(__dirname);
@@ -56,31 +63,47 @@ async function main(): Promise<void> {
   const relationships = new DrizzleEntityRelationshipRepository(database.db);
   const assets = new DrizzleAssetRepository(database.db);
 
+  const generationRepository = new DrizzleGenerationRepository(database.db);
   const activity = new ActivityService(new DrizzleActivityRepository(database.db), deps);
-  const entityService = new EntityService(entities, projects, activity, deps);
+
+  const queue = createJobQueue({ connectionUrl: env.REDIS_URL });
+  const events = createJobEvents({ connectionUrl: env.REDIS_URL });
+  const jobs = new JobService(new DrizzleJobRepository(database.db), projects, queue, events, deps);
+
+  // The API registers the same embedding provider, so a stored vector and the
+  // query it is compared against are always in one vector space.
+  const search = new SearchIndexService(
+    new DrizzleSearchDocumentRepository(database.db),
+    entities,
+    assets,
+    generationRepository,
+    new LocalEmbeddingProvider(),
+    jobs,
+    deps,
+  );
+
+  const entityService = new EntityService(entities, projects, activity, deps, search);
   const lineage = new LineageService(
     entityService,
     new EntityRelationshipService(relationships, entities, deps),
     activity,
   );
-
-  const queue = createJobQueue({ connectionUrl: env.REDIS_URL });
-  const events = createJobEvents({ connectionUrl: env.REDIS_URL });
-  const jobs = new JobService(new DrizzleJobRepository(database.db), projects, queue, events, deps);
   const assetService = new AssetService(
     assets,
     projects,
     new LocalObjectStorageProvider({ rootDir: env.STORAGE_LOCAL_ROOT }),
     deps,
+    search,
   );
   const generations = new GenerationService(
-    new DrizzleGenerationRepository(database.db),
+    generationRepository,
     projects,
     entities,
     assets,
     lineage,
     activity,
     deps,
+    search,
   );
 
   // Registration order is preference order, and a failing provider falls
@@ -98,15 +121,22 @@ async function main(): Promise<void> {
     { name: 'redis', check: () => checkRedis(redis.redis) },
   ];
 
-  const consumer = createJobConsumer({
-    connectionUrl: env.REDIS_URL,
-    handle: createGenerationJobHandler({
+  // The queue names the kind it enqueued, so routing is a lookup rather than a
+  // chain of checks inside one handler.
+  const handlers: Record<JobKind, JobHandler> = {
+    generation: createGenerationJobHandler({
       jobs,
       generations,
       assets: assetService,
       providers,
       logger: console,
     }),
+    search_index: createSearchIndexJobHandler({ jobs, search, logger: console }),
+  };
+
+  const consumer = createJobConsumer({
+    connectionUrl: env.REDIS_URL,
+    handle: (delivery: JobDelivery) => handlers[delivery.kind](delivery),
     onError: (error) => console.error('[worker] queue error', error),
   });
 

@@ -8,3 +8,4 @@ export * from './generations';
 export * from './jobs';
 export * from './projects';
 export * from './prototype-versions';
+export * from './search-documents';
