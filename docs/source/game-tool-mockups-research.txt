@@ -1,0 +1,2624 @@
+Here’s the implementation-facing version, written so you can hand it directly to Claude, Cursor, or another coding agent.
+
+:::writing{variant="document" id="63842" title="Workbench — Frontend Design System & Implementation Specification"}
+# Workbench — Frontend Design System & Implementation Specification
+
+## Purpose
+
+This document defines the frontend implementation standards for **Workbench**, an AI-native game-development workspace for turning early ideas into structured designs, visual assets, prototypes, and playable builds.
+
+Use this specification as the source of truth when implementing new pages, components, and interactions.
+
+Primary goals:
+
+- maintain strong visual consistency across all tools
+- avoid each page becoming its own mini-product
+- preserve a cinematic, technical, game-development feel
+- enable dense professional workflows without visual clutter
+- support AI-assisted workflows naturally
+- make reusable primitives the default
+- minimize visual drift across generated implementations
+
+---
+
+# 1. Recommended Stack
+
+Preferred implementation stack:
+
+```txt id="exstus"
+React
+TypeScript
+Tailwind CSS
+shadcn/ui
+Radix UI
+Lucide Icons
+Framer Motion
+TanStack Query
+TanStack Table
+Zustand
+React Router / Next.js App Router
+```
+
+Optional libraries:
+
+```txt id="m9mo0o"
+React Flow      — graphs, mechanics, relationships
+tldraw          — moodboard / freeform canvas
+TipTap          — GDD document editing
+Monaco Editor   — code / scripts
+Recharts        — charts and balancing views
+cmdk            — command palette
+```
+
+Do not introduce additional UI frameworks without a clear need.
+
+---
+
+# 2. Global CSS Variables
+
+Define semantic variables rather than using hardcoded colors throughout components.
+
+```css id="l1pxck"
+:root {
+  --wb-bg-canvas: #08131c;
+  --wb-bg-sidebar: #09151e;
+  --wb-bg-surface: #0d1923;
+  --wb-bg-surface-raised: #12222e;
+  --wb-bg-hover: #172b39;
+  --wb-bg-active: rgba(66, 165, 255, 0.12);
+
+  --wb-border-subtle: #192b36;
+  --wb-border-default: #213744;
+  --wb-border-strong: #315065;
+
+  --wb-text-primary: #f2f6f8;
+  --wb-text-secondary: #a8bac5;
+  --wb-text-muted: #718894;
+  --wb-text-disabled: #4d626d;
+
+  --wb-blue: #42a5ff;
+  --wb-blue-hover: #64bcff;
+  --wb-blue-pressed: #1679c9;
+  --wb-blue-muted: rgba(66, 165, 255, 0.12);
+
+  --wb-ai: #a982f4;
+  --wb-ai-muted: rgba(169, 130, 244, 0.12);
+
+  --wb-success: #49d7a0;
+  --wb-warning: #e8b94c;
+  --wb-error: #f16e72;
+  --wb-info: #65b9f7;
+
+  --wb-radius-xs: 4px;
+  --wb-radius-sm: 6px;
+  --wb-radius-md: 8px;
+  --wb-radius-lg: 12px;
+  --wb-radius-xl: 16px;
+
+  --wb-shadow-floating:
+    0 16px 48px rgba(0, 0, 0, 0.36);
+
+  --wb-sidebar-width: 184px;
+  --wb-inspector-width: 320px;
+  --wb-header-height: 48px;
+
+  --wb-transition-fast: 120ms;
+  --wb-transition-normal: 180ms;
+  --wb-transition-slow: 240ms;
+}
+```
+
+Avoid using raw hex values elsewhere unless defining project-specific themes.
+
+---
+
+# 3. Tailwind Theme Mapping
+
+Extend Tailwind with semantic Workbench tokens.
+
+```ts id="8trzbu"
+// tailwind.config.ts
+
+export default {
+  theme: {
+    extend: {
+      colors: {
+        wb: {
+          canvas: "var(--wb-bg-canvas)",
+          sidebar: "var(--wb-bg-sidebar)",
+          surface: "var(--wb-bg-surface)",
+          raised: "var(--wb-bg-surface-raised)",
+          hover: "var(--wb-bg-hover)",
+
+          border: "var(--wb-border-default)",
+          "border-subtle": "var(--wb-border-subtle)",
+          "border-strong": "var(--wb-border-strong)",
+
+          primary: "var(--wb-text-primary)",
+          secondary: "var(--wb-text-secondary)",
+          muted: "var(--wb-text-muted)",
+
+          blue: "var(--wb-blue)",
+          "blue-hover": "var(--wb-blue-hover)",
+
+          ai: "var(--wb-ai)",
+
+          success: "var(--wb-success)",
+          warning: "var(--wb-warning)",
+          error: "var(--wb-error)",
+        },
+      },
+
+      borderRadius: {
+        "wb-xs": "var(--wb-radius-xs)",
+        "wb-sm": "var(--wb-radius-sm)",
+        "wb-md": "var(--wb-radius-md)",
+        "wb-lg": "var(--wb-radius-lg)",
+        "wb-xl": "var(--wb-radius-xl)",
+      },
+
+      spacing: {
+        sidebar: "var(--wb-sidebar-width)",
+        inspector: "var(--wb-inspector-width)",
+      },
+
+      transitionDuration: {
+        wb: "180ms",
+      },
+    },
+  },
+};
+```
+
+---
+
+# 4. Typography
+
+Primary font:
+
+```css id="soqhhm"
+font-family:
+  Inter,
+  Geist,
+  "SF Pro Display",
+  -apple-system,
+  BlinkMacSystemFont,
+  sans-serif;
+```
+
+Base font:
+
+```css id="7hck4w"
+body {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--wb-text-primary);
+}
+```
+
+## Type Tokens
+
+```txt id="1kz17z"
+Display XL
+40px / 44px
+700
+
+Display
+32px / 38px
+700
+
+Page Title
+28px / 34px
+700
+
+Section Title
+18px / 24px
+600
+
+Card Title
+15px / 20px
+600
+
+Body
+14px / 21px
+400
+
+Body Small
+13px / 19px
+400
+
+Label
+12px / 16px
+500
+
+Metadata
+11px / 15px
+500
+```
+
+Tailwind examples:
+
+```tsx id="rlvzgf"
+<h1 className="text-[28px] leading-[34px] font-bold">
+  Characters
+</h1>
+
+<h2 className="text-lg font-semibold">
+  Major Factions
+</h2>
+
+<p className="text-sm text-wb-secondary">
+  People drive the story.
+</p>
+
+<span className="text-xs text-wb-muted">
+  Updated 2h ago
+</span>
+```
+
+---
+
+# 5. App Shell
+
+All project tools should live within a consistent three-zone layout.
+
+```txt id="1426hb"
+┌─────────────┬─────────────────────────────────┬───────────────┐
+│ Navigation  │ Primary Workspace               │ Inspector     │
+│             │                                 │ optional      │
+│ 184px       │ fluid                           │ 320px         │
+└─────────────┴─────────────────────────────────┴───────────────┘
+```
+
+Implementation:
+
+```tsx id="hcqiqk"
+<div className="flex h-screen bg-wb-canvas text-wb-primary">
+  <AppSidebar />
+
+  <main className="min-w-0 flex-1 overflow-hidden">
+    <ProjectTopbar />
+    <ProjectWorkspace />
+  </main>
+
+  {inspectorOpen && <Inspector />}
+</div>
+```
+
+The primary workspace must always use:
+
+```tsx id="wf0ckv"
+className="min-w-0 flex-1"
+```
+
+to prevent horizontal overflow in dense interfaces.
+
+---
+
+# 6. Sidebar
+
+Desktop width:
+
+```txt id="nd2vrj"
+184px
+```
+
+Collapsed:
+
+```txt id="xsmbu0"
+64px
+```
+
+Sidebar background:
+
+```txt id="uz85g0"
+#09151E
+```
+
+Right border:
+
+```txt id="4icqfl"
+1px solid #192B36
+```
+
+## Sidebar Item
+
+Height:
+
+```txt id="thw8as"
+36px
+```
+
+Horizontal padding:
+
+```txt id="prvx2o"
+10px
+```
+
+Gap:
+
+```txt id="1f3zoq"
+10px
+```
+
+Icon:
+
+```txt id="xj22no"
+16–18px
+```
+
+Example:
+
+```tsx id="io15fq"
+<button
+  className="
+    flex h-9 w-full items-center gap-2.5
+    rounded-wb-sm px-2.5
+    text-sm text-wb-secondary
+    transition-colors duration-wb
+    hover:bg-wb-hover hover:text-wb-primary
+  "
+>
+  <Globe2 className="size-4" />
+  World
+</button>
+```
+
+Active:
+
+```tsx id="ogtcw5"
+className="
+  bg-[rgba(66,165,255,.12)]
+  text-wb-primary
+  ring-1 ring-inset ring-[rgba(66,165,255,.18)]
+"
+```
+
+Active icon:
+
+```txt id="q9bn44"
+Workbench Blue
+```
+
+Never make the full item bright blue.
+
+---
+
+# 7. Top Bar
+
+Height:
+
+```txt id="epaylj"
+48px
+```
+
+Use for:
+
+- breadcrumbs
+- global/project search
+- notifications
+- collaboration
+- account
+
+Structure:
+
+```txt id="97bfs3"
+Breadcrumbs       Search                  Utility actions
+```
+
+Search width:
+
+```txt id="grgq60"
+320–440px
+```
+
+Desktop max height:
+
+```txt id="mq07xr"
+36px
+```
+
+---
+
+# 8. Workspace Header
+
+Every project page should use one of two patterns.
+
+## Compact Header
+
+Use for utility-heavy pages:
+
+```txt id="y57zvc"
+Characters
+People drive the story.
+```
+
+Height:
+
+```txt id="6iwrb2"
+80–120px
+```
+
+---
+
+## Cinematic Header
+
+Use for:
+
+- Overview
+- World
+- Mechanics
+- GDD
+- Build
+- Prototype
+
+Typical height:
+
+```txt id="05t39f"
+160–200px
+```
+
+Includes project/environment artwork.
+
+Example structure:
+
+```tsx id="mrwz25"
+<ProjectHero
+  title="Driftwake"
+  eyebrow="Game Systems Design"
+  description="Interconnected systems for exploration, survival, and salvage."
+  image={projectBanner}
+/>
+```
+
+Overlay:
+
+```css id="h3t12i"
+background:
+  linear-gradient(
+    90deg,
+    rgba(8, 19, 28, 0.96) 0%,
+    rgba(8, 19, 28, 0.66) 52%,
+    rgba(8, 19, 28, 0.18) 100%
+  );
+```
+
+Do not place important UI directly over busy artwork without an overlay.
+
+---
+
+# 9. Content Width
+
+Workbench is a full-width productivity application.
+
+Do not use conventional marketing-site max widths such as:
+
+```txt id="pqvij1"
+max-w-5xl
+```
+
+Main content should use:
+
+```tsx id="pyboz8"
+className="w-full px-4 xl:px-5 2xl:px-6"
+```
+
+For document-centric surfaces, use a controlled reading width inside the workspace.
+
+Example:
+
+```txt id="eb7027"
+GDD editor content:
+720–860px
+```
+
+while navigation and inspector remain visible.
+
+---
+
+# 10. Grid System
+
+Common dashboard grid:
+
+```css id="d1yzgx"
+grid-template-columns:
+  repeat(12, minmax(0, 1fr));
+```
+
+Useful spans:
+
+```txt id="ajq0kh"
+Small card        3 columns
+Medium card       4 columns
+Large card        6 columns
+Main visualization 8 columns
+Inspector region  4 columns
+```
+
+Example:
+
+```tsx id="evs9i9"
+<div className="grid grid-cols-12 gap-3">
+  <section className="col-span-8">
+    ...
+  </section>
+
+  <section className="col-span-4">
+    ...
+  </section>
+</div>
+```
+
+Avoid nesting excessive grids.
+
+---
+
+# 11. Standard Panel
+
+Base primitive:
+
+```tsx id="nns24k"
+<div
+  className="
+    rounded-wb-md
+    border border-wb-border
+    bg-wb-surface
+  "
+>
+  ...
+</div>
+```
+
+Default panel padding:
+
+```txt id="4xj6w7"
+12px or 16px
+```
+
+Dense panels:
+
+```txt id="22yvkh"
+12px
+```
+
+Prominent panels:
+
+```txt id="1a6daa"
+16–20px
+```
+
+---
+
+# 12. Card Component
+
+Create one reusable card primitive rather than reinventing containers.
+
+```ts id="8aur25"
+type CardProps = {
+  selected?: boolean;
+  interactive?: boolean;
+  padding?: "none" | "sm" | "md" | "lg";
+};
+```
+
+Base:
+
+```tsx id="vzqq2a"
+const cardVariants = cva(
+  `
+    rounded-wb-md
+    border border-wb-border
+    bg-wb-surface
+    transition-colors duration-wb
+  `,
+  {
+    variants: {
+      selected: {
+        true: `
+          border-wb-blue
+          ring-1 ring-[rgba(66,165,255,.2)]
+        `,
+      },
+
+      interactive: {
+        true: `
+          cursor-pointer
+          hover:border-wb-border-strong
+          hover:bg-wb-hover
+        `,
+      },
+
+      padding: {
+        none: "",
+        sm: "p-2",
+        md: "p-3",
+        lg: "p-4",
+      },
+    },
+  }
+);
+```
+
+---
+
+# 13. Media Card
+
+Use for:
+
+- characters
+- locations
+- generated assets
+- project cards
+- scenes
+
+Anatomy:
+
+```txt id="aehz9l"
+┌─────────────────────┐
+│                     │
+│       Image         │
+│                     │
+├─────────────────────┤
+│ Card Title          │
+│ Short description   │
+│                     │
+│ Tags                │
+│ Metadata             │
+└─────────────────────┘
+```
+
+Image aspect ratios:
+
+```txt id="ys4642"
+Characters          4:5
+Locations           16:9
+Assets              1:1
+Project cards       16:9
+Environment cards   3:2
+```
+
+Avoid arbitrary image ratios within the same card collection.
+
+---
+
+# 14. Buttons
+
+Create these variants only:
+
+```txt id="atylkn"
+primary
+secondary
+ghost
+ai
+danger
+```
+
+## Primary
+
+```tsx id="juq1fp"
+className="
+  bg-wb-blue
+  text-[#05121b]
+  hover:bg-wb-blue-hover
+"
+```
+
+Primary text can be very dark rather than white for stronger contrast.
+
+---
+
+## Secondary
+
+```tsx id="abeyrg"
+className="
+  border border-wb-border-strong
+  bg-wb-raised
+  text-wb-primary
+  hover:bg-wb-hover
+"
+```
+
+---
+
+## Ghost
+
+```tsx id="yien3r"
+className="
+  bg-transparent
+  text-wb-secondary
+  hover:bg-wb-hover
+  hover:text-wb-primary
+"
+```
+
+---
+
+## AI
+
+```tsx id="miar69"
+className="
+  border border-[rgba(169,130,244,.35)]
+  bg-[rgba(169,130,244,.12)]
+  text-[#d8c8ff]
+  hover:bg-[rgba(169,130,244,.18)]
+"
+```
+
+AI buttons should often use:
+
+```tsx id="2qg1eo"
+<Sparkles />
+```
+
+---
+
+# 15. Button Heights
+
+Use:
+
+```txt id="a61qnp"
+Small        28px
+Default      34px
+Large        40px
+```
+
+Default Workbench buttons should usually be:
+
+```txt id="6nehby"
+34px
+```
+
+Avoid oversized 48px marketing-style buttons inside tools.
+
+---
+
+# 16. Icon Buttons
+
+Default:
+
+```txt id="evbthx"
+32 × 32px
+```
+
+Compact:
+
+```txt id="xskcwt"
+28 × 28px
+```
+
+Example:
+
+```tsx id="44n5np"
+<Button
+  variant="ghost"
+  size="icon"
+  className="size-8"
+>
+  <MoreHorizontal className="size-4" />
+</Button>
+```
+
+---
+
+# 17. Inputs
+
+Default height:
+
+```txt id="icsebc"
+34px
+```
+
+Textareas:
+
+```txt id="w2bkz4"
+minimum 88px
+```
+
+Input style:
+
+```tsx id="j18kl4"
+className="
+  h-[34px]
+  rounded-wb-sm
+  border border-wb-border
+  bg-wb-raised
+  px-3
+  text-sm text-wb-primary
+  placeholder:text-wb-muted
+  focus:border-wb-blue
+  focus:outline-none
+  focus:ring-1
+  focus:ring-[rgba(66,165,255,.25)]
+"
+```
+
+---
+
+# 18. Tabs
+
+Use tabs within tools rather than adding additional sidebar nesting.
+
+Example:
+
+```txt id="7j144z"
+Overview
+Visuals
+Background
+Inventory
+Relationships
+Notes
+```
+
+Tab height:
+
+```txt id="9my7l6"
+36px
+```
+
+Active state:
+
+```txt id="b2vxwu"
+blue bottom border
+primary text
+```
+
+Avoid pill-shaped tabs for major page navigation.
+
+Segmented controls may use pills.
+
+---
+
+# 19. Status Badge
+
+API:
+
+```ts id="rbjlms"
+type Status =
+  | "draft"
+  | "active"
+  | "generated"
+  | "approved"
+  | "testing"
+  | "warning"
+  | "error"
+  | "success";
+```
+
+Example:
+
+```tsx id="fcq1xy"
+<StatusBadge status="approved">
+  Approved
+</StatusBadge>
+```
+
+Default badge height:
+
+```txt id="tplch5"
+20–22px
+```
+
+Never rely on color alone.
+
+Always include text or icon.
+
+---
+
+# 20. Tag
+
+Tags communicate taxonomy, not status.
+
+Examples:
+
+```txt id="7klpc7"
+Sci-Fi
+Survival
+Salvager
+Mechanic
+Exploration
+```
+
+Height:
+
+```txt id="r8gg5i"
+22px
+```
+
+Horizontal padding:
+
+```txt id="g48ke8"
+8px
+```
+
+Tags should be lower contrast than statuses.
+
+---
+
+# 21. Inspector Panel
+
+Default width:
+
+```txt id="0txx57"
+320px
+```
+
+Minimum:
+
+```txt id="rde3sj"
+280px
+```
+
+Maximum:
+
+```txt id="lkmah1"
+380px
+```
+
+Structure:
+
+```txt id="pzyerr"
+Inspector Header
+
+Context Tabs
+
+Primary Input / AI Composer
+
+Contextual actions
+
+Properties / suggestions
+
+History / metadata
+```
+
+Inspector should scroll independently.
+
+```tsx id="w1z5no"
+<aside className="w-inspector shrink-0 border-l border-wb-border bg-wb-sidebar">
+  <div className="h-full overflow-y-auto">
+    ...
+  </div>
+</aside>
+```
+
+---
+
+# 22. AI Composer
+
+AI interaction should use a reusable component.
+
+```ts id="0ttcow"
+type AIComposerProps = {
+  context: AIContext;
+  placeholder?: string;
+  suggestions?: Suggestion[];
+  attachments?: Attachment[];
+  allowProjectContext?: boolean;
+};
+```
+
+Example UI:
+
+```txt id="aomkjj"
+Describe what you'd like to explore...
+
+[ + ] [Project Context ✓]
+
+                     [Generate]
+```
+
+Composer should support contextual tokens:
+
+```txt id="eypqt6"
+@Kael
+@Oxygen System
+@The Maw
+@Current GDD Section
+```
+
+---
+
+# 23. AI Suggestions
+
+Suggestions should not feel like chat messages.
+
+Prefer actionable cards:
+
+```txt id="13qu0o"
+⚡ Balance concern
+
+Oxygen consumption may be too forgiving
+for deeper zones.
+
+[Apply Suggestion] [Discuss]
+```
+
+Suggested component:
+
+```tsx id="bxyknd"
+<AISuggestion
+  type="balance"
+  severity="medium"
+  title="Oxygen consumption may be too forgiving"
+  description="..."
+  actions={[...]}
+/>
+```
+
+---
+
+# 24. AI Result Provenance
+
+All generated assets should record:
+
+```ts id="xa128i"
+type GenerationMetadata = {
+  id: string;
+  provider: string;
+  model?: string;
+  prompt: string;
+  createdAt: Date;
+  seed?: string;
+  inputAssetIds?: string[];
+  projectContextIds?: string[];
+  generationId?: string;
+};
+```
+
+UI should expose this through:
+
+```txt id="mazkmn"
+Generated
+Model
+Prompt
+References
+Parent
+Version
+```
+
+Provenance should not dominate visual surfaces, but must be retrievable.
+
+---
+
+# 25. Entity Model
+
+Use a unified entity concept across the application.
+
+Examples:
+
+```ts id="07a4zr"
+type EntityType =
+  | "idea"
+  | "character"
+  | "location"
+  | "faction"
+  | "mechanic"
+  | "system"
+  | "asset"
+  | "scene"
+  | "prototype"
+  | "build"
+  | "document";
+```
+
+Every entity should support:
+
+```ts id="1ed7vs"
+interface Entity {
+  id: string;
+  projectId: string;
+  type: EntityType;
+
+  name: string;
+  description?: string;
+
+  status?: string;
+  tags?: string[];
+
+  parentIds?: string[];
+  linkedEntityIds?: string[];
+
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+This shared model makes cross-tool linking possible.
+
+---
+
+# 26. Creative Lineage
+
+Represent provenance as edges.
+
+```ts id="694nn4"
+interface LineageEdge {
+  id: string;
+
+  sourceEntityId: string;
+  targetEntityId: string;
+
+  relation:
+    | "inspired"
+    | "generated"
+    | "derived"
+    | "promoted"
+    | "implemented"
+    | "referenced"
+    | "replaced";
+}
+```
+
+Example:
+
+```txt id="e9u08u"
+Moodboard Image
+      ↓ inspired
+Character Concept
+      ↓ generated
+Character Sheet
+      ↓ derived
+3D Model
+      ↓ implemented
+Playable Character
+```
+
+This should become a core Workbench capability.
+
+---
+
+# 27. Context Menu
+
+All entity cards should support a consistent context menu.
+
+Typical actions:
+
+```txt id="nfeccj"
+Open
+Edit
+Explore Variations
+Ask AI
+Add to Moodboard
+Add to GDD
+Link to...
+Duplicate
+Archive
+Delete
+```
+
+Relevant actions only.
+
+Avoid showing 15 actions for every entity.
+
+---
+
+# 28. Command Palette
+
+Keyboard shortcut:
+
+```txt id="k2b8ep"
+⌘K
+Ctrl+K
+```
+
+Commands:
+
+```txt id="n65rch"
+Go to...
+Create...
+Generate...
+Search project...
+Open character...
+Open mechanic...
+Add idea...
+Start prototype...
+Ask Workbench...
+```
+
+Support fuzzy search.
+
+---
+
+# 29. Keyboard Interaction
+
+Recommended shortcuts:
+
+```txt id="dirb0z"
+⌘K          Command palette
+
+⌘P          Project search
+
+⌘N          New context-aware object
+
+⌘Enter      Execute primary action
+
+⌘S          Save
+
+Esc         Close current modal/panel
+
+/           Focus local search
+```
+
+Do not override common platform expectations.
+
+---
+
+# 30. Moodboard Canvas
+
+The Moodboard intentionally differs from standard layouts.
+
+Use:
+
+```txt id="4ssscg"
+infinite/freeform canvas
+```
+
+Supported nodes:
+
+```txt id="gz0b13"
+Image
+Generated Image
+Text
+Sticky Note
+Color Palette
+Reference Link
+Character
+Location
+Asset
+Group
+```
+
+Node behavior:
+
+```txt id="dquvvk"
+drag
+resize
+rotate
+group
+connect
+annotate
+lock
+duplicate
+```
+
+Use a compact floating toolbar.
+
+Canvas background:
+
+```txt id="m1k4tw"
+#0A151D
+```
+
+with a subtle grid.
+
+Grid opacity:
+
+```txt id="1ehfuf"
+3–6%
+```
+
+Do not use a bright Figma-style dotted grid.
+
+---
+
+# 31. Character Studio
+
+Desktop layout:
+
+```txt id="d5uwrw"
+┌──────────────┬──────────────────────────┬─────────────────┐
+│ Character    │ Character Detail         │ AI Studio       │
+│ Grid         │                          │                 │
+│ 32–38%       │ remaining                │ 320px           │
+└──────────────┴──────────────────────────┴─────────────────┘
+```
+
+Character detail tabs:
+
+```txt id="jff0oa"
+Overview
+Visuals
+Background
+Inventory
+Relationships
+Notes
+```
+
+Visual actions:
+
+```txt id="9aj2r2"
+Generate Portrait
+Expression Sheet
+Outfit Variants
+Turnaround
+Pose Sheet
+3D Concept
+```
+
+---
+
+# 32. World Workspace
+
+World should be entity-based rather than one giant document.
+
+Primary entity types:
+
+```txt id="4zfq7a"
+Locations
+Regions
+Factions
+Lore
+Events
+Hazards
+Cultures
+Technology
+Relationships
+Maps
+```
+
+Recommended dashboard:
+
+```txt id="mqbr7i"
+Major Factions
+Sector Map
+Key Locations
+Timeline
+Environment Tags
+Hazards
+Relationship Graph
+AI Suggestions
+```
+
+Maps should be interactive where feasible.
+
+---
+
+# 33. Mechanics Workspace
+
+Mechanics should focus on systems thinking.
+
+Supported modules:
+
+```txt id="hcyyi1"
+Core Loop
+Progression
+Resources
+Economy
+Crafting
+Combat
+AI
+Risk / Reward
+Difficulty
+Retention
+Rewards
+Exploration
+```
+
+Mechanic entity:
+
+```ts id="va3stw"
+interface Mechanic {
+  id: string;
+  name: string;
+  fantasy: string;
+  rules: string[];
+  inputs: string[];
+  outputs: string[];
+  tuningParameters: Parameter[];
+  linkedMechanics: string[];
+  implementationStatus: string;
+}
+```
+
+---
+
+# 34. Parameter Component
+
+Mechanic tuning should use a reusable parameter control.
+
+Example:
+
+```txt id="96msqc"
+Base Oxygen Capacity
+120 s
+─────────────●──────
+60                   240
+```
+
+API:
+
+```ts id="ucbikq"
+type Parameter = {
+  id: string;
+  label: string;
+  type: "number" | "range" | "percentage" | "boolean" | "enum";
+  value: unknown;
+  min?: number;
+  max?: number;
+  units?: string;
+};
+```
+
+Support simulation later.
+
+---
+
+# 35. GDD Editor
+
+Use TipTap or similar.
+
+Layout:
+
+```txt id="ywhkwt"
+┌───────────────┬──────────────────────────────┬─────────────┐
+│ TOC           │ Document                     │ AI Drafting │
+│ 220px         │ ~760px readable width        │ 320px       │
+└───────────────┴──────────────────────────────┴─────────────┘
+```
+
+Document sections should allow entity embeds.
+
+Example:
+
+```txt id="eq2gum"
+Core Loop
+
+Explore → Scavenge → Upgrade → Go Deeper
+```
+
+But each element can link back to its mechanic entity.
+
+---
+
+# 36. Entity Embeds in GDD
+
+Example:
+
+```tsx id="ziqykg"
+<EntityMention
+  type="mechanic"
+  id="oxygen-management"
+>
+  Oxygen Management
+</EntityMention>
+```
+
+Hover:
+
+```txt id="g146eg"
+Oxygen Management
+Mechanic • Testing
+
+Capacity: 120 seconds
+Current build: Prototype v0.3
+
+[Open]
+```
+
+---
+
+# 37. Prototype Workspace
+
+Primary focus should be the running game.
+
+Layout:
+
+```txt id="zxf0q3"
+┌─────────────────────────────────────────┬───────────────────┐
+│                                         │ Build Tasks       │
+│                                         │                   │
+│             Playable View               ├───────────────────┤
+│                                         │ Activity          │
+│                                         │                   │
+├─────────────────────────────────────────┴───────────────────┤
+│ Prototype Versions / Actions                                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+Actions:
+
+```txt id="kizzd2"
+Playtest
+Commit Variant
+Compare
+Share
+Send to Engine
+```
+
+---
+
+# 38. Build Workspace
+
+Sections:
+
+```txt id="3c6jdy"
+Engine Integrations
+Scenes
+Asset Pipeline
+Code Tasks
+Build Targets
+Build Queue
+Agent Activity
+Approval Workflow
+Logs
+Deploy
+```
+
+Build UI should still use Workbench panels and cards.
+
+Do not adopt a completely different "DevOps dashboard" look.
+
+---
+
+# 39. Agent Task Component
+
+```ts id="sfcea4"
+type AgentTaskStatus =
+  | "queued"
+  | "running"
+  | "blocked"
+  | "review"
+  | "complete"
+  | "failed";
+```
+
+Card example:
+
+```txt id="2bftxg"
+Generate Enemy AI
+
+Create patrol and pursuit logic
+based on Leviathan mechanic.
+
+Agent-03
+
+████████░░ 78%
+
+Running
+```
+
+Require review when destructive or significant changes are made.
+
+---
+
+# 40. Tables
+
+Use tables for:
+
+```txt id="mz2hz7"
+resources
+economy
+builds
+asset metadata
+parameter sets
+logs
+history
+```
+
+Table rows:
+
+```txt id="podn8b"
+36–40px
+```
+
+Headers:
+
+```txt id="emv3pm"
+32px
+```
+
+Use subtle separators.
+
+Avoid enclosing every cell with borders.
+
+---
+
+# 41. Data Visualization
+
+Use restrained visualizations.
+
+Recommended:
+
+```txt id="9w2zm6"
+line charts
+bar charts
+scatter plots
+relationship graphs
+progression graphs
+resource flows
+radar only when genuinely useful
+```
+
+Do not create a dashboard full of decorative charts.
+
+Every graph must answer a design or production question.
+
+---
+
+# 42. Loading States
+
+Skeletons should mirror final structure.
+
+Example card skeleton:
+
+```tsx id="vj452g"
+<div className="animate-pulse rounded-wb-md border border-wb-border bg-wb-surface">
+  <div className="aspect-video bg-wb-raised" />
+  <div className="space-y-2 p-3">
+    <div className="h-4 w-2/3 rounded bg-wb-raised" />
+    <div className="h-3 w-full rounded bg-wb-raised" />
+  </div>
+</div>
+```
+
+AI progress should use explicit state:
+
+```txt id="ct62fc"
+Creating silhouettes...
+2 of 4 complete
+```
+
+rather than endless spinners.
+
+---
+
+# 43. Empty States
+
+Use contextual text.
+
+Example:
+
+```txt id="s8klvy"
+No mechanics yet
+
+Start with the player's core fantasy,
+or let Workbench propose a few systems.
+
+[Create Mechanic] [Generate Ideas]
+```
+
+Maximum two primary choices.
+
+---
+
+# 44. Notifications
+
+Use toast notifications for:
+
+```txt id="mku38h"
+save success
+generation started
+copy
+minor errors
+background completion
+```
+
+Do not toast everything.
+
+Persistent issues belong in the relevant panel.
+
+---
+
+# 45. Modal Rules
+
+Use modals for:
+
+```txt id="fc5n6q"
+focused creation
+destructive confirmation
+configuration
+share
+publish
+```
+
+Do not use modals for:
+
+```txt id="0wcqhr"
+normal navigation
+editing complex entities
+multi-step creation
+```
+
+Complex workflows should have dedicated pages or inspectors.
+
+---
+
+# 46. Drawer Rules
+
+Use right drawers for:
+
+```txt id="oj79xs"
+asset details
+generation history
+properties
+quick edits
+```
+
+Use bottom drawers primarily on tablet/mobile.
+
+---
+
+# 47. Motion
+
+Framer Motion defaults:
+
+```ts id="glc5b1"
+const transition = {
+  duration: 0.18,
+  ease: [0.2, 0, 0, 1],
+};
+```
+
+Modal:
+
+```ts id="4mbc3f"
+initial={{ opacity: 0, scale: 0.985 }}
+animate={{ opacity: 1, scale: 1 }}
+exit={{ opacity: 0, scale: 0.985 }}
+```
+
+Panel:
+
+```ts id="z610bw"
+initial={{ opacity: 0, x: 8 }}
+animate={{ opacity: 1, x: 0 }}
+```
+
+Avoid large movements.
+
+---
+
+# 48. Hover Behavior
+
+Interactive cards:
+
+```txt id="64fz7l"
+border lightens
+background increases one tonal step
+```
+
+Optional image:
+
+```txt id="js89jb"
+scale 1 → 1.015
+```
+
+Duration:
+
+```txt id="hbbfr0"
+150ms
+```
+
+Avoid glow effects.
+
+---
+
+# 49. Focus Styles
+
+All interactive elements require visible keyboard focus.
+
+```css id="xjxjrx"
+outline: none;
+
+box-shadow:
+  0 0 0 2px var(--wb-bg-canvas),
+  0 0 0 4px var(--wb-blue);
+```
+
+or equivalent Tailwind ring utilities.
+
+---
+
+# 50. Responsive Breakpoints
+
+Primary target:
+
+```txt id="oi0b2m"
+1440 × 900+
+```
+
+Supported desktop:
+
+```txt id="qv8n1p"
+1280+
+```
+
+Below `1280px`:
+
+```txt id="x5f89k"
+collapse inspector by default
+```
+
+Below `1100px`:
+
+```txt id="0ftvph"
+collapse sidebar to icon rail
+```
+
+Below `768px`:
+
+Workbench becomes a companion interface rather than full editor.
+
+Prioritize:
+
+```txt id="0pscou"
+ideas
+assets
+review
+comments
+approvals
+AI chat
+project overview
+```
+
+---
+
+# 51. Z-Index Scale
+
+Use a fixed scale:
+
+```txt id="ascx99"
+0       normal
+10      sticky
+20      toolbar
+30      dropdown
+40      drawer
+50      modal overlay
+60      modal
+70      tooltip
+80      command palette
+```
+
+Do not introduce arbitrary z-index values.
+
+---
+
+# 52. Project Theme Model
+
+Each project may provide:
+
+```ts id="5e3dqg"
+type ProjectTheme = {
+  accent?: string;
+  heroImage?: string;
+  logo?: string;
+};
+```
+
+Project accent must only affect:
+
+```txt id="5y2yl2"
+project imagery
+select tags
+graph nodes
+timelines
+decorative accent lines
+```
+
+Never alter:
+
+```txt id="lf9kam"
+primary buttons
+sidebar active color
+focus states
+global navigation
+```
+
+---
+
+# 53. Folder Structure
+
+Recommended:
+
+```txt id="7h9ptp"
+src/
+  app/
+
+  components/
+    ui/
+    layout/
+    navigation/
+    entities/
+    ai/
+    creative/
+    production/
+
+  features/
+    projects/
+    ideas/
+    moodboards/
+    world/
+    characters/
+    mechanics/
+    gdd/
+    prototype/
+    build/
+
+  stores/
+
+  lib/
+
+  styles/
+
+  types/
+```
+
+Feature components should compose shared components rather than duplicate them.
+
+---
+
+# 54. Component Naming
+
+Use descriptive names.
+
+Good:
+
+```txt id="jyagpu"
+CharacterCard
+ProjectHero
+MechanicParameter
+AIComposer
+AssetGenerationCard
+BuildAgentStatus
+EntityRelationshipGraph
+```
+
+Avoid generic names:
+
+```txt id="pfff0y"
+ThingCard
+Widget
+Box
+Container2
+ItemThing
+```
+
+---
+
+# 55. Shared Page Layout
+
+Implement a reusable page shell.
+
+```tsx id="5lqzmd"
+<ProjectToolPage
+  title="Characters"
+  description="People drive the story."
+  actions={<CharacterActions />}
+  tabs={<CharacterTabs />}
+  inspector={<CharacterAIStudio />}
+>
+  <CharacterWorkspace />
+</ProjectToolPage>
+```
+
+This should handle:
+
+```txt id="i8ppgl"
+page header
+tabs
+scroll behavior
+inspector
+padding
+responsive behavior
+```
+
+---
+
+# 56. Inspector Context Model
+
+Inspector content should follow selection.
+
+Example:
+
+```ts id="a3pgc0"
+type Selection =
+  | { type: "character"; id: string }
+  | { type: "mechanic"; id: string }
+  | { type: "asset"; id: string }
+  | { type: "location"; id: string }
+  | null;
+```
+
+Inspector:
+
+```tsx id="qsgosl"
+switch (selection?.type) {
+  case "character":
+    return <CharacterInspector />;
+  case "mechanic":
+    return <MechanicInspector />;
+  case "asset":
+    return <AssetInspector />;
+}
+```
+
+Avoid static inspectors that always show AI chat.
+
+---
+
+# 57. Universal Entity Link
+
+Every entity should support:
+
+```tsx id="mcqe74"
+<EntityLink id="kael-voss" />
+```
+
+which can render as:
+
+```txt id="2b5znn"
+Kael Voss
+Character
+```
+
+or inline.
+
+This enables deep linking throughout Workbench.
+
+---
+
+# 58. Search
+
+Global search searches:
+
+```txt id="19yp8a"
+Projects
+Ideas
+Characters
+Locations
+Mechanics
+Assets
+Documents
+Builds
+```
+
+Result:
+
+```txt id="rliu9e"
+Kael Voss
+Character • Driftwake
+
+Oxygen Management
+Mechanic • Driftwake
+```
+
+Local page search scopes to current entity type.
+
+---
+
+# 59. Versioning
+
+Creative assets and design entities should support version history.
+
+Example:
+
+```txt id="l6r3fe"
+Kael Voss
+
+v4 — Current
+v3 — Outfit update
+v2 — Face variation
+v1 — Initial concept
+```
+
+Users should be able to:
+
+```txt id="nevtg8"
+compare
+restore
+branch
+promote
+```
+
+---
+
+# 60. Branching
+
+Ideas and assets may branch.
+
+Data:
+
+```ts id="pj35je"
+interface EntityVersion {
+  id: string;
+  entityId: string;
+  parentVersionId?: string;
+  branchName?: string;
+}
+```
+
+UI example:
+
+```txt id="i8hnzw"
+Kael Concept
+
+Main
+ ├── Rugged
+ ├── Younger
+ └── Military
+```
+
+Avoid Git terminology in creative-facing views unless the user explicitly enters code/build areas.
+
+---
+
+# 61. Compare Mode
+
+Support side-by-side comparisons.
+
+Use for:
+
+```txt id="mohwi6"
+art variants
+mechanic tuning
+characters
+GDD revisions
+prototype builds
+```
+
+Layout:
+
+```txt id="u7l8h1"
+A                          B
+
+[image]                    [image]
+
+Differences
+...
+```
+
+Allow:
+
+```txt id="v20x9n"
+Choose A
+Choose B
+Merge
+Continue exploring
+```
+
+---
+
+# 62. Promotion Action
+
+Use a standardized component.
+
+```tsx id="6icqth"
+<PromoteAction
+  from="idea"
+  to="mechanic"
+  label="Turn into Mechanic"
+/>
+```
+
+Common promotions:
+
+```txt id="npc7nn"
+Idea → Design Pillar
+Idea → Mechanic
+Idea → Character
+Idea → Location
+Reference → Visual Direction
+Concept → Character Sheet
+Mechanic → Prototype
+Prototype → Production Task
+```
+
+Promotion should create a lineage edge automatically.
+
+---
+
+# 63. Activity Feed
+
+Activity should focus on meaningful changes.
+
+Show:
+
+```txt id="kmclfo"
+Kael Voss character sheet approved
+
+Oxygen mechanic updated
+120s → 90s
+
+Prototype v0.4 created
+
+Agent-02 implemented salvage pickups
+```
+
+Do not show noisy events like:
+
+```txt id="7zl55p"
+Peter opened the World page
+```
+
+---
+
+# 64. Design System Rule
+
+Before implementing any new UI, coding agents should ask internally:
+
+```txt id="3e4trk"
+Can this be built from an existing primitive?
+```
+
+Preferred composition:
+
+```txt id="dveats"
+Panel
+Card
+Tabs
+Button
+Inspector
+Toolbar
+EntityCard
+AIComposer
+StatusBadge
+```
+
+New primitives should only be created if the interaction pattern is genuinely new.
+
+---
+
+# 65. Do / Don't
+
+## Do
+
+- use dark navy surfaces
+- use thin borders
+- use restrained accent colors
+- use visual imagery generously
+- maintain information density
+- keep layouts purposeful
+- reuse components
+- treat AI as contextual
+- link related entities
+- preserve provenance
+
+## Don't
+
+- use pure black backgrounds
+- use excessive glassmorphism
+- over-round everything
+- add neon glows everywhere
+- turn the interface into Discord
+- turn every screen into an AI chat
+- use giant cards where density matters
+- use marketing-site spacing
+- create unique navigation for each tool
+- introduce dozens of arbitrary colors
+
+---
+
+# 66. Example React Page
+
+```tsx id="9ryipt"
+export function CharactersPage() {
+  const selectedCharacter = useCharacterSelection();
+
+  return (
+    <ProjectToolPage
+      header={
+        <ProjectToolHeader
+          title="Characters"
+          description="People drive the story. Design, develop, and bring your cast to life."
+          actions={
+            <>
+              <Button variant="secondary">
+                <Share2 className="size-4" />
+                Share
+              </Button>
+
+              <Button>
+                <Plus className="size-4" />
+                New Character
+              </Button>
+            </>
+          }
+        />
+      }
+      tabs={
+        <Tabs
+          items={[
+            "Characters",
+            "Relationships",
+            "Groups",
+            "Casting Ideas",
+            "Appearance Library",
+            "Templates",
+          ]}
+        />
+      }
+      inspector={
+        selectedCharacter ? (
+          <CharacterAIStudio character={selectedCharacter} />
+        ) : (
+          <CharacterCreationInspector />
+        )
+      }
+    >
+      <div className="flex h-full">
+        <CharacterBrowser />
+        <CharacterDetail />
+      </div>
+    </ProjectToolPage>
+  );
+}
+```
+
+---
+
+# 67. Example Panel
+
+```tsx id="of3j0q"
+export function SectionPanel({
+  title,
+  description,
+  actions,
+  children,
+}: SectionPanelProps) {
+  return (
+    <section className="rounded-wb-md border border-wb-border bg-wb-surface">
+      <header className="flex items-start justify-between border-b border-wb-border-subtle px-4 py-3">
+        <div>
+          <h2 className="text-[15px] font-semibold text-wb-primary">
+            {title}
+          </h2>
+
+          {description && (
+            <p className="mt-0.5 text-xs text-wb-muted">
+              {description}
+            </p>
+          )}
+        </div>
+
+        {actions}
+      </header>
+
+      <div className="p-4">
+        {children}
+      </div>
+    </section>
+  );
+}
+```
+
+---
+
+# 68. Example Entity Card
+
+```tsx id="9o9ex1"
+export function EntityCard({
+  image,
+  name,
+  type,
+  status,
+  description,
+  tags,
+  selected,
+  onClick,
+}: EntityCardProps) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        `
+          group w-full overflow-hidden text-left
+          rounded-wb-md border border-wb-border
+          bg-wb-surface transition duration-wb
+          hover:border-wb-border-strong
+          hover:bg-wb-hover
+        `,
+        selected &&
+          `
+            border-wb-blue
+            ring-1 ring-[rgba(66,165,255,.18)]
+          `
+      )}
+    >
+      {image && (
+        <div className="aspect-[4/3] overflow-hidden bg-wb-raised">
+          <img
+            src={image}
+            alt=""
+            className="
+              h-full w-full object-cover
+              transition-transform duration-200
+              group-hover:scale-[1.015]
+            "
+          />
+        </div>
+      )}
+
+      <div className="p-3">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="truncate text-sm font-semibold">
+            {name}
+          </h3>
+
+          {status && <StatusBadge status={status} />}
+        </div>
+
+        <p className="mt-0.5 text-xs text-wb-muted">
+          {type}
+        </p>
+
+        {description && (
+          <p className="mt-2 line-clamp-2 text-xs text-wb-secondary">
+            {description}
+          </p>
+        )}
+
+        {tags?.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {tags.map((tag) => (
+              <Tag key={tag}>{tag}</Tag>
+            ))}
+          </div>
+        )}
+      </div>
+    </button>
+  );
+}
+```
+
+---
+
+# 69. First Component Implementation Order
+
+Build components in this order:
+
+```txt id="v7rv2l"
+1. AppShell
+2. AppSidebar
+3. Topbar
+4. ProjectToolPage
+5. ProjectToolHeader
+6. Tabs
+7. Button
+8. IconButton
+9. Panel
+10. Card
+11. Tag
+12. StatusBadge
+13. Inspector
+14. AIComposer
+15. EntityCard
+16. MediaCard
+17. EmptyState
+18. Toolbar
+19. ContextMenu
+20. CommandPalette
+```
+
+Once these exist, most initial mockups should be straightforward compositions.
+
+---
+
+# 70. Suggested Page Implementation Order
+
+Recommended first vertical slice:
+
+```txt id="ts2cat"
+Home
+Project Overview
+Idea Lab
+Moodboard
+Characters
+GDD
+Prototype
+```
+
+Then:
+
+```txt id="xdl7r6"
+World
+Mechanics
+Assets
+Build
+```
+
+This validates the entire concept-to-play workflow before expanding production tooling.
+
+---
+
+# 71. Agent Prompting Rule
+
+When giving coding tasks to AI agents, include this instruction:
+
+```txt id="q43grl"
+Follow the Workbench design system.
+
+Do not invent new colors, spacing scales, panel styles,
+button treatments, or navigation patterns unless the existing
+system cannot support the interaction.
+
+Prefer composing shared Workbench components over creating
+feature-specific visual primitives.
+
+All pages should feel like tools inside the same application,
+not standalone dashboards.
+```
+
+---
+
+# 72. Definition of Done for UI Tasks
+
+A UI task is complete when:
+
+- it uses semantic color tokens
+- it reuses shared components
+- dark/light contrast meets accessibility requirements
+- selected, hover, focus, loading, empty, and error states exist
+- keyboard navigation works
+- responsive behavior is defined
+- inspector behavior is appropriate
+- AI actions are visually distinct from deterministic actions
+- entities link back to canonical project objects
+- generated content preserves provenance
+- no arbitrary design values are introduced without justification
+
+---
+
+# 73. Product-Wide Principle
+
+Workbench is not a collection of generators.
+
+It is a connected creative system.
+
+A user should be able to begin with:
+
+```txt id="3q1vbu"
+"What if I made a game about scavenging abandoned spacecraft?"
+```
+
+and eventually move through:
+
+```txt id="25hq8l"
+Idea
+
+↓ Explore
+
+Design Pillars
+
+↓ Develop
+
+World
+Characters
+Mechanics
+
+↓ Visualize
+
+Moodboards
+Concept Art
+Character Sheets
+Assets
+
+↓ Define
+
+Game Design Document
+
+↓ Test
+
+Playable Prototype
+
+↓ Produce
+
+Tasks
+Code
+Engine Assets
+
+↓ Ship
+
+Build
+Playtest
+Deploy
+```
+
+without losing the relationship between any of those artifacts.
+
+The UI exists to make that progression feel natural.
+
+## The implementation rule to preserve above everything else:
+
+**Every object in Workbench should feel like part of the game, not part of the tool.**
+:::
+
+The next useful artifact would be a **page-by-page UX specification** for Home, Idea Lab, Moodboard, World, Characters, Mechanics, GDD, Prototype, Assets, and Build, including exact layout regions, interactions, menus, and what happens when you click each major control.
