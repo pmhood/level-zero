@@ -1,6 +1,9 @@
 import type {
+  CreateDocumentInput,
   CreateEntityInput,
   CreateProjectInput,
+  Document,
+  DocumentContent,
   Entity,
   EntityNeighborhood,
   EntityPage,
@@ -88,6 +91,10 @@ function post<T>(path: string, body?: unknown): Promise<T> {
 
 function patch<T>(path: string, body: unknown): Promise<T> {
   return apiFetch<T>(path, { method: 'PATCH', body: JSON.stringify(body) });
+}
+
+function put<T>(path: string, body: unknown): Promise<T> {
+  return apiFetch<T>(path, { method: 'PUT', body: JSON.stringify(body) });
 }
 
 /**
@@ -200,4 +207,38 @@ export function promoteEntity(
   input: PromoteEntityInput,
 ): Promise<PromotionResult> {
   return post(`/api/projects/${projectId}/entities/${entityId}/promote`, input);
+}
+
+// --- Documents -----------------------------------------------------------
+
+export interface ListDocumentsParams {
+  search?: string;
+  includeArchived?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+/** Listing returns the document entities; `getDocument` adds the body and history. */
+export function listDocuments(
+  projectId: string,
+  params: ListDocumentsParams = {},
+): Promise<EntityPage> {
+  return apiFetch(`/api/projects/${projectId}/documents${toQueryString(params)}`);
+}
+
+export function getDocument(projectId: string, documentId: string): Promise<Document> {
+  return apiFetch(`/api/projects/${projectId}/documents/${documentId}`);
+}
+
+export function createDocument(projectId: string, input: CreateDocumentInput): Promise<Document> {
+  return post(`/api/projects/${projectId}/documents`, input);
+}
+
+/** Autosave. The API replaces the body and deliberately writes no version. */
+export function saveDocumentContent(
+  projectId: string,
+  documentId: string,
+  content: DocumentContent,
+): Promise<Document> {
+  return put(`/api/projects/${projectId}/documents/${documentId}/content`, { content });
 }

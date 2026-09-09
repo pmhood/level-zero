@@ -25,6 +25,9 @@ Implemented so far, against the architecture epic
 - [#12](https://github.com/pmhood/level-zero/issues/12) — prototypes pinned to
   exact entity versions, so a playable experiment keeps resolving to what was
   actually in it, and two prototype versions can be compared.
+- [#14](https://github.com/pmhood/level-zero/issues/14) — document persistence,
+  autosave and meaningful document versions, so a GDD can be written
+  continuously without every pause becoming a permanent revision.
 
 ## Requirements
 
@@ -308,6 +311,35 @@ progress indicator needs to say something true: `queued`,
   Redis; `GET /jobs/stream` relays them to the browser as server-sent events.
   Delivery is best effort — a client that misses one re-reads the record.
 
+### Documents
+
+```text
+Project ──owns──> Entity (type: document, data.content = structured body)
+                    │
+                    └──EntityVersion(number, snapshot, reason, metadata.name)
+```
+
+A GDD, a brief and a playtest write-up are all `document` entities, and their
+history is the entity history every other game object already has. There is no
+document table and no document version table: duplicating entity identity for
+the sake of a text editor is the exact thing the entity model exists to prevent.
+
+- **The structured body is canonical.** `data.content` holds the editor's JSON
+  document node, never rendered HTML. Everything inside it — headings, tables,
+  entity mentions, asset embeds — is stored and restored untouched, so a custom
+  node survives saving and versioning without the domain knowing what it is.
+  HTML, Markdown and PDF are export formats layered on top of it.
+- **Autosave and versions are different acts.** `PUT …/content` replaces the
+  working copy and writes no version, so a writer pausing for breath cannot
+  flood the history; undo and redo stay the editor's own. A version is a
+  deliberate event — a named snapshot, a milestone, an accepted AI edit, a
+  playtest — which is exactly the reason list `EntityVersion` already carries.
+- **Restoring adds.** A restore appends a new version whose parent is whatever
+  was current, so the work done after the restored point is still there.
+- **A version list carries no bodies.** The history endpoint returns metadata
+  per version; a body arrives only when one version is read or two are compared,
+  which hands back both sides for a side-by-side view rather than diffing prose.
+
 ### API
 
 | Endpoint                                                                  | Purpose                                               |
@@ -362,6 +394,15 @@ removed and changed entity versions, `GET …/versions/:prototypeVersionId/conte
 resolves a version to the entity versions and build artifact it names, and
 `PATCH` on a version updates its status, notes or build artifact — never its
 pins.
+
+Documents live under `/api/projects/:projectId/documents`: `POST` creates one,
+`GET` lists the project's documents, `GET :documentId` loads the body with its
+current version and whether the working copy has moved on from it,
+`PUT :documentId/content` autosaves, `POST :documentId/versions` takes a named
+snapshot, `GET :documentId/versions` lists version metadata,
+`GET …/versions/:versionId` reads one with its body,
+`GET …/versions/compare?from=&to=` returns both bodies and what else changed,
+and `POST …/versions/:versionId/restore` brings a version back as a new one.
 
 Jobs live under `/api/projects/:projectId/jobs`: `GET` lists them (filtering by
 `status`, `kind` and `targetId`, which is how a page finds the job running one

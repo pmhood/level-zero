@@ -11,6 +11,7 @@ import {
 } from '@level-zero/database';
 import {
   AssetService,
+  DocumentService,
   EntityRelationshipService,
   EntityService,
   EntityVersionService,
@@ -131,6 +132,12 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
       ): EntityVersionService => new EntityVersionService(versions, entities, deps),
     },
     {
+      provide: DocumentService,
+      inject: [EntityService, EntityVersionService],
+      useFactory: (entities: EntityService, versions: EntityVersionService): DocumentService =>
+        new DocumentService(entities, versions),
+    },
+    {
       provide: ASSET_REPOSITORY,
       inject: [DATABASE_CLIENT],
       useFactory: (client: DatabaseClient): AssetRepository =>
@@ -219,6 +226,7 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     EntityService,
     EntityRelationshipService,
     EntityVersionService,
+    DocumentService,
     LineageService,
     AssetService,
     GenerationService,
