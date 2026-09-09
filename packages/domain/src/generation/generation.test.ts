@@ -9,6 +9,7 @@ import {
   createGeneration,
   dispatchGeneration,
   failGeneration,
+  redispatchGeneration,
   type CreateGenerationInput,
   type Generation,
 } from './generation';
@@ -97,6 +98,27 @@ describe('dispatchGeneration', () => {
     expect(() =>
       dispatchGeneration(running(), { provider: 'echo', model: 'echo-1' }, { clock }),
     ).toThrow(ConflictError);
+  });
+});
+
+describe('redispatchGeneration', () => {
+  it('corrects the provider and model without touching status or startedAt', () => {
+    const dispatched = running();
+
+    const generation = redispatchGeneration(dispatched, { provider: 'openai', model: 'gpt-image-1' });
+
+    expect(generation).toMatchObject({
+      status: 'running',
+      provider: 'openai',
+      model: 'gpt-image-1',
+    });
+    expect(generation.startedAt).toEqual(dispatched.startedAt);
+  });
+
+  it('refuses to redispatch a generation that was never dispatched', () => {
+    expect(() => redispatchGeneration(queued(), { provider: 'openai', model: 'gpt-image-1' })).toThrow(
+      ConflictError,
+    );
   });
 });
 

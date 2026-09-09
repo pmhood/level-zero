@@ -14,11 +14,13 @@ import {
   createGeneration,
   dispatchGeneration,
   failGeneration,
+  redispatchGeneration,
   type CompleteGenerationInput,
   type CreateGenerationInput,
   type DispatchGenerationInput,
   type FailGenerationInput,
   type Generation,
+  type RedispatchGenerationInput,
 } from './generation';
 import {
   type GenerationListFilter,
@@ -154,6 +156,19 @@ export class GenerationService {
   ): Promise<Generation> {
     const generation = await this.getById(projectId, generationId);
     return this.generations.save(dispatchGeneration(generation, input, this.deps));
+  }
+
+  /**
+   * Corrects the provider and model on a generation already dispatched, for
+   * when the candidate named at `dispatch` failed over to the next one.
+   */
+  async redispatch(
+    projectId: string,
+    generationId: string,
+    input: RedispatchGenerationInput,
+  ): Promise<Generation> {
+    const generation = await this.getById(projectId, generationId);
+    return this.generations.save(redispatchGeneration(generation, input));
   }
 
   /**

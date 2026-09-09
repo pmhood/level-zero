@@ -57,6 +57,20 @@ class FlakyProvider extends BaseAiProvider {
   }
 }
 
+/** A provider that always fails, for testing fallback to the next candidate. */
+class FailingProvider extends BaseAiProvider {
+  readonly capabilities: readonly AiCapability[] = ['text.generate'];
+  readonly defaultModel = 'failing-1';
+
+  constructor(readonly id: string) {
+    super();
+  }
+
+  async execute(): Promise<AiResult> {
+    throw new Error(`${this.id} unavailable`);
+  }
+}
+
 const silentLogger = { log: () => {}, error: () => {} };
 
 let jobs: JobService;
@@ -269,6 +283,39 @@ describe('failure and retry', () => {
     await expect(generations.getById(project.id, generation.id)).resolves.toMatchObject({
       status: 'failed',
       failure: { code: 'provider_error', message: 'provider unavailable' },
+    });
+  });
+});
+
+describe('provider fallback', () => {
+  it('completes with the next registered candidate when the first-choice provider throws', async () => {
+    providers.register(new FailingProvider('primary')).register(
+      new EchoAiProvider(['text.generate'], 'backup'),
+    );
+    const { generation, job } = await queued();
+
+    await handle()(delivery(job));
+
+    await expect(jobs.getById(project.id, job.id)).resolves.toMatchObject({ status: 'complete' });
+    // Names the provider and model that actually produced the result, not the
+    // first-choice one recorded when the attempt started.
+    await expect(generations.getById(project.id, generation.id)).resolves.toMatchObject({
+      status: 'complete',
+      provider: 'backup',
+      model: 'echo-1',
+    });
+  });
+
+  it('fails the generation with the last candidate error once every candidate is exhausted', async () => {
+    providers.register(new FailingProvider('primary')).register(new FailingProvider('secondary'));
+    const { generation, job } = await queued();
+
+    await expect(handle()(delivery(job))).rejects.toThrow('secondary unavailable');
+
+    await expect(jobs.getById(project.id, job.id)).resolves.toMatchObject({ status: 'failed' });
+    await expect(generations.getById(project.id, generation.id)).resolves.toMatchObject({
+      status: 'failed',
+      failure: { message: 'secondary unavailable' },
     });
   });
 });

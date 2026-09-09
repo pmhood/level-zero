@@ -167,6 +167,31 @@ export function dispatchGeneration(
   };
 }
 
+export interface RedispatchGenerationInput {
+  provider: string;
+  model: string;
+}
+
+/**
+ * Corrects who is doing the work after the candidate named at dispatch failed
+ * over to the next one, so a still-running generation never keeps naming a
+ * provider that did not end up producing the result. Status and `startedAt`
+ * are left as the original dispatch set them: the work started then, it is
+ * only its identity that changed.
+ */
+export function redispatchGeneration(
+  generation: Generation,
+  input: RedispatchGenerationInput,
+): Generation {
+  requireStatus(generation, ['running'], 'redispatched');
+
+  return {
+    ...generation,
+    provider: requireText('provider', input.provider, MAX_GENERATION_PROVIDER_LENGTH),
+    model: requireText('model', input.model, MAX_GENERATION_MODEL_LENGTH),
+  };
+}
+
 export interface CompleteGenerationInput {
   /** Assets the provider output, already uploaded through `AssetService`. */
   outputAssetIds: readonly string[];
