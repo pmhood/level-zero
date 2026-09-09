@@ -4,6 +4,7 @@ import { AssetsModule } from './assets/assets.module';
 import { ApiConfigModule } from './config/config.module';
 import { DomainModule } from './domain/domain.module';
 import { EntitiesModule } from './entities/entities.module';
+import { GenerationsModule } from './generations/generations.module';
 import { HealthModule } from './health/health.module';
 import { DatabaseModule } from './infrastructure/database.module';
 import { RedisModule } from './infrastructure/redis.module';
@@ -32,6 +33,7 @@ import { VersionsModule } from './versions/versions.module';
     RelationshipsModule,
     VersionsModule,
     AssetsModule,
+    GenerationsModule,
   ],
 })
 export class AppModule {}

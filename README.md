@@ -16,6 +16,9 @@ Implemented so far, against the architecture epic
 - [#5](https://github.com/pmhood/level-zero/issues/5) — the `Asset` model and an
   object-storage abstraction, so images, video, audio, 3D files, references,
   exports and build artifacts are one reusable layer instead of a table per tool.
+- [#6](https://github.com/pmhood/level-zero/issues/6) — AI generation records and
+  provenance, so every generated output can say which provider, model, prompt,
+  parameters, inputs and project context produced it.
 
 ## Requirements
 
@@ -205,6 +208,36 @@ derivatives without a generation pipeline: a thumbnail declares the source asset
 it was made from, and the database enforces the pairing (a `source` asset has no
 `sourceAssetId`; anything else must have one).
 
+### Generations
+
+```text
+Project ──owns──> Generation (capability, provider, model, prompt, parameters, status,
+                              inputEntityIds, inputAssetIds, contextEntityIds,
+                              outputAssetIds, parentGenerationId, seed,
+                              providerRequestId, failure)
+```
+
+Every AI output can explain itself. `GenerationService` writes the record
+**before** dispatching provider work, then only ever moves it forward:
+`queued` → `running` → `complete` / `failed` / `cancelled`. The prompt,
+parameters and inputs are never rewritten, so a failure keeps its diagnostics
+_and_ the request that produced them, and a retry is a new generation carrying
+`parentGenerationId` back to the one it re-rolls.
+
+- **Outputs are Assets, not provider URLs.** A generated image is an ordinary
+  `Asset` uploaded through `AssetService`, reusable everywhere a file is.
+- **Provenance is one row.** The id lists live on the generation, so "how was
+  this made" is a single query — from the output asset (`?outputAssetId=`) or
+  from an entity that influenced it (`?entityId=`, matching named inputs and
+  project context alike). GIN indexes serve both.
+- **Lineage stays in the graph.** Completing a generation with output entities
+  writes ordinary `generated_from` relationships through `LineageService`, so
+  there is no second, parallel lineage mechanism. Sources already recorded are
+  skipped, which makes regenerating the same entity idempotent.
+- **The database enforces the states.** A terminal status must carry a
+  `completedAt`, only a `failed` generation may carry `failure`, and a
+  generation something was re-rolled from cannot be deleted.
+
 ### API
 
 | Endpoint                                                                  | Purpose                                               |
@@ -240,6 +273,14 @@ safe URL through the configured provider, `GET :assetId/content` streams the
 bytes back, and `POST :assetId/archive` · `/restore` change asset state. Linking
 one into the entity graph is done with an `asset_reference` entity and the
 relationships endpoint above, not a route here.
+
+Generations live under `/api/projects/:projectId/generations`: `POST` records a
+request before any provider is called, `POST :generationId/dispatch` ·
+`/complete` · `/fail` · `/cancel` move it through its states, and
+`GET :generationId/provenance` resolves a record's ids to the entities, assets
+and parent generation they name. The listing filters by `status`, `capability`,
+`parentGenerationId`, `outputAssetId` and `entityId`, which is how provenance is
+read backwards from a generated image.
 
 Domain errors map to HTTP in one place: `NotFoundError` → 404,
 `ValidationError` → 400, `ConflictError` → 409, each with a stable `error` code
