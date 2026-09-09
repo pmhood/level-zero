@@ -13,6 +13,7 @@ import {
   type Entity,
   type UpdateEntityInput,
 } from './entity';
+import { type SearchIndexer } from '../search/search-indexer';
 import { type EntityListFilter, type EntityPage, type EntityRepository } from './entity-repository';
 import { type EntityType } from './entity-type';
 
@@ -27,6 +28,10 @@ export interface EntityServiceDeps {
  * Every Workbench tool — Idea Lab, Character Studio, the GDD editor — reads and
  * writes entities through this one service. Features must not add their own
  * stores that duplicate entity identity.
+ *
+ * Because it is the one funnel, it is also where the search index is told an
+ * entity changed. The indexer is optional: a caller that does not want one —
+ * most tests — leaves it out and nothing else behaves differently.
  */
 export class EntityService {
   constructor(
@@ -34,6 +39,7 @@ export class EntityService {
     private readonly projects: ProjectRepository,
     private readonly activity: ActivityService,
     private readonly deps: EntityServiceDeps,
+    private readonly search?: SearchIndexer,
   ) {}
 
   async create(projectId: string, input: Omit<CreateEntityInput, 'projectId'>): Promise<Entity> {
@@ -54,7 +60,7 @@ export class EntityService {
       metadata: { entityType: entity.type, name: entity.name },
     });
 
-    return entity;
+    return this.indexed(entity);
   }
 
   /**
@@ -86,7 +92,7 @@ export class EntityService {
 
   async update(projectId: string, entityId: string, patch: UpdateEntityInput): Promise<Entity> {
     const entity = await this.getById(projectId, entityId);
-    return this.entities.save(applyEntityUpdate(entity, patch, this.deps));
+    return this.indexed(await this.entities.save(applyEntityUpdate(entity, patch, this.deps)));
   }
 
   async archive(projectId: string, entityId: string): Promise<Entity> {
@@ -102,7 +108,7 @@ export class EntityService {
       metadata: { entityType: archived.type, name: archived.name },
     });
 
-    return archived;
+    return this.indexed(archived);
   }
 
   async restore(projectId: string, entityId: string): Promise<Entity> {
@@ -118,6 +124,17 @@ export class EntityService {
       metadata: { entityType: restored.type, name: restored.name },
     });
 
-    return restored;
+    return this.indexed(restored);
+  }
+
+  /**
+   * Hands the saved entity to the search index, when one is wired up.
+   *
+   * Called after the activity record, and last of the three: the index is
+   * derived, so it must never come between the write and the history of it.
+   */
+  private async indexed(entity: Entity): Promise<Entity> {
+    await this.search?.entityChanged(entity);
+    return entity;
   }
 }

@@ -7,4 +7,5 @@ export { DrizzleGenerationRepository } from './generation-repository';
 export { DrizzleJobRepository } from './job-repository';
 export { DrizzleProjectRepository } from './project-repository';
 export { DrizzlePrototypeVersionRepository } from './prototype-version-repository';
+export { DrizzleSearchDocumentRepository } from './search-document-repository';
 export { escapeLikePattern } from './mappers';

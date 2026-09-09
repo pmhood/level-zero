@@ -19,6 +19,8 @@ import type {
   PromotionResult,
   RelationshipDirection,
   RelationType,
+  SearchResultPage,
+  SearchSourceType,
   UpdateEntityInput,
   UpdateProjectInput,
   VersionReason,
@@ -307,4 +309,29 @@ export function saveDocumentContent(
   content: DocumentContent,
 ): Promise<Document> {
   return put(`/api/projects/${projectId}/documents/${documentId}/content`, { content });
+}
+
+// --- Search ---------------------------------------------------------------
+
+export interface SearchParams {
+  /** What to search for. Optional for `keyword`, which browses without it. */
+  q?: string;
+  /** `keyword` matches the words; `semantic` matches what they mean. */
+  mode?: 'keyword' | 'semantic';
+  sourceType?: SearchSourceType[];
+  /** Scopes to entity types — this is what a local, per-tool search sends. */
+  entityType?: EntityType[];
+  status?: string[];
+  tag?: string[];
+  includeArchived?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+/** One entry point over entities, documents, assets and generations. */
+export function searchProject(
+  projectId: string,
+  params: SearchParams = {},
+): Promise<SearchResultPage> {
+  return apiFetch(`/api/projects/${projectId}/search${toQueryString(params)}`);
 }

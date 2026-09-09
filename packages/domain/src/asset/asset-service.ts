@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { type ProjectRepository } from '../project/project-repository';
+import { type SearchIndexer } from '../search/search-indexer';
 import { type Clock } from '../shared/clock';
 import { ConflictError, NotFoundError } from '../shared/errors';
 import { type IdGenerator } from '../shared/id';
@@ -55,6 +56,7 @@ export class AssetService {
     private readonly projects: ProjectRepository,
     private readonly storage: ObjectStorageProvider,
     private readonly deps: AssetServiceDeps,
+    private readonly search?: SearchIndexer,
   ) {}
 
   /**
@@ -102,7 +104,7 @@ export class AssetService {
         },
         this.deps,
       );
-      return await this.assets.insert(asset);
+      return await this.indexed(await this.assets.insert(asset));
     } catch (error) {
       await this.storage.delete(storageKey).catch(() => undefined);
       throw error;
@@ -141,12 +143,18 @@ export class AssetService {
   /** Archiving hides the asset from normal listings; its bytes are left in place. */
   async archive(projectId: string, assetId: string): Promise<Asset> {
     const asset = await this.getById(projectId, assetId);
-    return this.assets.save(archiveAsset(asset, this.deps));
+    return this.indexed(await this.assets.save(archiveAsset(asset, this.deps)));
   }
 
   async restore(projectId: string, assetId: string): Promise<Asset> {
     const asset = await this.getById(projectId, assetId);
-    return this.assets.save(restoreAsset(asset, this.deps));
+    return this.indexed(await this.assets.save(restoreAsset(asset, this.deps)));
+  }
+
+  /** Hands the saved asset to the search index, when one is wired up. */
+  private async indexed(asset: Asset): Promise<Asset> {
+    await this.search?.assetChanged(asset);
+    return asset;
   }
 }
 

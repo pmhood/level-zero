@@ -6,6 +6,7 @@ import {
   type Entity,
 } from '../entity/entity';
 import { type EntityRepository } from '../entity/entity-repository';
+import { type SearchIndexer } from '../search/search-indexer';
 import { type Clock } from '../shared/clock';
 import { ConflictError, NotFoundError, ValidationError } from '../shared/errors';
 import { type IdGenerator } from '../shared/id';
@@ -73,6 +74,7 @@ export class EntityVersionService {
     private readonly entities: EntityRepository,
     private readonly activity: ActivityService,
     private readonly deps: VersionServiceDeps,
+    private readonly search?: SearchIndexer,
   ) {}
 
   /** Records the entity's current content as a new version on its branch. */
@@ -285,7 +287,7 @@ export class EntityVersionService {
     );
 
     const restored = applyEntitySnapshot(entity, version.snapshot, this.deps);
-    await this.entities.save(withCurrentVersion(restored, version.id, this.deps));
+    const saved = await this.entities.save(withCurrentVersion(restored, version.id, this.deps));
 
     await this.activity.record({
       projectId: entity.projectId,
@@ -305,6 +307,12 @@ export class EntityVersionService {
       },
       actor: version.createdBy,
     });
+
+    // Restoring, branching and promoting all rewrite the entity's content, so
+    // the searchable copy follows them the same way an ordinary edit does.
+    // Last, like everywhere else: the index is derived, so it must never come
+    // between the write and the history of it.
+    await this.search?.entityChanged(saved);
 
     return version;
   }

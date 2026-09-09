@@ -33,3 +33,8 @@ export {
   type AnthropicProviderOptions,
 } from './anthropic-provider';
 export { LocalImageProvider, type LocalImageProviderOptions } from './local-image-provider';
+export {
+  LOCAL_EMBEDDING_DIMENSIONS,
+  LOCAL_EMBEDDING_MODEL,
+  LocalEmbeddingProvider,
+} from './local-embedding-provider';

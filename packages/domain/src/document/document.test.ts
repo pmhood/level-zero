@@ -8,6 +8,7 @@ import { createEntityVersion } from '../version/entity-version';
 import {
   documentContent,
   documentData,
+  documentPlainText,
   documentVersionName,
   emptyDocumentContent,
   requireDocumentContent,
@@ -104,5 +105,45 @@ describe('documentVersionName', () => {
   it('reads an unnamed snapshot as null', () => {
     expect(documentVersionName(version({}))).toBeNull();
     expect(documentVersionName(version({ name: 12 }))).toBeNull();
+  });
+});
+
+describe('documentPlainText', () => {
+  it('collects the words a reader sees, whatever node holds them', () => {
+    const content: DocumentContent = {
+      type: 'doc',
+      content: [
+        { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Traversal' }] },
+        {
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: 'The trench is crossed on ' },
+            { type: 'text', marks: [{ type: 'bold' }], text: 'a single tank' },
+            { type: 'text', text: '.' },
+          ],
+        },
+      ],
+    };
+
+    expect(documentPlainText(content)).toBe('Traversal The trench is crossed on a single tank .');
+  });
+
+  it('reads the text out of a custom node without knowing what it is', () => {
+    const content: DocumentContent = {
+      type: 'doc',
+      content: [
+        {
+          type: 'entityMention',
+          attrs: { entityId: 'entity-1' },
+          content: [{ type: 'text', text: 'Kael Voss' }],
+        },
+      ],
+    };
+
+    expect(documentPlainText(content)).toBe('Kael Voss');
+  });
+
+  it('reads an empty document as an empty string', () => {
+    expect(documentPlainText(emptyDocumentContent())).toBe('');
   });
 });

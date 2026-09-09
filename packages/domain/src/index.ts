@@ -309,6 +309,7 @@ export {
   MAX_DOCUMENT_VERSION_NAME_LENGTH,
   documentContent,
   documentData,
+  documentPlainText,
   documentVersionName,
   emptyDocumentContent,
   requireDocumentContent,
@@ -326,3 +327,31 @@ export {
   type RestoreDocumentVersionInput,
   type SnapshotDocumentInput,
 } from './document/document-service';
+
+export {
+  SEARCH_EXCERPT_LENGTH,
+  SEARCH_SOURCE_TYPES,
+  embeddableText,
+  searchDocumentForAsset,
+  searchDocumentForEntity,
+  searchDocumentForGeneration,
+  type SearchDocument,
+  type SearchDocumentFactoryDeps,
+  type SearchSourceType,
+} from './search/search-document';
+export { type EmbeddingProvider } from './search/embedding';
+export {
+  MIN_SEMANTIC_SIMILARITY,
+  type SaveEmbeddingInput,
+  type SearchDocumentRepository,
+  type SearchFilter,
+  type SearchResult,
+  type SearchResultPage,
+} from './search/search-repository';
+export { SEARCH_INDEX_JOB_STEPS, type SearchIndexer } from './search/search-indexer';
+export { SearchService } from './search/search-service';
+export {
+  EMBEDDING_BATCH_SIZE,
+  SearchIndexService,
+  type SearchIndexServiceDeps,
+} from './search/search-index-service';

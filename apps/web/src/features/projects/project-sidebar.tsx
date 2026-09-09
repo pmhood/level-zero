@@ -6,6 +6,7 @@ import {
   IdeaLabIcon,
   MechanicsIcon,
   OverviewIcon,
+  SearchIcon,
   type SidebarNavItem,
 } from '@level-zero/ui';
 import type { Route } from 'next';
@@ -46,6 +47,7 @@ export function ProjectSidebar({
   const ideaLabHref = `/projects/${projectId}/idea-lab`;
   const mechanicsHref = `/projects/${projectId}/mechanics`;
   const gddHref = `/projects/${projectId}/gdd`;
+  const searchHref = `/projects/${projectId}/search`;
 
   const items: SidebarNavItem[] = [
     {
@@ -75,6 +77,13 @@ export function ProjectSidebar({
       label: 'GDD',
       icon: <DocumentIcon className="size-4" />,
       active: pathname?.startsWith(gddHref) ?? false,
+    },
+    {
+      key: 'search',
+      href: searchHref,
+      label: 'Search',
+      icon: <SearchIcon className="size-4" />,
+      active: pathname?.startsWith(searchHref) ?? false,
     },
   ];
 

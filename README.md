@@ -31,6 +31,9 @@ Implemented so far, against the architecture epic
 - [#14](https://github.com/pmhood/level-zero/issues/14) — document persistence,
   autosave and meaningful document versions, so a GDD can be written
   continuously without every pause becoming a permanent revision.
+- [#41](https://github.com/pmhood/level-zero/issues/41) — project-wide search
+  and semantic retrieval, so entities, documents, assets and generations are
+  findable from one place, by the words in them or by what they mean.
 
 ## Requirements
 
@@ -393,6 +396,68 @@ the sake of a text editor is the exact thing the entity model exists to prevent.
   per version; a body arrives only when one version is read or two are compared,
   which hands back both sides for a side-by-side view rather than diffing prose.
 
+### Search and retrieval
+
+```text
+Entity ─┐
+Asset  ─┼─indexed as──> SearchDocument (title, body, tags, search_vector, embedding)
+Generation ─┘                 │
+                              └──EmbeddingProvider──> vector ──cosine──> results
+```
+
+One question reaches everything in a project. A `SearchDocument` is the
+searchable copy of one canonical record — an entity, an asset or a generation —
+so a character, a GDD section, a concept image and a prompt come back in one
+ranked list carrying the type and project behind each hit.
+
+- **Search documents are derived, not canonical.** Every row can be rebuilt from
+  the record it mirrors, which is why it is not an `Entity` and why nothing
+  reads a search result as a source of truth: it carries `sourceType`,
+  `sourceId` and the `sourceVersionId` it was indexed at, and a caller follows
+  those back.
+- **Documents, prototypes and builds are entity types, not source types.** They
+  are indexed as entities and told apart by `entityType`, so a GDD is one row in
+  one table rather than a parallel document index. A document's body — the
+  editor's JSON — is flattened to its prose on the way in.
+- **The text follows a change immediately; the vector does not.** A write
+  updates the searchable copy in the same request, so a rename or an autosaved
+  paragraph is findable at once. Building an embedding is a provider call, so a
+  change only marks the row stale and makes sure a `search_index` job is
+  queued — one per project, not one per edit — and the worker does the rest.
+- **The vector's model is part of the row.** `embedding_model` and the vector's
+  width are matched before anything is compared, so swapping models degrades to
+  "not indexed yet" rather than to nonsense.
+- **An index failure never fails the write that caused it.** The canonical row
+  is already saved by the time the index is told, so the searchable copy is
+  written best effort and logged if it cannot be — otherwise a broken index, or
+  a queue that cannot be reached, would turn creating an idea or autosaving a
+  GDD into an error. Nothing is lost: every `search_index` job rebuilds the
+  index from the canonical tables.
+- **A hit has to be a hit.** Semantic retrieval applies a similarity floor, so
+  "closest first" cannot quietly return the entire project ranked and an empty
+  result stays a real answer.
+- **Keyword ranking is Postgres', not ours.** `search_vector` is a generated
+  column, so the text a query matches cannot drift from `title` and `body`, and
+  `websearch_to_tsquery` accepts what people already type — bare words,
+  `"quoted phrases"`, `or`, `-excluded` — with the title weighted above the body.
+- **Semantic retrieval is a dot product over stored unit vectors.** The
+  embedding is a `double precision[]` rather than pgvector's `vector`, because
+  the `postgres:16-alpine` image the stack runs does not carry the extension;
+  moving to pgvector later is a column type and an ANN index, not a change to
+  how any of this is used.
+- **Scoping is structural, as everywhere else.** Every statement carries
+  `project_id`, so a search cannot reach another project's material, and the
+  same filters — source type, entity type, status, tags, updated range — apply
+  whether the question was words or a vector.
+
+`EmbeddingProvider` is a port in `packages/domain`, the same shape as
+`ObjectStorageProvider`: `@level-zero/ai`'s `LocalEmbeddingProvider` hashes
+words and their character trigrams into a fixed-width unit vector, so semantic
+retrieval runs with no credentials. It is a stand-in, not a language model —
+swapping in a hosted embedding model is one registration in
+`apps/api/src/infrastructure/embedding.module.ts` and the matching line in
+`apps/worker/src/index.ts`, and nothing else.
+
 ### API
 
 | Endpoint                                                                  | Purpose                                               |
@@ -459,6 +524,17 @@ snapshot, `GET :documentId/versions` lists version metadata,
 `GET …/versions/:versionId` reads one with its body,
 `GET …/versions/compare?from=&to=` returns both bodies and what else changed,
 and `POST …/versions/:versionId/restore` brings a version back as a new one.
+
+Search lives under `/api/projects/:projectId/search`: `GET` answers the project's
+one search, filtering by `sourceType`, `entityType`, `status`, `tag`,
+`updatedAfter`/`updatedBefore` and `includeArchived`, and paging with `limit` and
+`offset`. `mode=semantic` answers the same question from the embeddings instead
+of the words, and returns the same result shape, so "the mechanic where oxygen
+limits exploration" can reach a design that never uses those words. A page that
+only cares about its own material sends `entityType`, which is the local search
+the design spec describes. `POST search/reindex` queues a rebuild and answers
+with the job running it — an index pass already running is returned rather than
+duplicated.
 
 Jobs live under `/api/projects/:projectId/jobs`: `GET` lists them (filtering by
 `status`, `kind` and `targetId`, which is how a page finds the job running one
@@ -548,6 +624,10 @@ bypasses the services:
 - Check constraints on `jobs` keep progress and attempts honest: a job cannot
   report more steps done than it has, and cannot exceed the attempts it was
   given.
+- A search document's `search_vector` is a generated column and its
+  `(source_type, source_id)` is unique, so the text a query matches cannot drift
+  from the text that was indexed, and re-indexing a record replaces its row
+  rather than adding a second one.
 
 > **NestJS gotcha:** constructor injection relies on `design:paramtypes` metadata,
 > which TypeScript only emits for _value_ imports. `@typescript-eslint/consistent-type-imports`

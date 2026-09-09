@@ -30,10 +30,13 @@ export const JOB_STATUSES = [
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
 /**
- * What a job does. One kind today; the column exists because the queue routes
- * on it and because "generation" is not the only long-running work planned.
+ * What a job does. The queue routes on it, and the worker picks the handler.
+ *
+ * `search_index` refreshes a project's searchable copy and builds the vectors
+ * behind semantic retrieval — a provider call, so it belongs out here rather
+ * than in the request that changed the material.
  */
-export const JOB_KINDS = ['generation'] as const;
+export const JOB_KINDS = ['generation', 'search_index'] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 
 /**

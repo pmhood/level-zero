@@ -50,6 +50,15 @@ import {
   type ProjectPage,
   type ProjectRepository,
 } from '../project/project-repository';
+import { type EmbeddingProvider } from '../search/embedding';
+import { SEARCH_EXCERPT_LENGTH, type SearchDocument } from '../search/search-document';
+import {
+  MIN_SEMANTIC_SIMILARITY,
+  type SaveEmbeddingInput,
+  type SearchDocumentRepository,
+  type SearchFilter,
+  type SearchResultPage,
+} from '../search/search-repository';
 import { type EntityVersion } from '../version/entity-version';
 import {
   type EntityVersionRepository,
@@ -646,4 +655,201 @@ export class InMemoryJobEvents implements JobEvents {
       },
     };
   }
+}
+
+/**
+ * In-memory `SearchDocumentRepository` for tests.
+ *
+ * Filtering, project scoping and cosine ranking mirror the Postgres adapter.
+ * Keyword matching does not: Postgres stems and weights its `tsvector`, and
+ * this counts whole-word hits instead, which is enough to prove a service asked
+ * for the right thing. The ranking that ships is proven against real Postgres
+ * in `packages/database`.
+ */
+export class InMemorySearchDocumentRepository implements SearchDocumentRepository {
+  private readonly rows = new Map<string, SearchDocument>();
+
+  async upsert(document: SearchDocument): Promise<SearchDocument> {
+    const key = `${document.sourceType}:${document.sourceId}`;
+    const existing = this.rows.get(key);
+
+    // The vector survives a re-index; whether it is stale is what the hashes say.
+    const stored: SearchDocument = {
+      ...structuredClone(document),
+      id: existing?.id ?? document.id,
+      embedding: existing?.embedding ?? null,
+      embeddingModel: existing?.embeddingModel ?? null,
+      embeddedHash: existing?.embeddedHash ?? null,
+    };
+
+    this.rows.set(key, stored);
+    return structuredClone(stored);
+  }
+
+  async searchText(projectId: string, filter: SearchFilter): Promise<SearchResultPage> {
+    const terms = tokenize(filter.text ?? '');
+
+    const scored = this.matching(projectId, filter).flatMap((document) => {
+      if (terms.length === 0) return [{ document, score: 0 }];
+
+      const title = tokenize(document.title);
+      const body = tokenize(document.body);
+      const score = terms.reduce(
+        (total, term) => total + (title.includes(term) ? 2 : 0) + (body.includes(term) ? 1 : 0),
+        0,
+      );
+      return score > 0 ? [{ document, score }] : [];
+    });
+
+    return pageOfHits(scored, filter);
+  }
+
+  async searchSimilar(
+    projectId: string,
+    embedding: readonly number[],
+    model: string,
+    filter: SearchFilter,
+  ): Promise<SearchResultPage> {
+    const scored = this.matching(projectId, filter).flatMap((document) => {
+      if (document.embeddingModel !== model) return [];
+      if (document.embedding?.length !== embedding.length) return [];
+
+      const vector = document.embedding;
+      const score = vector.reduce(
+        (total, value, index) => total + value * (embedding[index] ?? 0),
+        0,
+      );
+      // Ranking alone would return the whole project; a hit has to be a hit.
+      return score >= MIN_SEMANTIC_SIMILARITY ? [{ document, score }] : [];
+    });
+
+    return pageOfHits(scored, filter);
+  }
+
+  async listStale(projectId: string, limit: number): Promise<SearchDocument[]> {
+    return [...this.rows.values()]
+      .filter(
+        (document) =>
+          document.projectId === projectId && document.embeddedHash !== document.contentHash,
+      )
+      .sort((a, b) => a.indexedAt.getTime() - b.indexedAt.getTime())
+      .slice(0, limit)
+      .map((document) => structuredClone(document));
+  }
+
+  async saveEmbedding(
+    projectId: string,
+    documentId: string,
+    input: SaveEmbeddingInput,
+  ): Promise<void> {
+    for (const [key, document] of this.rows) {
+      if (document.id !== documentId || document.projectId !== projectId) continue;
+      // The row may have been re-indexed since the vector was asked for; only
+      // the text that was actually embedded gets it.
+      if (document.contentHash !== input.contentHash) return;
+
+      this.rows.set(key, {
+        ...document,
+        embedding: [...input.embedding],
+        embeddingModel: input.model,
+        embeddedHash: input.contentHash,
+      });
+      return;
+    }
+  }
+
+  private matching(projectId: string, filter: SearchFilter): SearchDocument[] {
+    const tags = (filter.tags ?? [])
+      .map((tag) => tag.trim().toLowerCase())
+      .filter((tag) => tag.length > 0);
+
+    return [...this.rows.values()].filter((document) => {
+      if (document.projectId !== projectId) return false;
+      if (filter.sourceTypes?.length && !filter.sourceTypes.includes(document.sourceType)) {
+        return false;
+      }
+      if (
+        filter.entityTypes?.length &&
+        (document.entityType === null || !filter.entityTypes.includes(document.entityType))
+      ) {
+        return false;
+      }
+      if (filter.statuses?.length) {
+        if (!filter.statuses.includes(document.status)) return false;
+      } else if (filter.includeArchived !== true && document.status === 'archived') {
+        return false;
+      }
+      if (tags.length > 0 && !document.tags.some((tag) => tags.includes(tag.toLowerCase()))) {
+        return false;
+      }
+      if (filter.updatedAfter && document.sourceUpdatedAt < filter.updatedAfter) return false;
+      if (filter.updatedBefore && document.sourceUpdatedAt > filter.updatedBefore) return false;
+      return true;
+    });
+  }
+}
+
+/**
+ * Deterministic `EmbeddingProvider` for tests: one dimension per vocabulary
+ * term, so a test states in the vector space itself what "related" means.
+ */
+export class InMemoryEmbeddingProvider implements EmbeddingProvider {
+  constructor(
+    private readonly vocabulary: readonly string[],
+    readonly model = 'test-embedding',
+  ) {}
+
+  get dimensions(): number {
+    return this.vocabulary.length;
+  }
+
+  async embed(texts: readonly string[]): Promise<number[][]> {
+    return texts.map((text) => {
+      const terms = tokenize(text);
+      const counts = this.vocabulary.map(
+        (term) => terms.filter((candidate) => candidate === term).length,
+      );
+      const length = Math.hypot(...counts);
+      return length === 0 ? counts : counts.map((count) => count / length);
+    });
+  }
+}
+
+function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length > 0);
+}
+
+/** Ranks, pages and projects hits the way the Postgres adapter does. */
+function pageOfHits(
+  scored: readonly { document: SearchDocument; score: number }[],
+  filter: SearchFilter,
+): SearchResultPage {
+  const ranked = [...scored].sort(
+    (a, b) =>
+      b.score - a.score ||
+      b.document.sourceUpdatedAt.getTime() - a.document.sourceUpdatedAt.getTime(),
+  );
+
+  const offset = filter.offset ?? 0;
+  const limit = filter.limit ?? ranked.length;
+
+  return {
+    items: ranked.slice(offset, offset + limit).map(({ document, score }) => ({
+      projectId: document.projectId,
+      sourceType: document.sourceType,
+      sourceId: document.sourceId,
+      entityType: document.entityType,
+      status: document.status,
+      tags: [...document.tags],
+      title: document.title,
+      excerpt: document.body.slice(0, SEARCH_EXCERPT_LENGTH),
+      sourceVersionId: document.sourceVersionId,
+      updatedAt: document.sourceUpdatedAt,
+      score,
+    })),
+    total: ranked.length,
+  };
 }

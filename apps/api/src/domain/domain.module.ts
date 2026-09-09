@@ -8,6 +8,7 @@ import {
   DrizzleJobRepository,
   DrizzleProjectRepository,
   DrizzlePrototypeVersionRepository,
+  DrizzleSearchDocumentRepository,
   type DatabaseClient,
 } from '@level-zero/database';
 import {
@@ -22,12 +23,15 @@ import {
   LineageService,
   ProjectService,
   PrototypeService,
+  SearchIndexService,
+  SearchService,
   systemClock,
   uuidIdGenerator,
   type ActivityRepository,
   type AssetRepository,
   type EntityRelationshipRepository,
   type EntityRepository,
+  type EmbeddingProvider,
   type EntityVersionRepository,
   type EntityServiceDeps,
   type GenerationRepository,
@@ -37,12 +41,14 @@ import {
   type ObjectStorageProvider,
   type ProjectRepository,
   type PrototypeVersionRepository,
+  type SearchDocumentRepository,
 } from '@level-zero/domain';
 import { Global, Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 
 import { DomainExceptionFilter } from '../common/domain-exception.filter';
 import { DATABASE_CLIENT } from '../infrastructure/database.module';
+import { EMBEDDING_PROVIDER } from '../infrastructure/embedding.module';
 import { JOB_EVENTS, JOB_QUEUE } from '../infrastructure/queue.module';
 import { OBJECT_STORAGE } from '../infrastructure/storage.module';
 
@@ -55,6 +61,7 @@ export const ASSET_REPOSITORY = Symbol('ASSET_REPOSITORY');
 export const GENERATION_REPOSITORY = Symbol('GENERATION_REPOSITORY');
 export const PROTOTYPE_VERSION_REPOSITORY = Symbol('PROTOTYPE_VERSION_REPOSITORY');
 export const JOB_REPOSITORY = Symbol('JOB_REPOSITORY');
+export const SEARCH_DOCUMENT_REPOSITORY = Symbol('SEARCH_DOCUMENT_REPOSITORY');
 export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
 
 /**
@@ -102,13 +109,20 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     },
     {
       provide: EntityService,
-      inject: [ENTITY_REPOSITORY, PROJECT_REPOSITORY, ActivityService, DOMAIN_DEPS],
+      inject: [
+        ENTITY_REPOSITORY,
+        PROJECT_REPOSITORY,
+        ActivityService,
+        DOMAIN_DEPS,
+        SearchIndexService,
+      ],
       useFactory: (
         entities: EntityRepository,
         projects: ProjectRepository,
         activity: ActivityService,
         deps: EntityServiceDeps,
-      ): EntityService => new EntityService(entities, projects, activity, deps),
+        search: SearchIndexService,
+      ): EntityService => new EntityService(entities, projects, activity, deps, search),
     },
     {
       provide: RELATIONSHIP_REPOSITORY,
@@ -142,13 +156,21 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     },
     {
       provide: EntityVersionService,
-      inject: [VERSION_REPOSITORY, ENTITY_REPOSITORY, ActivityService, DOMAIN_DEPS],
+      inject: [
+        VERSION_REPOSITORY,
+        ENTITY_REPOSITORY,
+        ActivityService,
+        DOMAIN_DEPS,
+        SearchIndexService,
+      ],
       useFactory: (
         versions: EntityVersionRepository,
         entities: EntityRepository,
         activity: ActivityService,
         deps: EntityServiceDeps,
-      ): EntityVersionService => new EntityVersionService(versions, entities, activity, deps),
+        search: SearchIndexService,
+      ): EntityVersionService =>
+        new EntityVersionService(versions, entities, activity, deps, search),
     },
     {
       provide: DocumentService,
@@ -164,13 +186,20 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     },
     {
       provide: AssetService,
-      inject: [ASSET_REPOSITORY, PROJECT_REPOSITORY, OBJECT_STORAGE, DOMAIN_DEPS],
+      inject: [
+        ASSET_REPOSITORY,
+        PROJECT_REPOSITORY,
+        OBJECT_STORAGE,
+        DOMAIN_DEPS,
+        SearchIndexService,
+      ],
       useFactory: (
         assets: AssetRepository,
         projects: ProjectRepository,
         storage: ObjectStorageProvider,
         deps: EntityServiceDeps,
-      ): AssetService => new AssetService(assets, projects, storage, deps),
+        search: SearchIndexService,
+      ): AssetService => new AssetService(assets, projects, storage, deps, search),
     },
     {
       provide: GENERATION_REPOSITORY,
@@ -188,6 +217,7 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
         LineageService,
         ActivityService,
         DOMAIN_DEPS,
+        SearchIndexService,
       ],
       useFactory: (
         generations: GenerationRepository,
@@ -197,8 +227,18 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
         lineage: LineageService,
         activity: ActivityService,
         deps: EntityServiceDeps,
+        search: SearchIndexService,
       ): GenerationService =>
-        new GenerationService(generations, projects, entities, assets, lineage, activity, deps),
+        new GenerationService(
+          generations,
+          projects,
+          entities,
+          assets,
+          lineage,
+          activity,
+          deps,
+          search,
+        ),
     },
     {
       provide: PROTOTYPE_VERSION_REPOSITORY,
@@ -242,6 +282,42 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
         deps: EntityServiceDeps,
       ): JobService => new JobService(jobs, projects, queue, events, deps),
     },
+    {
+      provide: SEARCH_DOCUMENT_REPOSITORY,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: DatabaseClient): SearchDocumentRepository =>
+        new DrizzleSearchDocumentRepository(client.db),
+    },
+    {
+      provide: SearchIndexService,
+      inject: [
+        SEARCH_DOCUMENT_REPOSITORY,
+        ENTITY_REPOSITORY,
+        ASSET_REPOSITORY,
+        GENERATION_REPOSITORY,
+        EMBEDDING_PROVIDER,
+        JobService,
+        DOMAIN_DEPS,
+      ],
+      useFactory: (
+        documents: SearchDocumentRepository,
+        entities: EntityRepository,
+        assets: AssetRepository,
+        generations: GenerationRepository,
+        embeddings: EmbeddingProvider,
+        jobs: JobService,
+        deps: EntityServiceDeps,
+      ): SearchIndexService =>
+        new SearchIndexService(documents, entities, assets, generations, embeddings, jobs, deps),
+    },
+    {
+      provide: SearchService,
+      inject: [SEARCH_DOCUMENT_REPOSITORY, EMBEDDING_PROVIDER],
+      useFactory: (
+        documents: SearchDocumentRepository,
+        embeddings: EmbeddingProvider,
+      ): SearchService => new SearchService(documents, embeddings),
+    },
     { provide: APP_FILTER, useClass: DomainExceptionFilter },
   ],
   exports: [
@@ -256,6 +332,8 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     PrototypeService,
     JobService,
     ActivityService,
+    SearchService,
+    SearchIndexService,
     PROJECT_REPOSITORY,
     ENTITY_REPOSITORY,
     RELATIONSHIP_REPOSITORY,
@@ -265,6 +343,7 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     PROTOTYPE_VERSION_REPOSITORY,
     JOB_REPOSITORY,
     ACTIVITY_REPOSITORY,
+    SEARCH_DOCUMENT_REPOSITORY,
     DOMAIN_DEPS,
   ],
 })
