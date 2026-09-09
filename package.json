@@ -21,9 +21,9 @@
     "db:generate": "pnpm --filter @level-zero/database run db:generate",
     "db:migrate": "pnpm --filter @level-zero/database run db:migrate",
     "db:studio": "pnpm --filter @level-zero/database run db:studio",
-    "infra:up": "docker compose --project-directory . -f infra/docker-compose.yml up -d",
-    "infra:down": "docker compose --project-directory . -f infra/docker-compose.yml down",
-    "infra:reset": "docker compose --project-directory . -f infra/docker-compose.yml down -v"
+    "infra:up": "docker compose --project-directory \"$(dirname \"$(git rev-parse --path-format=absolute --git-common-dir)\")\" -f infra/docker-compose.yml up -d",
+    "infra:down": "docker compose --project-directory \"$(dirname \"$(git rev-parse --path-format=absolute --git-common-dir)\")\" -f infra/docker-compose.yml down",
+    "infra:reset": "docker compose --project-directory \"$(dirname \"$(git rev-parse --path-format=absolute --git-common-dir)\")\" -f infra/docker-compose.yml down -v"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

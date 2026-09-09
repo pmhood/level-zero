@@ -85,6 +85,13 @@ integration tests against real Postgres, so `pnpm test` expects
 `pnpm infra:up && pnpm db:migrate` to have run first. CI does the same against
 service containers.
 
+The `infra:*` scripts always read the **main checkout's root `.env`** (gitignored, from
+`.env.example`), never one in the current working directory. They resolve it via
+`git rev-parse --git-common-dir`, which points at the main checkout's `.git` from any git
+worktree, so every worktree attaches to the same `level-zero` Compose stack and its named
+volumes instead of starting a rival one on the compose defaults. A fresh clone with no `.env`
+still works — Compose falls back to the defaults baked into `infra/docker-compose.yml`.
+
 ## Layout
 
 ```text
