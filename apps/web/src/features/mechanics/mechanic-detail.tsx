@@ -1,6 +1,6 @@
 'use client';
 
-import type { Entity } from '@level-zero/domain';
+import { parameterDefinitionIssues, type Entity, type Parameter } from '@level-zero/domain';
 import { Button, Field, Input, Select, StatusBadge, Tabs, Tag, Textarea } from '@level-zero/ui';
 import { useState, type FormEvent } from 'react';
 
@@ -9,6 +9,7 @@ import { entityTypeLabel } from '@/features/entities/entity-presentation';
 import { apiErrorMessage } from '@/lib/api';
 
 import { MechanicListField } from './mechanic-list-field';
+import { MechanicParameters } from './mechanic-parameters';
 import { MechanicRationale } from './mechanic-rationale';
 import {
   IMPLEMENTATION_STATUSES,
@@ -22,7 +23,7 @@ import {
 } from './mechanic';
 import { useUpdateMechanic } from './use-mechanics';
 
-type DetailTab = 'design' | 'rules' | 'rationale';
+type DetailTab = 'design' | 'rules' | 'tuning' | 'rationale';
 
 interface MechanicDraft {
   name: string;
@@ -34,10 +35,12 @@ interface MechanicDraft {
   rules: string[];
   inputs: string[];
   outputs: string[];
+  tuningParameters: Parameter[];
 }
 
 function draftOf(mechanic: Entity): MechanicDraft {
-  const { area, fantasy, implementationStatus, rules, inputs, outputs } = readMechanic(mechanic);
+  const { area, fantasy, implementationStatus, rules, inputs, outputs, tuningParameters } =
+    readMechanic(mechanic);
 
   return {
     name: mechanic.name,
@@ -49,6 +52,7 @@ function draftOf(mechanic: Entity): MechanicDraft {
     rules,
     inputs,
     outputs,
+    tuningParameters,
   };
 }
 
@@ -74,6 +78,12 @@ export function MechanicDetail({ projectId, mechanic }: { projectId: string; mec
   const progress = implementationStatusBadge(saved.implementationStatus);
   const dirty = JSON.stringify(draft) !== JSON.stringify(draftOf(mechanic));
   const nameIsEmpty = draft.name.trim().length === 0;
+  // A parameter nobody can tune — no label, a range with one end, an option
+  // list with nothing in it — is held back; a value the bounds have moved out
+  // from under is not, because that one is often what the edit is fixing.
+  const parametersAreBroken = draft.tuningParameters.some(
+    (parameter) => parameterDefinitionIssues(parameter).length > 0,
+  );
 
   function set<K extends keyof MechanicDraft>(key: K, value: MechanicDraft[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -81,7 +91,7 @@ export function MechanicDetail({ projectId, mechanic }: { projectId: string; mec
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (archived || !dirty || nameIsEmpty) return;
+    if (archived || !dirty || nameIsEmpty || parametersAreBroken) return;
 
     updateMechanic.mutate({
       entityId: mechanic.id,
@@ -96,6 +106,7 @@ export function MechanicDetail({ projectId, mechanic }: { projectId: string; mec
           rules: clean(draft.rules),
           inputs: clean(draft.inputs),
           outputs: clean(draft.outputs),
+          tuningParameters: draft.tuningParameters,
         }),
       },
     });
@@ -123,6 +134,7 @@ export function MechanicDetail({ projectId, mechanic }: { projectId: string; mec
           items={[
             { value: 'design', label: 'Design' },
             { value: 'rules', label: 'Rules & I/O' },
+            { value: 'tuning', label: 'Tuning' },
             { value: 'rationale', label: 'Rationale' },
           ]}
         />
@@ -141,10 +153,13 @@ export function MechanicDetail({ projectId, mechanic }: { projectId: string; mec
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col gap-4 px-5 py-4">
           <fieldset disabled={archived} className="flex flex-col gap-4 disabled:opacity-60">
-            {tab === 'design' ? (
-              <DesignFields draft={draft} set={set} />
-            ) : (
-              <RulesFields draft={draft} set={set} />
+            {tab === 'design' && <DesignFields draft={draft} set={set} />}
+            {tab === 'rules' && <RulesFields draft={draft} set={set} />}
+            {tab === 'tuning' && (
+              <MechanicParameters
+                parameters={draft.tuningParameters}
+                onChange={(parameters) => set('tuningParameters', parameters)}
+              />
             )}
           </fieldset>
 
@@ -156,7 +171,10 @@ export function MechanicDetail({ projectId, mechanic }: { projectId: string; mec
 
           {!archived && (
             <div className="flex items-center gap-3">
-              <Button type="submit" disabled={!dirty || nameIsEmpty || updateMechanic.isPending}>
+              <Button
+                type="submit"
+                disabled={!dirty || nameIsEmpty || parametersAreBroken || updateMechanic.isPending}
+              >
                 {updateMechanic.isPending ? 'Saving…' : 'Save changes'}
               </Button>
               {dirty && <p className="text-xs text-faint-foreground">Unsaved changes</p>}

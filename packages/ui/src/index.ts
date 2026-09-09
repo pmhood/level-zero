@@ -24,6 +24,8 @@ export { WorkspacePage, type WorkspacePageProps } from './workspace-page';
 export { WorkspaceBrowser, type WorkspaceBrowserProps } from './workspace-browser';
 export { SearchField, type SearchFieldProps } from './search-field';
 export { Field, type FieldProps } from './field';
+export { ParameterControl, type ParameterControlProps } from './parameter-control';
+export { ParameterSummary, type ParameterSummaryProps } from './parameter-summary';
 export {
   ChevronRightIcon,
   CloseIcon,

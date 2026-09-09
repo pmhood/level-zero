@@ -212,6 +212,53 @@ describe('Mechanics workspace', () => {
     expect(patch.data?.keepMe).toBe('a field this workspace does not own');
   });
 
+  it('saves a tuning change as ordinary entity data, so the next version carries it', async () => {
+    const tuned = mechanic({
+      data: {
+        ...mechanic().data,
+        tuningParameters: [
+          {
+            id: 'base-oxygen-capacity',
+            label: 'Base Oxygen Capacity',
+            type: 'range',
+            value: 120,
+            units: 's',
+            min: 60,
+            max: 240,
+            step: 5,
+          },
+        ],
+      },
+    });
+    vi.mocked(api.listEntities).mockResolvedValue(page([tuned]));
+    vi.mocked(api.getEntity).mockResolvedValue(tuned);
+    vi.mocked(api.updateEntity).mockResolvedValue(tuned);
+
+    renderWorkspace();
+    fireEvent.click(await screen.findByText('Oxygen management'));
+
+    const surface = within(await detail());
+    fireEvent.click(surface.getByRole('tab', { name: 'Tuning' }));
+    fireEvent.change(surface.getByLabelText('Base Oxygen Capacity'), { target: { value: '180' } });
+    fireEvent.click(surface.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(api.updateEntity).toHaveBeenCalledOnce());
+    const [, , patch] = vi.mocked(api.updateEntity).mock.calls[0]!;
+    expect(patch.data?.tuningParameters).toEqual([
+      {
+        id: 'base-oxygen-capacity',
+        label: 'Base Oxygen Capacity',
+        type: 'range',
+        value: 180,
+        units: 's',
+        min: 60,
+        max: 240,
+        step: 5,
+      },
+    ]);
+    expect(patch.data?.keepMe).toBe('a field this workspace does not own');
+  });
+
   it('locks an archived mechanic and offers to restore it instead', async () => {
     const archived = mechanic({ status: 'archived', archivedAt: new Date() });
     vi.mocked(api.listEntities).mockResolvedValue(page([archived]));

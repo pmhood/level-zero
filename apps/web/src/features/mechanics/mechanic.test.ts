@@ -46,6 +46,7 @@ describe('readMechanic', () => {
       inputs: ['Tank capacity'],
       outputs: ['Time pressure'],
       implementationStatus: 'prototyped',
+      tuningParameters: [],
     });
   });
 
@@ -57,7 +58,34 @@ describe('readMechanic', () => {
       inputs: [],
       outputs: [],
       implementationStatus: 'concept',
+      tuningParameters: [],
     });
+  });
+
+  it('round-trips tuning parameters without losing units, bounds or identity', () => {
+    const parameters = [
+      {
+        id: 'base-oxygen-capacity',
+        label: 'Base Oxygen Capacity',
+        type: 'range',
+        value: 120,
+        units: 's',
+        min: 60,
+        max: 240,
+        step: 5,
+      },
+      {
+        id: 'damage-model',
+        label: 'Damage model',
+        type: 'enum',
+        value: 'ironman',
+        options: [{ value: 'ironman', label: 'Ironman' }],
+      },
+    ];
+    const entity = mechanic({ tuningParameters: parameters });
+
+    expect(readMechanic(entity).tuningParameters).toEqual(parameters);
+    expect(writeMechanic(entity, {}).tuningParameters).toEqual(parameters);
   });
 
   it('falls back rather than trusting a value `data` cannot constrain', () => {
@@ -84,7 +112,7 @@ describe('writeMechanic', () => {
     const entity = mechanic({
       area: 'economy',
       [MECHANIC_RATIONALE_FIELD]: rationale,
-      tuningParameters: [{ id: 'p1', label: 'Base capacity' }],
+      simulationNotes: 'a field this workspace does not own',
     });
 
     const written = writeMechanic(entity, { implementationStatus: 'designed' });
@@ -92,7 +120,7 @@ describe('writeMechanic', () => {
     expect(written.area).toBe('economy');
     expect(written.implementationStatus).toBe('designed');
     expect(written[MECHANIC_RATIONALE_FIELD]).toEqual(rationale);
-    expect(written.tuningParameters).toEqual([{ id: 'p1', label: 'Base capacity' }]);
+    expect(written.simulationNotes).toBe('a field this workspace does not own');
   });
 });
 
