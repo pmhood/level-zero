@@ -13,10 +13,17 @@ This file covers what a README reader still gets wrong.
 full table, including the `db:*` and `infra:*` commands, is in `README.md`.
 
 ```bash
-pnpm --filter @level-zero/api test          # one workspace
-pnpm --filter @level-zero/ui exec vitest run src/ui.test.tsx   # one file
-pnpm --filter @level-zero/ui exec vitest run -t "renders"      # one test by name
+pnpm turbo run test --filter=@level-zero/api                     # one workspace
+pnpm turbo run test --filter=@level-zero/ui -- src/ui.test.tsx   # one file
+pnpm turbo run test --filter=@level-zero/ui -- -t "renders"      # one test by name
 ```
+
+Always go through `pnpm turbo run test --filter=...`, never `pnpm --filter <pkg> test` or
+`pnpm --filter <pkg> exec vitest` directly. Those invoke the workspace's own script and bypass
+Turbo entirely, which means bypassing `test`'s `dependsOn: ["^build"]` too. `packages/domain` is
+consumed as compiled output, so a direct `pnpm --filter` command runs against whatever
+`packages/domain/dist` happens to be on disk — stale or absent — and the failure is silent
+field-dropping in the result, not a build error pointing at the real cause.
 
 Workspaces: `@level-zero/{web,api,worker}` (apps) and `@level-zero/{domain,database,ui,ai,config,storage}`
 (packages).
