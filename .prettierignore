@@ -6,3 +6,7 @@ coverage
 pnpm-lock.yaml
 next-env.d.ts
 packages/database/migrations
+
+# Imported design package: reference material, preserved verbatim as source of truth
+docs/
+assets/icons

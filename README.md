@@ -87,11 +87,36 @@ packages/
   config/     Environment schemas and validation
 
 infra/        Docker Compose for local Postgres and Redis
+docs/         Design, UX and brand reference material (see below)
+assets/       Shared SVG icon set from the design package
 ```
 
 Dependencies point one way: `apps/*` → `packages/database` → `packages/domain`. The
 domain defines the storage _ports_; the database package provides the Postgres
 adapters. Nothing points back into an app.
+
+## Design and brand reference
+
+`docs/` holds the imported design package — reference material and source of truth
+for the product's visual language, not generated output. See [`docs/README.md`](docs/README.md)
+for the package's own description of its contents.
+
+- [`docs/design/style-guide.md`](docs/design/style-guide.md) — visual language: typography,
+  color, layout, AI styling and brand usage.
+- [`docs/design/frontend-design-system-and-implementation-spec.md`](docs/design/frontend-design-system-and-implementation-spec.md)
+  — implementation-facing React/Tailwind component specification.
+- [`docs/design/page-by-page-ux-spec.md`](docs/design/page-by-page-ux-spec.md) — UX behavior
+  per surface, from Home through Playtesting.
+- [`docs/brand/brand-direction.md`](docs/brand/brand-direction.md) and
+  [`docs/brand/explorations/`](docs/brand/explorations) — naming and logo development.
+- [`docs/mockups/`](docs/mockups) — high-fidelity product explorations.
+- [`docs/source/`](docs/source) — raw design source retained for reference.
+- [`assets/icons/`](assets/icons) — 24x24 rounded-stroke SVG icon set using `currentColor`.
+
+The product name is **Level Zero**; the tagline is **Ideas to Play.**, with **Before Level
+One.** as the secondary line. The current mark is the minimal isometric foundation tile,
+in blue and monochrome variants. Some mockups still carry the earlier **Workbench** working
+name — treat that naming as historical, and the interaction and visual design as current.
 
 ## The domain model
 
