@@ -27,7 +27,7 @@ export function toDependencyRows(report: HealthReport | undefined): DependencyRo
 
   return Object.entries(report.checks).map(([name, check]) => ({
     name,
-    tone: check.status === 'up' ? 'up' : 'down',
+    tone: check.status === 'up' ? 'success' : 'error',
     label: check.status === 'up' ? 'up' : 'down',
     detail: check.status === 'up' ? formatDetail(check) : (check.error ?? 'unavailable'),
   }));
@@ -41,7 +41,7 @@ function formatDetail(check: DependencyCheck): string {
 
 /** Overall tone for the panel header, including the not-yet-loaded case. */
 export function overallTone(report: HealthReport | undefined, isError = false): StatusTone {
-  if (isError) return 'down';
-  if (!report) return 'unknown';
-  return report.status === 'ok' ? 'up' : 'down';
+  if (isError) return 'error';
+  if (!report) return 'neutral';
+  return report.status === 'ok' ? 'success' : 'error';
 }

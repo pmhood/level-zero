@@ -7,4 +7,12 @@
 body {
   background-color: var(--color-background);
   color: var(--color-foreground);
+  font-family:
+    Inter,
+    'SF Pro Display',
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
 }

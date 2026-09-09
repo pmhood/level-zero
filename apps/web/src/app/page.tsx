@@ -1,27 +1,33 @@
 import { Card, CardDescription, CardHeader, CardTitle } from '@level-zero/ui';
 
 import { SystemStatus } from '@/components/system-status';
+import { CreateProjectPanel } from '@/features/projects/create-project-panel';
+import { ProjectList } from '@/features/projects/project-list';
 
 const nextUp = [
-  { issue: '#5', title: 'Asset model and object storage' },
-  { issue: '#9', title: 'Reusable TipTap Workbench editor' },
-  { issue: '#11', title: 'First Project and Idea Lab vertical slice' },
+  { issue: '#9', title: 'Reusable TipTap Level Zero editor' },
   { issue: '#12', title: 'Prototypes pinned to exact entity versions' },
 ];
 
 export default function HomePage() {
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 px-6 py-16">
+    <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-8 px-6 py-16">
       <header className="space-y-2">
         <p className="text-sm font-medium tracking-widest text-muted-foreground uppercase">
           Level Zero
         </p>
-        <h1 className="text-3xl font-semibold">Workbench</h1>
+        <h1 className="text-3xl font-semibold">Ideas to Play.</h1>
         <p className="text-muted-foreground">
-          A connected game-development workspace. This shell is the bootstrap slice: the monorepo,
-          the API, the worker, and the shared packages the rest of the product is built on.
+          A connected game-development workspace. Create a project, capture ideas in the Idea Lab,
+          and promote what sticks into characters, mechanics and more.
         </p>
       </header>
+
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold">Your projects</h2>
+        <CreateProjectPanel />
+        <ProjectList />
+      </section>
 
       <SystemStatus />
 

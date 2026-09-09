@@ -1,22 +1,82 @@
 /*
- * Shared Workbench theme tokens.
+ * Shared Level Zero theme tokens.
  *
  * Apps import this once (see apps/web/src/app/globals.css) and then use the
  * generated utilities: bg-surface, text-muted-foreground, border-border, ...
+ *
+ * The `--lz-*` variables are the palette itself, taken from
+ * docs/design/style-guide.md and section 2 of
+ * docs/design/frontend-design-system-and-implementation-spec.md. That spec
+ * predates the Level Zero rename and names its variables `--wb-*`
+ * (Workbench); the values are current, the prefix is not, so it is not used
+ * here and no `--wb-*` variable should be introduced elsewhere either.
+ *
+ * The `--color-*` block below aliases that palette onto the semantic names
+ * Tailwind turns into utilities (bg-surface, text-muted-foreground, ...) so
+ * components never reach for a raw hex value.
  */
 @theme {
-  --color-background: oklch(0.18 0.01 265);
-  --color-foreground: oklch(0.97 0.005 265);
+  --lz-bg-canvas: #08131c;
+  --lz-bg-sidebar: #09151e;
+  --lz-bg-surface: #0d1923;
+  --lz-bg-raised: #12222e;
+  --lz-bg-hover: #172b39;
+  --lz-bg-active: rgba(66, 165, 255, 0.12);
 
-  --color-surface: oklch(0.23 0.012 265);
-  --color-surface-strong: oklch(0.28 0.015 265);
+  --lz-border-subtle: #192b36;
+  --lz-border-default: #213744;
+  --lz-border-strong: #315065;
 
-  --color-border: oklch(0.34 0.015 265);
-  --color-ring: oklch(0.72 0.14 275);
+  --lz-text-primary: #f2f6f8;
+  --lz-text-secondary: #a8bac5;
+  --lz-text-muted: #718894;
+  --lz-text-disabled: #4d626d;
 
-  --color-muted: oklch(0.3 0.012 265);
-  --color-muted-foreground: oklch(0.72 0.015 265);
+  --lz-blue: #42a5ff;
+  --lz-blue-hover: #64bcff;
+  --lz-blue-pressed: #1679c9;
+  --lz-blue-muted: rgba(66, 165, 255, 0.12);
+  --lz-blue-ink: #05121b;
 
-  --color-primary: oklch(0.62 0.17 275);
-  --color-primary-foreground: oklch(0.99 0.005 265);
+  --lz-ai: #a982f4;
+  --lz-ai-ink: #d8c8ff;
+  --lz-ai-muted: rgba(169, 130, 244, 0.12);
+  --lz-ai-border: rgba(169, 130, 244, 0.35);
+
+  --lz-success: #49d7a0;
+  --lz-warning: #e8b94c;
+  --lz-error: #f16e72;
+  --lz-error-muted: rgba(241, 110, 114, 0.12);
+  --lz-error-border: rgba(241, 110, 114, 0.35);
+  --lz-info: #65b9f7;
+
+  --color-background: var(--lz-bg-canvas);
+  --color-foreground: var(--lz-text-primary);
+
+  --color-sidebar: var(--lz-bg-sidebar);
+  --color-surface: var(--lz-bg-surface);
+  --color-raised: var(--lz-bg-raised);
+  --color-hover: var(--lz-bg-hover);
+  --color-active: var(--lz-bg-active);
+
+  --color-border: var(--lz-border-default);
+  --color-border-subtle: var(--lz-border-subtle);
+  --color-border-strong: var(--lz-border-strong);
+  --color-ring: var(--lz-blue);
+
+  --color-muted: var(--lz-bg-hover);
+  --color-muted-foreground: var(--lz-text-secondary);
+  --color-faint-foreground: var(--lz-text-muted);
+
+  --color-primary: var(--lz-blue);
+  --color-primary-foreground: var(--lz-blue-ink);
+  --color-primary-hover: var(--lz-blue-hover);
+
+  --color-ai: var(--lz-ai);
+  --color-ai-foreground: var(--lz-ai-ink);
+
+  --color-success: var(--lz-success);
+  --color-warning: var(--lz-warning);
+  --color-error: var(--lz-error);
+  --color-info: var(--lz-info);
 }

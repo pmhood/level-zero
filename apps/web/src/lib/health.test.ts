@@ -18,14 +18,14 @@ describe('toDependencyRows', () => {
 
     expect(rows[0]).toEqual({
       name: 'postgres',
-      tone: 'up',
+      tone: 'success',
       label: 'up',
       detail: '4ms · 1 migrations',
     });
   });
 
   it('surfaces the error message for a failing dependency', () => {
-    expect(toDependencyRows(report)[1]).toMatchObject({ tone: 'down', detail: 'ECONNREFUSED' });
+    expect(toDependencyRows(report)[1]).toMatchObject({ tone: 'error', detail: 'ECONNREFUSED' });
   });
 
   it('falls back when a failing dependency reports no error message', () => {
@@ -52,16 +52,16 @@ describe('toDependencyRows', () => {
 });
 
 describe('overallTone', () => {
-  it('is unknown before the first response', () => {
-    expect(overallTone(undefined)).toBe('unknown');
+  it('is neutral before the first response', () => {
+    expect(overallTone(undefined)).toBe('neutral');
   });
 
-  it('is down when the request itself failed', () => {
-    expect(overallTone(undefined, true)).toBe('down');
+  it('is error when the request itself failed', () => {
+    expect(overallTone(undefined, true)).toBe('error');
   });
 
   it('mirrors the reported status', () => {
-    expect(overallTone(report)).toBe('down');
-    expect(overallTone({ ...report, status: 'ok' })).toBe('up');
+    expect(overallTone(report)).toBe('error');
+    expect(overallTone({ ...report, status: 'ok' })).toBe('success');
   });
 });
