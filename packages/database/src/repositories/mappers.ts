@@ -6,6 +6,8 @@ import {
   type EntityVersion,
   type Generation,
   type Job,
+  type MoodboardConnector,
+  type MoodboardNode,
   type Project,
   type PrototypeVersion,
   type SearchDocument,
@@ -21,6 +23,12 @@ import {
 } from '../schema/entity-relationships';
 import { type EntityVersionRow, type NewEntityVersionRow } from '../schema/entity-versions';
 import { type JobRow, type NewJobRow } from '../schema/jobs';
+import {
+  type MoodboardConnectorRow,
+  type MoodboardNodeRow,
+  type NewMoodboardConnectorRow,
+  type NewMoodboardNodeRow,
+} from '../schema/moodboards';
 import { type NewProjectRow, type ProjectRow } from '../schema/projects';
 import { type NewSearchDocumentRow, type SearchDocumentRow } from '../schema/search-documents';
 import {
@@ -342,6 +350,78 @@ export function toPrototypeEntityVersionRows(
     entityVersionId: member.entityVersionId,
     position,
   }));
+}
+
+export function toMoodboardNode(row: MoodboardNodeRow): MoodboardNode {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    boardId: row.boardId,
+    type: row.type,
+    assetId: row.assetId,
+    entityId: row.entityId,
+    groupId: row.groupId,
+    x: row.x,
+    y: row.y,
+    width: row.width,
+    height: row.height,
+    rotation: row.rotation,
+    zOrder: row.zOrder,
+    locked: row.locked,
+    data: row.data,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export function toMoodboardNodeRow(node: MoodboardNode): NewMoodboardNodeRow {
+  return {
+    id: node.id,
+    projectId: node.projectId,
+    boardId: node.boardId,
+    type: node.type,
+    assetId: node.assetId,
+    entityId: node.entityId,
+    groupId: node.groupId,
+    x: node.x,
+    y: node.y,
+    width: node.width,
+    height: node.height,
+    rotation: node.rotation,
+    zOrder: node.zOrder,
+    locked: node.locked,
+    data: node.data,
+    createdAt: node.createdAt,
+    updatedAt: node.updatedAt,
+  };
+}
+
+export function toMoodboardConnector(row: MoodboardConnectorRow): MoodboardConnector {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    boardId: row.boardId,
+    fromNodeId: row.fromNodeId,
+    toNodeId: row.toNodeId,
+    label: row.label,
+    relationshipId: row.relationshipId,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export function toMoodboardConnectorRow(connector: MoodboardConnector): NewMoodboardConnectorRow {
+  return {
+    id: connector.id,
+    projectId: connector.projectId,
+    boardId: connector.boardId,
+    fromNodeId: connector.fromNodeId,
+    toNodeId: connector.toNodeId,
+    label: connector.label,
+    relationshipId: connector.relationshipId,
+    createdAt: connector.createdAt,
+    updatedAt: connector.updatedAt,
+  };
 }
 
 export function toActivity(row: ActivityRow): Activity {

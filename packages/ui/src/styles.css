@@ -23,6 +23,8 @@
 
 @theme {
   --lz-bg-canvas: #08131c;
+  /* The freeform moodboard surface, a shade off the app canvas (spec §30). */
+  --lz-bg-board: #0a151d;
   --lz-bg-sidebar: #09151e;
   --lz-bg-surface: #0d1923;
   --lz-bg-raised: #12222e;
@@ -62,6 +64,7 @@
   --color-foreground: var(--lz-text-primary);
 
   --color-sidebar: var(--lz-bg-sidebar);
+  --color-board: var(--lz-bg-board);
   --color-surface: var(--lz-bg-surface);
   --color-raised: var(--lz-bg-raised);
   --color-hover: var(--lz-bg-hover);

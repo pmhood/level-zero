@@ -5,6 +5,7 @@ export { DrizzleEntityRepository } from './entity-repository';
 export { DrizzleEntityVersionRepository } from './entity-version-repository';
 export { DrizzleGenerationRepository } from './generation-repository';
 export { DrizzleJobRepository } from './job-repository';
+export { DrizzleMoodboardRepository } from './moodboard-repository';
 export { DrizzleProjectRepository } from './project-repository';
 export { DrizzlePrototypeVersionRepository } from './prototype-version-repository';
 export { DrizzleSearchDocumentRepository } from './search-document-repository';

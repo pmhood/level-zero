@@ -23,6 +23,7 @@ export const ENTITY_TYPES = [
   'system',
   'asset_reference',
   'scene',
+  'moodboard',
   'document',
   'prototype',
   'build',
