@@ -44,23 +44,20 @@ Check the spec for a component **before** writing one. It already specifies butt
 cards, status badges, tags, panels, the inspector, tables, empty states, loading states, modals and
 drawers. Inventing a parallel version of something the spec defines is a review comment.
 
-### The current tokens contradict the design system
+### Tokens
 
-`packages/ui/src/styles.css` was scaffolded before the design package landed. It defines generic
-`oklch` tokens whose `--color-primary` is a **violet** — but the style guide reserves purple
-(`#A982F4`) exclusively for AI/generative actions, with Level Zero Blue (`#42A5FF`) for all normal
-interaction. Spec §2 defines the real palette as hex variables.
+`packages/ui/src/styles.css` holds spec §2's palette as `--lz-*` hex variables, aliased onto the
+semantic `--color-*` names Tailwind generates utilities from. Use those utilities. Reach for a
+raw `--lz-*` variable only where no semantic alias exists, and add a new colour only when the
+style guide has one to add — not to fill a gap in a single component.
 
-The design docs win on **values**. The first UI issue that touches theming should reconcile
-`packages/ui/src/styles.css` with spec §2 rather than building on top of tokens that are already
-wrong, and should say so in its PR. Don't quietly add a second palette alongside the existing set
-and leave two competing ones.
+The split that matters: Level Zero Blue (`--lz-blue`, `#42A5FF`) is normal interaction, and
+purple (`--lz-ai`, `#A982F4`) is reserved **exclusively** for AI/generative actions. Using the AI
+purple for an ordinary button, or the blue for a generate action, is a review comment.
 
-**Name the tokens `--lz-*`, not the spec's `--wb-*`.** The spec's prefix is the old Workbench
-working name; the values are current but the prefix is not. Take spec §2's palette verbatim and
-rename the prefix as you go — `--wb-bg-canvas` becomes `--lz-bg-canvas`, and so on. This is a
-decided convention, not a judgment call to re-make per component: no new `--wb-*` variable should
-enter the codebase.
+**Name any new token `--lz-*`, never the spec's `--wb-*`.** The spec predates the Level Zero
+rename, so its values are current but its prefix is not. This is a decided convention, not a
+judgment call to re-make per component: no new `--wb-*` variable should enter the codebase.
 
 ### Naming
 
