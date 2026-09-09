@@ -48,33 +48,16 @@ export {
   type ToolbarGroup,
 } from './editor/editor-modes';
 export { createEditorExtensions, type EditorExtensionOptions } from './editor/editor-extensions';
-export {
-  AI_EDIT_ACTIONS,
-  AI_INSTRUCTION_ACTION_ID,
-  aiSlashCommand,
-  type AiEditAction,
-} from './editor/ai-actions';
-export {
-  AI_SUGGESTION_TARGET_CLASS,
-  AiSuggestion,
-  aiSuggestionRange,
-  applyAiSuggestion,
-  droppedReferences,
-  rangeReferences,
-  rangeText,
-  setAiSuggestionRange,
-  suggestionContent,
-  textRunSelection,
-  type AiSuggestionReference,
-} from './editor/ai-suggestion';
-export {
-  useAiSuggestion,
-  type AcceptedAiEdit,
-  type AiEditing,
-  type AiEditingOptions,
-  type AiSuggestionRequest,
-  type AiSuggestionResponse,
-  type PendingAiSuggestion,
+/**
+ * Inline AI editing is switched on with `RichTextEditor`'s `ai` prop, so what
+ * a caller needs is the shape of that prop. The extension, the decoration, the
+ * hook and the content rebuilding stay inside `./editor`.
+ */
+export type {
+  AcceptedAiEdit,
+  AiEditingOptions,
+  AiSuggestionRequest,
+  AiSuggestionResponse,
 } from './editor/use-ai-suggestion';
 export { EditorToolbar, type EditorToolbarProps } from './editor/editor-toolbar';
 export { MarkdownPaste, looksLikeMarkdown } from './editor/markdown-paste';

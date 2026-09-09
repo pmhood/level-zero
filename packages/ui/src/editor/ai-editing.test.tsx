@@ -1,9 +1,9 @@
-import { Editor, Node, type JSONContent } from '@tiptap/core';
-import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { Editor, Node, type JSONContent, type Range } from '@tiptap/core';
+import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import * as React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AI_EDIT_ACTIONS } from './ai-actions';
+import { AI_EDIT_ACTIONS, aiSlashCommand } from './ai-actions';
 import { AiEditingLayer } from './ai-editing-layer';
 import {
   AiSuggestion,
@@ -353,7 +353,6 @@ describe('useAiSuggestion', () => {
       replaced: 'The diver @Kael Voss holds their breath.',
       accepted: '@Kael Voss surfaces.',
     });
-    expect(onAccept.mock.calls[0]![0].content).toEqual(editor.getJSON());
     expect(result.current.pending).toBeNull();
   });
 
@@ -430,11 +429,12 @@ describe('useAiSuggestion', () => {
 describe('AiEditingLayer', () => {
   function renderLayer(editor: Editor, options: AiEditingOptions) {
     const containerRef = React.createRef<HTMLDivElement>();
-    const openPromptRef = { current: () => undefined } as React.MutableRefObject<
-      (instance: Editor, range: { from: number; to: number }) => void
-    >;
+    // The holder `aiSlashCommand` calls through; the layer fills it in.
+    const openPromptRef: React.RefObject<(instance: Editor, range: Range) => void> = {
+      current: () => undefined,
+    };
 
-    return render(
+    render(
       <div ref={containerRef}>
         <AiEditingLayer
           editor={editor}
@@ -444,6 +444,9 @@ describe('AiEditingLayer', () => {
         />
       </div>,
     );
+
+    /** Runs the `/ai` block over the text the writer typed to summon it. */
+    return (range: Range) => act(() => openPromptRef.current(editor, range));
   }
 
   it('offers the AI actions for a selected passage', async () => {
@@ -517,5 +520,75 @@ describe('AiEditingLayer', () => {
     await screen.findByText('The passage this was about is no longer in the document.');
     expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Dismiss' })).toBeDefined();
+  });
+
+  it('drafts at the caret from a freeform `/ai` instruction', async () => {
+    const editor = editorFor(documentWithMention());
+    const { suggest, requests, resolve } = deferredSuggest();
+    const runSlashCommand = renderLayer(editor, { suggest });
+
+    // The writer typed `/ai` at the end of the paragraph and picked the block.
+    const caret = paragraphRange(editor).to;
+    editor.commands.insertContentAt(caret, ' /ai');
+    runSlashCommand({ from: caret + 1, to: caret + 4 });
+
+    // The block takes the text that summoned it back out of the document.
+    expect(editor.getText()).toBe('The diver @Kael Voss holds their breath. ');
+
+    const instruction = await screen.findByLabelText('What should the AI write here?');
+    fireEvent.change(instruction, { target: { value: 'Draft the core loop.' } });
+    fireEvent.submit(instruction.closest('form') as HTMLFormElement);
+
+    expect(suggest).toHaveBeenCalledOnce();
+    expect(requests[0]).toMatchObject({
+      action: 'instruction',
+      instruction: 'Draft the core loop.',
+      // Nothing is selected: this asks for prose at a point, not a rewrite.
+      selection: '',
+      references: [],
+    });
+
+    await resolve('Explore, scavenge, upgrade, go deeper.');
+    await screen.findByText('Explore, scavenge, upgrade, go deeper.');
+    // Still only a suggestion: the document is untouched until it is accepted.
+    expect(editor.getText()).toBe('The diver @Kael Voss holds their breath. ');
+
+    act(() => screen.getByRole('button', { name: 'Accept' }).click());
+
+    await waitFor(() =>
+      expect(editor.getText()).toBe(
+        'The diver @Kael Voss holds their breath. Explore, scavenge, upgrade, go deeper.',
+      ),
+    );
+  });
+
+  it('closes the `/ai` box on Escape without asking anything', async () => {
+    const editor = editorFor(documentWithMention());
+    const suggest = vi.fn();
+    const runSlashCommand = renderLayer(editor, { suggest });
+
+    const caret = paragraphRange(editor).to;
+    runSlashCommand({ from: caret, to: caret });
+
+    const instruction = await screen.findByLabelText('What should the AI write here?');
+    fireEvent.keyDown(instruction, { key: 'Escape' });
+
+    await waitFor(() =>
+      expect(screen.queryByLabelText('What should the AI write here?')).toBeNull(),
+    );
+    expect(suggest).not.toHaveBeenCalled();
+  });
+});
+
+describe('aiSlashCommand', () => {
+  it('hands the editor and the typed range to whatever answers `/ai`', () => {
+    const editor = editorFor(documentWithMention());
+    const open = { current: vi.fn() };
+    const command = aiSlashCommand(open);
+
+    command.run(editor, { from: 1, to: 4 });
+
+    expect(command.id).toBe('ai');
+    expect(open.current).toHaveBeenCalledExactlyOnceWith(editor, { from: 1, to: 4 });
   });
 });

@@ -259,6 +259,67 @@ describe('useEditorAutosave', () => {
     expect(result.current.error?.message).toBe('API is down');
   });
 
+  it('sends what is waiting on demand and resolves once it has landed', async () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    const { result } = renderHook(() => useEditorAutosave(save, { delayMs: 100 }));
+
+    act(() => result.current.onChange(content));
+    await act(async () => {
+      await result.current.flush();
+    });
+
+    expect(save).toHaveBeenCalledExactlyOnceWith(content);
+    expect(result.current.status).toBe('saved');
+  });
+
+  it('queues a flush behind a save already in flight, so writes land in order', async () => {
+    vi.useFakeTimers();
+    const landed: string[] = [];
+    // The first write is the slow one: unqueued, the second would overtake it.
+    const save = vi.fn(
+      (value: JSONContent) =>
+        new Promise<void>((resolve) => {
+          const label = String(value.content?.[0]?.text);
+          setTimeout(
+            () => {
+              landed.push(label);
+              resolve();
+            },
+            label === 'first' ? 500 : 50,
+          );
+        }),
+    );
+    const text = (value: string): JSONContent => ({ type: 'doc', content: [{ text: value }] });
+
+    const { result } = renderHook(() => useEditorAutosave(save, { delayMs: 100 }));
+
+    act(() => result.current.onChange(text('first')));
+    let first!: Promise<void>;
+    act(() => {
+      first = result.current.flush();
+    });
+    act(() => result.current.onChange(text('second')));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    await first;
+
+    expect(landed).toEqual(['first', 'second']);
+  });
+
+  it('reports a failed flush to the caller that asked for it', async () => {
+    const save = vi.fn().mockRejectedValue(new Error('API is down'));
+    const { result } = renderHook(() => useEditorAutosave(save, { delayMs: 100 }));
+
+    act(() => result.current.onChange(content));
+
+    await act(async () => {
+      await expect(result.current.flush()).rejects.toThrow('API is down');
+    });
+    expect(result.current.status).toBe('error');
+  });
+
   it('flushes an edit still waiting when the surface unmounts', () => {
     vi.useFakeTimers();
     const save = vi.fn().mockResolvedValue(undefined);

@@ -115,20 +115,19 @@ function GddDocumentEditor({
   );
   const autosave = useEditorAutosave(save);
 
+  // Autosave is the only writer to the document body, so an accepted edit is
+  // versioned by flushing it rather than by saving a second copy alongside.
+  const flush = autosave.flush;
   const recordAiEdit = useCallback(
     async (edit: AcceptedAiEdit) => {
       try {
-        await recordAcceptedAiEdit(
-          edit,
-          (content) => saveDocument.mutateAsync(content),
-          (input) => snapshotDocument.mutateAsync(input),
-        );
+        await recordAcceptedAiEdit(edit, flush, (input) => snapshotDocument.mutateAsync(input));
         setAiEditError(null);
       } catch (error) {
         setAiEditError(apiErrorMessage(error, 'The AI edit was applied but not versioned.'));
       }
     },
-    [saveDocument, snapshotDocument],
+    [flush, snapshotDocument],
   );
 
   const aiEditing = useMemo<AiEditingOptions>(

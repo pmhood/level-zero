@@ -35,7 +35,15 @@ export interface AiSuggestionResponse {
   generationId?: string | null;
 }
 
-/** An accepted suggestion, once it is in the document. */
+/**
+ * An accepted suggestion, once it is in the document.
+ *
+ * Deliberately not the resulting document. Accepting is an ordinary editor
+ * transaction, so the new body has already gone to `onChange` — and therefore
+ * to autosave — before this is called. Handing it over again would invite a
+ * second writer racing the first, which is how the keystrokes made just after
+ * accepting get overwritten.
+ */
 export interface AcceptedAiEdit {
   action: string;
   /** The action's menu label, for anything that has to name the edit to a user. */
@@ -46,8 +54,6 @@ export interface AcceptedAiEdit {
   /** The prose that replaced it. */
   accepted: string;
   generationId: string | null;
-  /** The document after the edit — what autosave persists and a version records. */
-  content: JSONContent;
 }
 
 export interface AiEditingOptions {
@@ -56,7 +62,10 @@ export interface AiEditingOptions {
    * this package never learns what a project or a provider is.
    */
   suggest: (request: AiSuggestionRequest) => Promise<AiSuggestionResponse>;
-  /** Called once an accepted suggestion is in the document. */
+  /**
+   * Called once an accepted suggestion is in the document, after `onChange`
+   * has already reported the new body.
+   */
   onAccept?: (edit: AcceptedAiEdit) => void;
 }
 
@@ -264,7 +273,6 @@ export function useAiSuggestion(editor: Editor | null, options: AiEditingOptions
         replaced: pending.replaced,
         accepted: pending.text,
         generationId: pending.generationId,
-        content: editor.getJSON(),
       });
     },
 

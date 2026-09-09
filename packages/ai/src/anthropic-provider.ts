@@ -7,6 +7,16 @@ import { BaseAiProvider, type AiRequest, type AiResult } from './provider';
 export const ANTHROPIC_DEFAULT_MODEL = 'claude-opus-5';
 export const ANTHROPIC_DEFAULT_MAX_TOKENS = 16_000;
 
+/**
+ * How long one call may take before it is abandoned.
+ *
+ * Well under the SDK's own ten-minute default, because the API answers the
+ * editor's inline suggestions inside the request: a hung provider would
+ * otherwise hold an HTTP request — and a writer's suggestion card — open
+ * indefinitely.
+ */
+export const ANTHROPIC_DEFAULT_TIMEOUT_MS = 60_000;
+
 /** Beta flag for server-side refusal fallbacks, in its `"default"` routing form. */
 const SERVER_SIDE_FALLBACK_BETA = 'server-side-fallback-2026-07-01';
 
@@ -14,6 +24,8 @@ export interface AnthropicProviderOptions {
   apiKey?: string;
   model?: string;
   maxTokens?: number;
+  /** Per-request timeout in milliseconds. */
+  timeoutMs?: number;
   /** Pre-built SDK client. Tests pass a stub; production lets the SDK build one. */
   client?: Anthropic;
 }
@@ -33,26 +45,31 @@ export class AnthropicProvider extends BaseAiProvider {
 
   private readonly client: Anthropic;
   private readonly maxTokens: number;
+  private readonly timeoutMs: number;
 
   constructor(options: AnthropicProviderOptions = {}) {
     super();
     this.client = options.client ?? new Anthropic({ apiKey: options.apiKey });
     this.defaultModel = options.model ?? ANTHROPIC_DEFAULT_MODEL;
     this.maxTokens = options.maxTokens ?? ANTHROPIC_DEFAULT_MAX_TOKENS;
+    this.timeoutMs = options.timeoutMs ?? ANTHROPIC_DEFAULT_TIMEOUT_MS;
   }
 
   async execute(request: AiRequest): Promise<AiResult> {
     const model = requestedModel(request) ?? this.defaultModel;
 
-    const message = await this.client.beta.messages.create({
-      model,
-      max_tokens: this.maxTokens,
-      // Routes past a policy decline to a capable fallback inside the same call.
-      betas: [SERVER_SIDE_FALLBACK_BETA],
-      fallbacks: 'default',
-      ...(request.context ? { system: renderContext(request.context) } : {}),
-      messages: [{ role: 'user', content: request.prompt }],
-    });
+    const message = await this.client.beta.messages.create(
+      {
+        model,
+        max_tokens: this.maxTokens,
+        // Routes past a policy decline to a capable fallback inside the same call.
+        betas: [SERVER_SIDE_FALLBACK_BETA],
+        fallbacks: 'default',
+        ...(request.context ? { system: renderContext(request.context) } : {}),
+        messages: [{ role: 'user', content: request.prompt }],
+      },
+      { timeout: this.timeoutMs },
+    );
 
     if (message.stop_reason === 'refusal') {
       throw new Error(

@@ -1,7 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { describe, expect, it } from 'vitest';
 
-import { AnthropicProvider } from './anthropic-provider';
+import { ANTHROPIC_DEFAULT_TIMEOUT_MS, AnthropicProvider } from './anthropic-provider';
 import { type ResolvedContext } from './context';
 
 interface StubMessage {
@@ -17,10 +17,16 @@ interface StubMessage {
 function stubClient(message: Partial<StubMessage> = {}): {
   client: Anthropic;
   requests: Record<string, unknown>[];
+  options: Record<string, unknown>[];
 } {
   const requests: Record<string, unknown>[] = [];
-  const create = async (params: Record<string, unknown>): Promise<StubMessage> => {
+  const options: Record<string, unknown>[] = [];
+  const create = async (
+    params: Record<string, unknown>,
+    requestOptions: Record<string, unknown>,
+  ): Promise<StubMessage> => {
     requests.push(params);
+    options.push(requestOptions);
     return {
       id: 'msg_1',
       model: 'claude-opus-5',
@@ -31,7 +37,7 @@ function stubClient(message: Partial<StubMessage> = {}): {
     };
   };
 
-  return { client: { beta: { messages: { create } } } as unknown as Anthropic, requests };
+  return { client: { beta: { messages: { create } } } as unknown as Anthropic, requests, options };
 }
 
 const context: ResolvedContext = {
@@ -61,6 +67,7 @@ describe('AnthropicProvider', () => {
     const provider = new AnthropicProvider({ client: stubClient().client });
 
     expect(provider.supports('text.generate')).toBe(true);
+    expect(provider.supports('text.rewrite')).toBe(true);
     expect(provider.supports('image.generate')).toBe(false);
   });
 
@@ -97,6 +104,19 @@ describe('AnthropicProvider', () => {
     });
 
     expect(requests[0]?.model).toBe('claude-sonnet-5');
+  });
+
+  it('bounds every call, so a hung provider cannot hold a request open', async () => {
+    const { client, options } = stubClient();
+
+    await new AnthropicProvider({ client }).execute({ capability: 'text.rewrite', prompt: 'x' });
+    expect(options[0]?.timeout).toBe(ANTHROPIC_DEFAULT_TIMEOUT_MS);
+
+    await new AnthropicProvider({ client, timeoutMs: 5_000 }).execute({
+      capability: 'text.rewrite',
+      prompt: 'x',
+    });
+    expect(options[1]?.timeout).toBe(5_000);
   });
 
   it('fails the generation when the request is declined', async () => {
