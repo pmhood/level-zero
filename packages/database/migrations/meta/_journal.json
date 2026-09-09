@@ -50,6 +50,13 @@
       "when": 1788918321160,
       "tag": "0006_prototypes",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788919831512,
+      "tag": "0007_background_jobs",
+      "breakpoints": true
     }
   ]
 }

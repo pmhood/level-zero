@@ -4,5 +4,6 @@ export * from './entities';
 export * from './entity-relationships';
 export * from './entity-versions';
 export * from './generations';
+export * from './jobs';
 export * from './projects';
 export * from './prototype-versions';

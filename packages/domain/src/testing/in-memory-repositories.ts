@@ -21,6 +21,10 @@ import {
   type GenerationPage,
   type GenerationRepository,
 } from '../generation/generation-repository';
+import { type Job } from '../job/job';
+import { type JobEvents, type JobSubscription } from '../job/job-events';
+import { type JobQueue } from '../job/job-queue';
+import { type JobListFilter, type JobPage, type JobRepository } from '../job/job-repository';
 import { type Project } from '../project/project';
 import { type PrototypeVersion } from '../prototype/prototype-version';
 import {
@@ -516,5 +520,94 @@ export class InMemoryPrototypeVersionRepository implements PrototypeVersionRepos
     return [...this.rows.values()].filter(
       (version) => version.projectId === projectId && version.prototypeId === prototypeId,
     );
+  }
+}
+
+/** In-memory `JobRepository` for tests. Mirrors the Postgres adapter's filtering. */
+export class InMemoryJobRepository implements JobRepository {
+  private readonly rows = new Map<string, Job>();
+
+  constructor(seed: readonly Job[] = []) {
+    for (const job of seed) this.rows.set(job.id, structuredClone(job));
+  }
+
+  async insert(job: Job): Promise<Job> {
+    this.rows.set(job.id, structuredClone(job));
+    return structuredClone(job);
+  }
+
+  async findById(projectId: string, jobId: string): Promise<Job | null> {
+    const job = this.rows.get(jobId);
+    // A mismatched project reads as missing, never as another project's row.
+    if (!job || job.projectId !== projectId) return null;
+    return structuredClone(job);
+  }
+
+  async listByProject(projectId: string, filter: JobListFilter): Promise<JobPage> {
+    const matches = [...this.rows.values()]
+      .filter((job) => job.projectId === projectId)
+      .filter((job) => !filter.statuses || filter.statuses.includes(job.status))
+      .filter((job) => !filter.kind || job.kind === filter.kind)
+      .filter((job) => !filter.targetId || job.targetId === filter.targetId)
+      .sort(byNewest);
+
+    const offset = filter.offset ?? 0;
+    const limit = filter.limit ?? matches.length;
+
+    return {
+      items: matches.slice(offset, offset + limit).map((job) => structuredClone(job)),
+      total: matches.length,
+    };
+  }
+
+  async save(job: Job): Promise<Job> {
+    const existing = this.rows.get(job.id);
+    if (!existing || existing.projectId !== job.projectId) {
+      throw new NotFoundError('Job', job.id);
+    }
+    this.rows.set(job.id, structuredClone(job));
+    return structuredClone(job);
+  }
+}
+
+/**
+ * In-memory `JobQueue` for tests: records what was handed to a worker so a test
+ * can assert that work was queued without running Redis.
+ */
+export class InMemoryJobQueue implements JobQueue {
+  readonly enqueued: Job[] = [];
+  readonly removed: Job[] = [];
+
+  async enqueue(job: Job): Promise<void> {
+    this.enqueued.push(structuredClone(job));
+  }
+
+  async remove(job: Job): Promise<void> {
+    this.removed.push(structuredClone(job));
+  }
+}
+
+/** In-memory `JobEvents` for tests: delivers to subscribers in the same process. */
+export class InMemoryJobEvents implements JobEvents {
+  readonly published: Job[] = [];
+  private readonly listeners = new Map<string, Set<(job: Job) => void>>();
+
+  async publish(job: Job): Promise<void> {
+    this.published.push(structuredClone(job));
+    for (const listener of this.listeners.get(job.projectId) ?? []) {
+      listener(structuredClone(job));
+    }
+  }
+
+  async subscribe(projectId: string, listener: (job: Job) => void): Promise<JobSubscription> {
+    const listeners = this.listeners.get(projectId) ?? new Set();
+    listeners.add(listener);
+    this.listeners.set(projectId, listeners);
+
+    return {
+      close: async () => {
+        listeners.delete(listener);
+      },
+    };
   }
 }

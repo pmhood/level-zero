@@ -16,6 +16,8 @@ export interface AiResult {
   capability: AiCapability;
   providerId: string;
   model: string;
+  /** The provider's own identifier for the request, for support and audit. */
+  requestId?: string;
   /** Text output, when the capability produces text. */
   output?: string;
   /** Free-form provider payload (image handles, tool calls, usage, ...). */
@@ -26,6 +28,8 @@ export interface AiResult {
 export interface AiProvider {
   readonly id: string;
   readonly capabilities: readonly AiCapability[];
+  /** Used when the request does not name a model of its own. */
+  readonly defaultModel: string;
   supports(capability: AiCapability): boolean;
   execute(request: AiRequest): Promise<AiResult>;
 }
@@ -34,6 +38,7 @@ export interface AiProvider {
 export abstract class BaseAiProvider implements AiProvider {
   abstract readonly id: string;
   abstract readonly capabilities: readonly AiCapability[];
+  abstract readonly defaultModel: string;
 
   supports(capability: AiCapability): boolean {
     return this.capabilities.includes(capability);

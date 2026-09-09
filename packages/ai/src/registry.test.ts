@@ -9,6 +9,7 @@ import { BaseAiProvider, type AiCapability, type AiRequest, type AiResult } from
 class FailingProvider extends BaseAiProvider {
   readonly id = 'failing';
   readonly capabilities: readonly AiCapability[] = ['text.generate'];
+  readonly defaultModel = 'failing-1';
 
   async execute(_request: AiRequest): Promise<AiResult> {
     throw new Error('provider unavailable');

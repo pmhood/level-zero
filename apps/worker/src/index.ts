@@ -1,11 +1,31 @@
+import { AiProviderRegistry, EchoAiProvider } from '@level-zero/ai';
 import { loadDotEnv, parseEnv, workerEnvSchema } from '@level-zero/config';
 import {
+  DrizzleAssetRepository,
+  DrizzleEntityRelationshipRepository,
+  DrizzleEntityRepository,
+  DrizzleGenerationRepository,
+  DrizzleJobRepository,
+  DrizzleProjectRepository,
   checkPostgres,
   checkRedis,
   createDatabaseClient,
+  createJobConsumer,
+  createJobEvents,
+  createJobQueue,
   createRedisClient,
 } from '@level-zero/database';
+import {
+  EntityRelationshipService,
+  EntityService,
+  GenerationService,
+  JobService,
+  LineageService,
+  systemClock,
+  uuidIdGenerator,
+} from '@level-zero/domain';
 
+import { createGenerationJobHandler } from './generation-job';
 import { createWorkerRuntime, type WorkerProbe } from './runtime';
 
 async function main(): Promise<void> {
@@ -17,21 +37,55 @@ async function main(): Promise<void> {
   const redis = createRedisClient({
     connectionUrl: env.REDIS_URL,
     keyPrefix: 'level-zero:',
-    // BullMQ (issue #7) requires unlimited retries on its blocking connections.
+    // BullMQ requires unlimited retries on its blocking connections.
     maxRetriesPerRequest: null,
   });
+
+  const deps = { clock: systemClock, ids: uuidIdGenerator };
+  const projects = new DrizzleProjectRepository(database.db);
+  const entities = new DrizzleEntityRepository(database.db);
+  const relationships = new DrizzleEntityRelationshipRepository(database.db);
+  const assets = new DrizzleAssetRepository(database.db);
+
+  const entityService = new EntityService(entities, projects, deps);
+  const lineage = new LineageService(
+    entityService,
+    new EntityRelationshipService(relationships, entities, deps),
+  );
+
+  const queue = createJobQueue({ connectionUrl: env.REDIS_URL });
+  const events = createJobEvents({ connectionUrl: env.REDIS_URL });
+  const jobs = new JobService(new DrizzleJobRepository(database.db), projects, queue, events, deps);
+  const generations = new GenerationService(
+    new DrizzleGenerationRepository(database.db),
+    projects,
+    entities,
+    assets,
+    lineage,
+    deps,
+  );
+
+  // The echo provider stands in until the vendor adapters land in issue #8.
+  const providers = new AiProviderRegistry().register(new EchoAiProvider(['text.generate']));
 
   const probes: WorkerProbe[] = [
     { name: 'postgres', check: () => checkPostgres(database.db) },
     { name: 'redis', check: () => checkRedis(redis.redis) },
   ];
 
+  const consumer = createJobConsumer({
+    connectionUrl: env.REDIS_URL,
+    handle: createGenerationJobHandler({ jobs, generations, providers, logger: console }),
+    onError: (error) => console.error('[worker] queue error', error),
+  });
+
   const runtime = createWorkerRuntime({
     port: env.WORKER_PORT,
     probes,
     onShutdown: async () => {
-      // Queue consumers registered in issue #7 are drained before this point.
-      await Promise.all([database.close(), redis.close()]);
+      // Stop taking work first, so in-flight jobs finish before anything closes.
+      await consumer.close();
+      await Promise.all([queue.close(), events.close(), database.close(), redis.close()]);
     },
   });
 

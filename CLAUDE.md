@@ -92,6 +92,11 @@ change — that is its own task.
   interfaces (`text.generate`, `image.generate`, …). Nothing outside an adapter imports a vendor SDK.
 - **Migrations are plain SQL, generated then applied** — `pnpm db:generate` after editing
   `packages/database/src/schema`, never a schema push.
+- **Long-running work goes through a `Job`**, enqueued by a domain service and run in
+  `apps/worker`. The Postgres row is the state; Redis carries only the job's identity.
+  BullMQ gets its own ioredis connection (`maxRetriesPerRequest: null`, and BullMQ's own
+  `prefix` rather than ioredis' `keyPrefix`, which it does not support) — reusing the
+  shared `createRedisClient` connection breaks it in ways that only show up at runtime.
 - **NestJS gotcha:** `@typescript-eslint/consistent-type-imports` is disabled for `apps/api` because
   constructor injection needs `design:paramtypes`, which TypeScript only emits for value imports.
   Rewriting an injected class to `import type` breaks DI at runtime.
