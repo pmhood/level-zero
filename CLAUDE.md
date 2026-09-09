@@ -131,7 +131,9 @@ never rendered HTML. Markdown is an import/export format only.
 - Issues carry `effort:` and `model:` labels that drive the `/do` and `/do-next` pipelines, and
   `needs-review` means the issue has open questions and should not be worked unattended. Many issue
   bodies list `Depends on: #N` — check those are closed before starting.
-- **CI is currently blocked at the GitHub account level** ("recent account payments have failed"),
-  so no workflow has run since 2026-09-08. Jobs fail in ~3s having executed zero steps; that is
-  billing, not the diff. Run `pnpm typecheck && pnpm lint && pnpm test` locally — nothing else is
+- **CI is disabled, not broken.** It was blocked at the GitHub account level ("recent account
+  payments have failed") and jobs failed in ~3s having executed zero steps — billing, not the diff
+  — so the `CI` workflow was manually disabled on 2026-09-09 to stop every push collecting a red X.
+  `.github/workflows/ci.yml` is intact; re-enable with `gh workflow enable CI` once billing is
+  sorted. Until then run `pnpm typecheck && pnpm lint && pnpm test` locally — nothing else is
   checking.
