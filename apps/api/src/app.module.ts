@@ -8,6 +8,7 @@ import { DomainModule } from './domain/domain.module';
 import { EntitiesModule } from './entities/entities.module';
 import { GenerationsModule } from './generations/generations.module';
 import { HealthModule } from './health/health.module';
+import { AiModule } from './infrastructure/ai.module';
 import { DatabaseModule } from './infrastructure/database.module';
 import { EmbeddingModule } from './infrastructure/embedding.module';
 import { QueueModule } from './infrastructure/queue.module';
@@ -35,6 +36,7 @@ import { VersionsModule } from './versions/versions.module';
     QueueModule,
     StorageModule,
     EmbeddingModule,
+    AiModule,
     DomainModule,
     HealthModule,
     ProjectsModule,

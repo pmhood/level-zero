@@ -1,14 +1,18 @@
 'use client';
 
-import type { Extensions, JSONContent } from '@tiptap/core';
+import type { Editor, Extensions, JSONContent, Range } from '@tiptap/core';
 import { EditorContent, useEditor } from '@tiptap/react';
 import * as React from 'react';
 
 import { cn } from '../cn';
+import { aiSlashCommand } from './ai-actions';
+import { AiEditingLayer } from './ai-editing-layer';
+import { AiSuggestion } from './ai-suggestion';
 import { createEditorExtensions } from './editor-extensions';
 import { EDITOR_MODE_CONFIG, type EditorMode } from './editor-modes';
 import { EditorToolbar } from './editor-toolbar';
 import type { EditorCommand } from './slash-menu';
+import type { AiEditingOptions } from './use-ai-suggestion';
 
 export interface RichTextEditorProps {
   /**
@@ -29,6 +33,12 @@ export interface RichTextEditorProps {
   extensions?: Extensions;
   /** Extra entries for the `/` menu. */
   commands?: EditorCommand[];
+  /**
+   * Turns on inline AI editing: the selection menu, the `/ai` block and the
+   * suggestion card. The feature that owns the document supplies the request,
+   * so this package never learns what a project or a provider is.
+   */
+  ai?: AiEditingOptions;
   /** Rendered at the right end of the toolbar — save state, document actions, … */
   toolbarActions?: React.ReactNode;
   /** Names the writing area for screen readers, e.g. "Game design document". */
@@ -53,11 +63,18 @@ export function RichTextEditor({
   editable = true,
   extensions,
   commands,
+  ai,
   toolbarActions,
   label,
   className,
 }: RichTextEditorProps) {
   const config = EDITOR_MODE_CONFIG[mode];
+
+  // Panels are positioned inside this box, and the `/ai` block reaches the
+  // layer through the holder because the `/` menu is built with the editor,
+  // before the layer that answers it has mounted.
+  const surfaceRef = React.useRef<HTMLDivElement>(null);
+  const openAiPromptRef = React.useRef<(instance: Editor, range: Range) => void>(() => undefined);
 
   // Held in a ref so a new callback identity on re-render never rebuilds the
   // editor — that would discard the undo history mid-sentence.
@@ -73,8 +90,8 @@ export function RichTextEditor({
     extensions: createEditorExtensions({
       placeholder: placeholder ?? config.placeholder,
       slashMenu: config.slashMenu,
-      commands,
-      extensions,
+      commands: ai ? [...(commands ?? []), aiSlashCommand(openAiPromptRef)] : commands,
+      extensions: ai ? [AiSuggestion, ...(extensions ?? [])] : extensions,
     }),
   }));
 
@@ -107,9 +124,17 @@ export function RichTextEditor({
   }, [editor, editable]);
 
   return (
-    <div className={cn('flex min-w-0 flex-col gap-3', className)}>
+    <div ref={surfaceRef} className={cn('relative flex min-w-0 flex-col gap-3', className)}>
       <EditorToolbar editor={editor} groups={config.toolbar} actions={toolbarActions} />
       <EditorContent editor={editor} />
+      {ai && (
+        <AiEditingLayer
+          editor={editor}
+          options={ai}
+          containerRef={surfaceRef}
+          openPromptRef={openAiPromptRef}
+        />
+      )}
     </div>
   );
 }

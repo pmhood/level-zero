@@ -37,6 +37,7 @@ export {
   OverviewIcon,
   PlusIcon,
   SearchIcon,
+  SparklesIcon,
 } from './icons';
 export { RichTextEditor, type RichTextEditorProps } from './editor/rich-text-editor';
 export {
@@ -47,6 +48,34 @@ export {
   type ToolbarGroup,
 } from './editor/editor-modes';
 export { createEditorExtensions, type EditorExtensionOptions } from './editor/editor-extensions';
+export {
+  AI_EDIT_ACTIONS,
+  AI_INSTRUCTION_ACTION_ID,
+  aiSlashCommand,
+  type AiEditAction,
+} from './editor/ai-actions';
+export {
+  AI_SUGGESTION_TARGET_CLASS,
+  AiSuggestion,
+  aiSuggestionRange,
+  applyAiSuggestion,
+  droppedReferences,
+  rangeReferences,
+  rangeText,
+  setAiSuggestionRange,
+  suggestionContent,
+  textRunSelection,
+  type AiSuggestionReference,
+} from './editor/ai-suggestion';
+export {
+  useAiSuggestion,
+  type AcceptedAiEdit,
+  type AiEditing,
+  type AiEditingOptions,
+  type AiSuggestionRequest,
+  type AiSuggestionResponse,
+  type PendingAiSuggestion,
+} from './editor/use-ai-suggestion';
 export { EditorToolbar, type EditorToolbarProps } from './editor/editor-toolbar';
 export { MarkdownPaste, looksLikeMarkdown } from './editor/markdown-paste';
 export { SaveStatusLabel, type SaveStatusLabelProps } from './editor/save-status-label';

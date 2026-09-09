@@ -226,6 +226,29 @@ describe('snapshots', () => {
     });
   });
 
+  it('records an accepted AI edit against the generation that produced it', async () => {
+    const created = await gdd();
+    await documents.saveContent(project.id, created.entity.id, prose('A rewritten core loop.'));
+
+    const version = await documents.snapshot(project.id, created.entity.id, {
+      name: 'AI edit — Rewrite',
+      reason: 'ai_edit',
+      generationId: 'gen_1',
+    });
+
+    expect(version).toMatchObject({ reason: 'ai_edit', generationId: 'gen_1' });
+    const history = await documents.listVersions(project.id, created.entity.id);
+    expect(history.versions[0]?.generationId).toBe('gen_1');
+  });
+
+  it('leaves the generation unset on an ordinary snapshot', async () => {
+    const created = await gdd();
+
+    await expect(documents.snapshot(project.id, created.entity.id)).resolves.toMatchObject({
+      generationId: null,
+    });
+  });
+
   it('refuses a reason that is not a document event', async () => {
     const created = await gdd();
 

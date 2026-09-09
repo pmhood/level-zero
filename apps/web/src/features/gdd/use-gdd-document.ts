@@ -1,6 +1,6 @@
 'use client';
 
-import type { Document, DocumentContent } from '@level-zero/domain';
+import type { Document, DocumentContent, SnapshotDocumentInput } from '@level-zero/domain';
 import type { JSONContent } from '@level-zero/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -57,5 +57,19 @@ export function useSaveGddDocument(projectId: string, documentId: string) {
     // document node without depending on an editor library.
     mutationFn: (content: JSONContent) =>
       api.saveDocumentContent(projectId, documentId, content as DocumentContent),
+  });
+}
+
+/**
+ * Records a version of the document as the server currently holds it.
+ *
+ * Autosave writes the working copy and nothing else, so a caller taking a
+ * snapshot has to have saved the body it means to keep first — the version is
+ * of what is stored, not of what is on screen.
+ */
+export function useSnapshotGddDocument(projectId: string, documentId: string) {
+  return useMutation({
+    mutationFn: (input: SnapshotDocumentInput) =>
+      api.snapshotDocument(projectId, documentId, input),
   });
 }

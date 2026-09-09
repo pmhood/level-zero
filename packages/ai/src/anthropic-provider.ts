@@ -19,7 +19,7 @@ export interface AnthropicProviderOptions {
 }
 
 /**
- * Anthropic adapter for `text.generate`.
+ * Anthropic adapter for the text capabilities.
  *
  * This is the only file in the repository that knows what an Anthropic request
  * looks like. The resolved project context becomes the system prompt and the
@@ -28,7 +28,7 @@ export interface AnthropicProviderOptions {
  */
 export class AnthropicProvider extends BaseAiProvider {
   readonly id = 'anthropic';
-  readonly capabilities: readonly AiCapability[] = ['text.generate'];
+  readonly capabilities: readonly AiCapability[] = ['text.generate', 'text.rewrite'];
   readonly defaultModel: string;
 
   private readonly client: Anthropic;

@@ -7,6 +7,7 @@ import type {
   CreateProjectInput,
   Document,
   DocumentContent,
+  DocumentVersion,
   Entity,
   EntityHistory,
   EntityNeighborhood,
@@ -24,6 +25,7 @@ import type {
   RelationType,
   SearchResultPage,
   SearchSourceType,
+  SnapshotDocumentInput,
   UpdateEntityInput,
   UpdateProjectInput,
   VersionReason,
@@ -312,6 +314,47 @@ export function saveDocumentContent(
   content: DocumentContent,
 ): Promise<Document> {
   return put(`/api/projects/${projectId}/documents/${documentId}/content`, { content });
+}
+
+/** Records the body as it stands as a permanent version. */
+export function snapshotDocument(
+  projectId: string,
+  documentId: string,
+  input: SnapshotDocumentInput,
+): Promise<DocumentVersion> {
+  return post(`/api/projects/${projectId}/documents/${documentId}/versions`, input);
+}
+
+export interface SuggestDocumentEditInput {
+  action: string;
+  instruction: string;
+  /** The passage being rewritten; omitted for an `/ai` request at the caret. */
+  selection?: string;
+  mentionedEntityIds?: string[];
+}
+
+/** The suggested prose, and the generation record that explains where it came from. */
+export interface DocumentSuggestion {
+  generationId: string;
+  suggestion: string;
+}
+
+/**
+ * Asks for one inline AI edit. This answers in the request rather than through
+ * a job: the writer is watching a spinner on the suggestion card, and nothing
+ * is written to the document either way until they accept.
+ */
+export function suggestDocumentEdit(
+  projectId: string,
+  documentId: string,
+  input: SuggestDocumentEditInput,
+  signal?: AbortSignal,
+): Promise<DocumentSuggestion> {
+  return apiFetch(`/api/projects/${projectId}/documents/${documentId}/ai/suggestions`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+    ...(signal ? { signal } : {}),
+  });
 }
 
 // --- Assets ---------------------------------------------------------------

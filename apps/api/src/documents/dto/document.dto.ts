@@ -51,6 +51,11 @@ export class SnapshotDocumentDto {
   @IsIn(DOCUMENT_VERSION_REASONS)
   reason?: DocumentVersionReason;
 
+  /** The generation behind an accepted AI edit, so the version says where it came from. */
+  @IsOptional()
+  @IsString()
+  generationId?: string | null;
+
   /** Free text until authentication lands; then it comes from the session. */
   @IsOptional()
   @IsString()

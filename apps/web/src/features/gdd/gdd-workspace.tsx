@@ -8,11 +8,13 @@ import {
   SaveStatusLabel,
   WorkspaceHeader,
   useEditorAutosave,
+  type AcceptedAiEdit,
+  type AiEditingOptions,
   type JSONContent,
 } from '@level-zero/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { matchEntities } from '@/features/entities/entity-reference';
+import { matchEntities, referencedEntityIds } from '@/features/entities/entity-reference';
 import { EntityReferenceProvider } from '@/features/entities/entity-reference-context';
 import {
   createEntityReferenceExtensions,
@@ -20,10 +22,17 @@ import {
 } from '@/features/entities/entity-reference-extensions';
 import { EntityReferenceInspector } from '@/features/entities/entity-reference-inspector';
 import { useReferenceableEntities } from '@/features/entities/use-entities';
-import { ApiRequestError } from '@/lib/api';
+import * as api from '@/lib/api';
+import { ApiRequestError, apiErrorMessage } from '@/lib/api';
 
+import { recordAcceptedAiEdit } from './ai-edit-version';
 import { documentOutline } from './document-outline';
-import { useCreateGddDocument, useGddDocument, useSaveGddDocument } from './use-gdd-document';
+import {
+  useCreateGddDocument,
+  useGddDocument,
+  useSaveGddDocument,
+  useSnapshotGddDocument,
+} from './use-gdd-document';
 
 function DocumentOutline({
   content,
@@ -72,9 +81,12 @@ function GddDocumentEditor({
   designDocument: Document;
 }) {
   // The stored body is a document node; the editor reads it as TipTap JSON.
+  const documentId = designDocument.entity.id;
   const [content, setContent] = useState<JSONContent>(() => designDocument.content as JSONContent);
-  const saveDocument = useSaveGddDocument(projectId, designDocument.entity.id);
+  const saveDocument = useSaveGddDocument(projectId, documentId);
+  const snapshotDocument = useSnapshotGddDocument(projectId, documentId);
   const surfaceRef = useRef<HTMLDivElement>(null);
+  const [aiEditError, setAiEditError] = useState<string | null>(null);
 
   const entitiesQuery = useReferenceableEntities(projectId);
   const entities = useMemo(() => entitiesQuery.data?.items ?? [], [entitiesQuery.data]);
@@ -102,6 +114,43 @@ function GddDocumentEditor({
     [saveDocument],
   );
   const autosave = useEditorAutosave(save);
+
+  const recordAiEdit = useCallback(
+    async (edit: AcceptedAiEdit) => {
+      try {
+        await recordAcceptedAiEdit(
+          edit,
+          (content) => saveDocument.mutateAsync(content),
+          (input) => snapshotDocument.mutateAsync(input),
+        );
+        setAiEditError(null);
+      } catch (error) {
+        setAiEditError(apiErrorMessage(error, 'The AI edit was applied but not versioned.'));
+      }
+    },
+    [saveDocument, snapshotDocument],
+  );
+
+  const aiEditing = useMemo<AiEditingOptions>(
+    () => ({
+      suggest: async ({ action, instruction, selection, references, signal }) => {
+        const { generationId, suggestion } = await api.suggestDocumentEdit(
+          projectId,
+          documentId,
+          {
+            action,
+            instruction,
+            selection,
+            mentionedEntityIds: referencedEntityIds(references),
+          },
+          signal,
+        );
+        return { text: suggestion, generationId };
+      },
+      onAccept: (edit) => void recordAiEdit(edit),
+    }),
+    [projectId, documentId, recordAiEdit],
+  );
 
   function handleChange(next: JSONContent) {
     setContent(next);
@@ -136,8 +185,14 @@ function GddDocumentEditor({
               onChange={handleChange}
               extensions={referenceExtensions}
               commands={ENTITY_EMBED_COMMANDS}
+              ai={aiEditing}
               toolbarActions={<SaveStatusLabel status={autosave.status} error={autosave.error} />}
             />
+            {aiEditError && (
+              <p role="status" className="mt-2 text-xs text-error">
+                {aiEditError}
+              </p>
+            )}
           </div>
         </div>
 

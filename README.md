@@ -301,8 +301,11 @@ capability, so a feature never names a vendor and never handles one being down.
   serves object storage. Swapping in a hosted image model is one registration in
   `apps/worker/src/index.ts` and nothing else.
 
-Set `ANTHROPIC_API_KEY` to enable the Anthropic adapter; without it the worker
-registers the echo provider so local development still runs end to end.
+Set `ANTHROPIC_API_KEY` to enable the Anthropic adapter; without it the echo
+provider is registered so local development still runs end to end. Both server
+processes read it: the worker runs queued generations, and the API answers the
+editor's inline AI suggestions inside the request, because a writer waiting on a
+rewrite of the sentence they selected has nothing to walk away to.
 
 ### Prototypes
 
@@ -525,6 +528,12 @@ snapshot, `GET :documentId/versions` lists version metadata,
 `GET …/versions/:versionId` reads one with its body,
 `GET …/versions/compare?from=&to=` returns both bodies and what else changed,
 and `POST …/versions/:versionId/restore` brings a version back as a new one.
+`POST :documentId/ai/suggestions` answers one inline AI edit: it assembles the
+document and the entities the passage mentions through `ContextResolver`,
+records a `Generation`, and returns the suggested prose for the editor to
+preview. Nothing is written to the document by asking — an accepted suggestion
+arrives back through `PUT :documentId/content`, and a substantial one through
+`POST :documentId/versions` with reason `ai_edit`.
 
 Search lives under `/api/projects/:projectId/search`: `GET` answers the project's
 one search, filtering by `sourceType`, `entityType`, `status`, `tag`,

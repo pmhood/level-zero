@@ -1,7 +1,12 @@
 import type { Entity, EntityStatus, EntityType } from '@level-zero/domain';
 import { describe, expect, it } from 'vitest';
 
-import { entityReferenceLabel, matchEntities, resolveEntityReference } from './entity-reference';
+import {
+  entityReferenceLabel,
+  matchEntities,
+  referencedEntityIds,
+  resolveEntityReference,
+} from './entity-reference';
 
 function entity(
   id: string,
@@ -103,5 +108,26 @@ describe('entityReferenceLabel', () => {
 
   it('falls back to the stored label so a broken reference still says what it was', () => {
     expect(entityReferenceLabel({ state: 'missing' }, 'Kael Voss')).toBe('Kael Voss');
+  });
+});
+
+describe('referencedEntityIds', () => {
+  const mention = (entityId: unknown) => ({ type: 'entityMention', attrs: { entityId } });
+
+  it('reads the entities a passage mentions out of its nodes', () => {
+    expect(referencedEntityIds([mention('ent_kael'), mention('ent_oxygen')])).toEqual([
+      'ent_kael',
+      'ent_oxygen',
+    ]);
+  });
+
+  it('names an entity mentioned twice once', () => {
+    expect(referencedEntityIds([mention('ent_kael'), mention('ent_kael')])).toEqual(['ent_kael']);
+  });
+
+  it('ignores a reference that never got an entity', () => {
+    expect(referencedEntityIds([mention(null), mention(''), { type: 'text', text: 'a' }])).toEqual(
+      [],
+    );
   });
 });
