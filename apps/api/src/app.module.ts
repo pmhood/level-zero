@@ -10,6 +10,7 @@ import { DatabaseModule } from './infrastructure/database.module';
 import { RedisModule } from './infrastructure/redis.module';
 import { StorageModule } from './infrastructure/storage.module';
 import { ProjectsModule } from './projects/projects.module';
+import { PrototypesModule } from './prototypes/prototypes.module';
 import { RelationshipsModule } from './relationships/relationships.module';
 import { VersionsModule } from './versions/versions.module';
 
@@ -34,6 +35,7 @@ import { VersionsModule } from './versions/versions.module';
     VersionsModule,
     AssetsModule,
     GenerationsModule,
+    PrototypesModule,
   ],
 })
 export class AppModule {}

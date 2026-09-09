@@ -19,6 +19,9 @@ Implemented so far, against the architecture epic
 - [#6](https://github.com/pmhood/level-zero/issues/6) — AI generation records and
   provenance, so every generated output can say which provider, model, prompt,
   parameters, inputs and project context produced it.
+- [#12](https://github.com/pmhood/level-zero/issues/12) — prototypes pinned to
+  exact entity versions, so a playable experiment keeps resolving to what was
+  actually in it, and two prototype versions can be compared.
 
 ## Requirements
 
@@ -238,6 +241,38 @@ _and_ the request that produced them, and a retry is a new generation carrying
   `completedAt`, only a `failed` generation may carry `failure`, and a
   generation something was re-rolled from cannot be deleted.
 
+### Prototypes
+
+```text
+Project ──owns──> Entity (type: prototype)
+                    │
+                    └──PrototypeVersion(number, name, status, notes, buildAssetId)
+                          │
+                          └──pins──> EntityVersion (one per included entity)
+```
+
+A prototype is an ordinary entity, so it has a name, tags, status and a place in
+the graph like everything else. What `PrototypeVersion` adds is the part an
+entity cannot express: the exact `EntityVersion` rows the experiment was built
+from.
+
+- **Pins are resolved once, at capture.** Including an entity without naming a
+  version records the entity's _current_ version there and then. Nothing is
+  re-resolved on read, so v1 still answers with the diver, the oxygen mechanic
+  and the trench as they were played, however far the entities have moved on.
+- **The pins are immutable; the annotations are not.** `status`, `notes` and
+  `buildAssetId` can be updated — a build is produced _after_ the versions going
+  into it are chosen — but a different set of versions is a new prototype
+  version, never an edit of an old one.
+- **Comparison is per entity.** Comparing two versions reports `added`,
+  `removed` and `changed` members, where a change is one entity moving from one
+  `EntityVersion` id to another.
+- **The database enforces the history.** A member row references
+  `entity_versions(id, entity_id, project_id)` with `ON DELETE RESTRICT`, so a
+  pinned version cannot be deleted, cannot belong to another entity and cannot
+  come from another project. The build artifact and the prototype entity are
+  protected the same way.
+
 ### API
 
 | Endpoint                                                                  | Purpose                                               |
@@ -281,6 +316,15 @@ request before any provider is called, `POST :generationId/dispatch` ·
 and parent generation they name. The listing filters by `status`, `capability`,
 `parentGenerationId`, `outputAssetId` and `entityId`, which is how provenance is
 read backwards from a generated image.
+
+Prototypes live under `/api/projects/:projectId/prototypes`: `POST` creates the
+prototype entity and captures its first version in one request,
+`POST :prototypeId/versions` captures a later one, `GET :prototypeId/versions`
+lists them newest first, `GET …/versions/compare?from=&to=` reports the added,
+removed and changed entity versions, `GET …/versions/:prototypeVersionId/contents`
+resolves a version to the entity versions and build artifact it names, and
+`PATCH` on a version updates its status, notes or build artifact — never its
+pins.
 
 Domain errors map to HTTP in one place: `NotFoundError` → 404,
 `ValidationError` → 400, `ConflictError` → 409, each with a stable `error` code
@@ -353,6 +397,10 @@ bypasses the services:
 - A check constraint on `assets` stops the `variant`/`sourceAssetId` pairing from
   drifting: a `source` asset cannot carry a `sourceAssetId`, and every other
   variant must.
+- A prototype's members reference `entity_versions(id, entity_id, project_id)`,
+  so a pin cannot name another entity's or another project's history, and
+  `ON DELETE RESTRICT` keeps that history alive for as long as something played
+  it.
 
 > **NestJS gotcha:** constructor injection relies on `design:paramtypes` metadata,
 > which TypeScript only emits for _value_ imports. `@typescript-eslint/consistent-type-imports`

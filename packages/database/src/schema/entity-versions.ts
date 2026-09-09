@@ -60,6 +60,10 @@ export const entityVersions = pgTable(
     // Makes the per-entity numbering monotonic even under concurrent commits:
     // a racing second insert fails rather than reusing a number.
     unique('entity_versions_entity_number_key').on(table.entityId, table.versionNumber),
+    // Lets a row elsewhere reference a version *and* the entity and project it
+    // belongs to in one composite foreign key, which is how prototype members
+    // are stopped from pinning another entity's or another project's history.
+    unique('entity_versions_identity_key').on(table.id, table.entityId, table.projectId),
     index('entity_versions_project_idx').on(table.projectId),
     index('entity_versions_entity_idx').on(table.entityId, table.versionNumber),
     index('entity_versions_branch_idx').on(table.entityId, table.branchName),

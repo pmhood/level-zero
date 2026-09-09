@@ -22,6 +22,12 @@ import {
   type GenerationRepository,
 } from '../generation/generation-repository';
 import { type Project } from '../project/project';
+import { type PrototypeVersion } from '../prototype/prototype-version';
+import {
+  type PrototypeVersionListFilter,
+  type PrototypeVersionPage,
+  type PrototypeVersionRepository,
+} from '../prototype/prototype-version-repository';
 import { type EntityRelationship } from '../relationship/entity-relationship';
 import {
   type EntityRelationshipRepository,
@@ -446,5 +452,69 @@ export class InMemoryGenerationRepository implements GenerationRepository {
     }
     this.rows.set(generation.id, structuredClone(generation));
     return structuredClone(generation);
+  }
+}
+
+/**
+ * In-memory `PrototypeVersionRepository` for tests. Mirrors the Postgres
+ * adapter: inserts, annotation-only saves, and no delete.
+ */
+export class InMemoryPrototypeVersionRepository implements PrototypeVersionRepository {
+  private readonly rows = new Map<string, PrototypeVersion>();
+
+  constructor(seed: readonly PrototypeVersion[] = []) {
+    for (const version of seed) this.rows.set(version.id, structuredClone(version));
+  }
+
+  async insert(version: PrototypeVersion): Promise<PrototypeVersion> {
+    this.rows.set(version.id, structuredClone(version));
+    return structuredClone(version);
+  }
+
+  async findById(projectId: string, prototypeVersionId: string): Promise<PrototypeVersion | null> {
+    const version = this.rows.get(prototypeVersionId);
+    // A mismatched project reads as missing, never as another project's row.
+    if (!version || version.projectId !== projectId) return null;
+    return structuredClone(version);
+  }
+
+  async listForPrototype(
+    projectId: string,
+    prototypeId: string,
+    filter: PrototypeVersionListFilter,
+  ): Promise<PrototypeVersionPage> {
+    const matches = this.forPrototype(projectId, prototypeId).sort(
+      (a, b) => b.versionNumber - a.versionNumber,
+    );
+
+    const offset = filter.offset ?? 0;
+    const limit = filter.limit ?? matches.length;
+
+    return {
+      items: matches.slice(offset, offset + limit).map((version) => structuredClone(version)),
+      total: matches.length,
+    };
+  }
+
+  async latestVersionNumber(projectId: string, prototypeId: string): Promise<number> {
+    return this.forPrototype(projectId, prototypeId).reduce(
+      (highest, version) => Math.max(highest, version.versionNumber),
+      0,
+    );
+  }
+
+  async save(version: PrototypeVersion): Promise<PrototypeVersion> {
+    const existing = this.rows.get(version.id);
+    if (!existing || existing.projectId !== version.projectId) {
+      throw new NotFoundError('Prototype version', version.id);
+    }
+    this.rows.set(version.id, structuredClone(version));
+    return structuredClone(version);
+  }
+
+  private forPrototype(projectId: string, prototypeId: string): PrototypeVersion[] {
+    return [...this.rows.values()].filter(
+      (version) => version.projectId === projectId && version.prototypeId === prototypeId,
+    );
   }
 }

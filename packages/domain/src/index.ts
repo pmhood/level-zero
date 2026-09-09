@@ -211,3 +211,37 @@ export {
   type GenerationServiceDeps,
   type RecordGenerationInput,
 } from './generation/generation-service';
+
+export {
+  MAX_PROTOTYPE_VERSION_CREATED_BY_LENGTH,
+  MAX_PROTOTYPE_VERSION_NAME_LENGTH,
+  MAX_PROTOTYPE_VERSION_NOTES_LENGTH,
+  PROTOTYPE_VERSION_STATUSES,
+  annotatePrototypeVersion,
+  createPrototypeVersion,
+  type AnnotatePrototypeVersionInput,
+  type CreatePrototypeVersionInput,
+  type PrototypeMember,
+  type PrototypeVersion,
+  type PrototypeVersionFactoryDeps,
+  type PrototypeVersionStatus,
+} from './prototype/prototype-version';
+export {
+  type PrototypeVersionListFilter,
+  type PrototypeVersionPage,
+  type PrototypeVersionRepository,
+} from './prototype/prototype-version-repository';
+export {
+  comparePrototypeVersions,
+  type PrototypeMemberChange,
+  type PrototypeVersionComparison,
+} from './prototype/compare';
+export {
+  PrototypeService,
+  type CapturePrototypeVersionInput,
+  type CreatePrototypeInput,
+  type PrototypeContents,
+  type PrototypeCreation,
+  type PrototypeMemberInput,
+  type PrototypeServiceDeps,
+} from './prototype/prototype-service';

@@ -4,4 +4,5 @@ export { DrizzleEntityRepository } from './entity-repository';
 export { DrizzleEntityVersionRepository } from './entity-version-repository';
 export { DrizzleGenerationRepository } from './generation-repository';
 export { DrizzleProjectRepository } from './project-repository';
+export { DrizzlePrototypeVersionRepository } from './prototype-version-repository';
 export { escapeLikePattern } from './mappers';

@@ -10,9 +10,7 @@ import { and, count, desc, eq, max, sql } from 'drizzle-orm';
 import { type Database } from '../postgres/client';
 import { entityVersions } from '../schema/entity-versions';
 import { toEntityVersion, toEntityVersionRow } from './mappers';
-
-/** Postgres SQLSTATE for a unique-constraint violation. */
-const UNIQUE_VIOLATION = '23505';
+import { UNIQUE_VIOLATION, hasPostgresCode } from './postgres-errors';
 
 /**
  * Postgres adapter for the domain's `EntityVersionRepository` port.
@@ -117,12 +115,4 @@ export class DrizzleEntityVersionRepository implements EntityVersionRepository {
 
     return rows.map((row) => row.branchName);
   }
-}
-
-/** Drizzle wraps driver errors, so the SQLSTATE lives on the cause chain. */
-function hasPostgresCode(error: unknown, code: string): boolean {
-  for (let current = error; current instanceof Error; current = current.cause) {
-    if ((current as Error & { code?: string }).code === code) return true;
-  }
-  return false;
 }
