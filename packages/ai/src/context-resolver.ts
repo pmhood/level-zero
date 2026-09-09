@@ -104,9 +104,20 @@ export class ContextResolver {
 
   /**
    * Walks the relationship graph outwards, breadth first, until the requested
-   * depth or the entity ceiling is reached. Returns whether the ceiling stopped
-   * it early, which is what tells a caller the context is a sample rather than
-   * the whole neighbourhood.
+   * depth or the entity ceiling is reached. Returns whether the walk is a
+   * sample rather than the whole neighbourhood — either because the entity
+   * ceiling stopped it early, or because some node's edges were paged and the
+   * page didn't hold them all. The second case matters on its own: a hub
+   * whose surplus edges all point at neighbours already included or archived
+   * never trips the ceiling, but its neighbourhood was still cut off.
+   *
+   * The per-node page limit reuses `maxEntities`, the total-entity budget,
+   * rather than a separate constant: a single node can never usefully
+   * contribute more *new* entities than the whole walk is allowed to hold, so
+   * a page that size is always enough when one exists. It is a real edge
+   * limit, though — a hub can have more relationships than that — so
+   * `total` from the page is what actually detects the cutoff, not the size
+   * of the page itself.
    */
   private async expand(
     projectId: string,
@@ -116,16 +127,18 @@ export class ContextResolver {
   ): Promise<boolean> {
     const depth = clamp(request.relatedDepth ?? DEFAULT_CONTEXT_DEPTH, 0, MAX_CONTEXT_DEPTH);
     let frontier = [...included.keys()];
+    let truncated = false;
 
     for (let distance = 1; distance <= depth && frontier.length > 0; distance += 1) {
       const next: string[] = [];
 
       for (const entityId of frontier) {
-        const { items } = await this.relationships.listForEntity(projectId, entityId, {
+        const { items, total } = await this.relationships.listForEntity(projectId, entityId, {
           direction: 'both',
           relations: request.relations,
           limit: maxEntities,
         });
+        if (total > items.length) truncated = true;
 
         for (const edge of items) {
           const neighborId = otherEnd(edge, entityId);
@@ -152,7 +165,7 @@ export class ContextResolver {
       frontier = next;
     }
 
-    return false;
+    return truncated;
   }
 
   private async resolveAssets(

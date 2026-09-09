@@ -262,6 +262,36 @@ describe('walking the relationship graph', () => {
     expect(context.entities).toHaveLength(2);
     expect(context.truncated).toBe(true);
   });
+
+  it('reports truncation when a hub loses edges to already-archived neighbours', async () => {
+    const hub = await entities.create(project.id, { type: 'character', name: 'The Cartographer' });
+
+    for (let index = 0; index < 6; index += 1) {
+      const wreck = await entities.create(project.id, {
+        type: 'location',
+        name: `Wreck ${index}`,
+      });
+      await relationships.link(project.id, {
+        sourceEntityId: hub.id,
+        targetEntityId: wreck.id,
+        relation: 'appears_in',
+      });
+      await entities.archive(project.id, wreck.id);
+    }
+
+    const context = await resolver.resolve(project.id, {
+      instruction: 'x',
+      selectedEntityIds: [hub.id],
+      maxEntities: 5,
+    });
+
+    // All 6 of the hub's relationships point at an archived neighbour, so
+    // nothing new is ever added and the entity ceiling is never reached —
+    // but the per-node page (capped at maxEntities) can only return 5 of
+    // the 6 edges, so the walk is still a sample and truncated must say so.
+    expect(context.entities.map((entity) => entity.id)).toEqual([hub.id]);
+    expect(context.truncated).toBe(true);
+  });
 });
 
 describe('documents, assets and lineage', () => {
