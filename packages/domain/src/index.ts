@@ -283,6 +283,26 @@ export { type JobEvents, type JobSubscription } from './job/job-events';
 export { JobService, type EnqueueJobInput, type JobServiceDeps } from './job/job-service';
 
 export {
+  ACTIVITY_SUBJECT_TYPES,
+  ACTIVITY_TYPES,
+  MAX_ACTIVITY_ACTOR_LENGTH,
+  MAX_ACTIVITY_SUMMARY_LENGTH,
+  createActivity,
+  truncateForSummary,
+  type Activity,
+  type ActivityFactoryDeps,
+  type ActivitySubjectType,
+  type ActivityType,
+  type RecordActivityInput,
+} from './activity/activity';
+export {
+  type ActivityListFilter,
+  type ActivityPage,
+  type ActivityRepository,
+} from './activity/activity-repository';
+export { ActivityService, type ActivityServiceDeps } from './activity/activity-service';
+
+export {
   DOCUMENT_CONTENT_KEY,
   DOCUMENT_VERSION_NAME_KEY,
   DOCUMENT_VERSION_REASONS,

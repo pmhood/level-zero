@@ -1,4 +1,5 @@
 import {
+  ActivityService,
   EntityRelationshipService,
   EntityService,
   LineageService,
@@ -11,6 +12,7 @@ import {
   type Project,
 } from '@level-zero/domain';
 import {
+  InMemoryActivityRepository,
   InMemoryEntityRelationshipRepository,
   InMemoryEntityRepository,
   InMemoryProjectRepository,
@@ -37,9 +39,10 @@ beforeEach(async () => {
   const entityRepo = new InMemoryEntityRepository();
   const relationshipRepo = new InMemoryEntityRelationshipRepository();
 
-  entities = new EntityService(entityRepo, projectRepo, deps);
+  const activity = new ActivityService(new InMemoryActivityRepository(), deps);
+  entities = new EntityService(entityRepo, projectRepo, activity, deps);
   const relationships = new EntityRelationshipService(relationshipRepo, entityRepo, deps);
-  const lineage = new LineageService(entities, relationships);
+  const lineage = new LineageService(entities, relationships, activity);
 
   const moduleRef = await Test.createTestingModule({
     controllers: [RelationshipsController],

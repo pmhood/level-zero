@@ -1,4 +1,5 @@
 export {
+  InMemoryActivityRepository,
   InMemoryAssetRepository,
   InMemoryEntityRelationshipRepository,
   InMemoryEntityRepository,

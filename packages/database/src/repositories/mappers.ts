@@ -1,4 +1,5 @@
 import {
+  type Activity,
   type Asset,
   type Entity,
   type EntityRelationship,
@@ -9,6 +10,7 @@ import {
   type PrototypeVersion,
 } from '@level-zero/domain';
 
+import { type ActivityRow, type NewActivityRow } from '../schema/activities';
 import { type AssetRow, type NewAssetRow } from '../schema/assets';
 import { type GenerationRow, type NewGenerationRow } from '../schema/generations';
 import { type EntityRow, type NewEntityRow } from '../schema/entities';
@@ -338,6 +340,34 @@ export function toPrototypeEntityVersionRows(
     entityVersionId: member.entityVersionId,
     position,
   }));
+}
+
+export function toActivity(row: ActivityRow): Activity {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    type: row.type,
+    summary: row.summary,
+    subjectType: row.subjectType,
+    subjectId: row.subjectId,
+    metadata: row.metadata,
+    actor: row.actor,
+    createdAt: row.createdAt,
+  };
+}
+
+export function toActivityRow(activity: Activity): NewActivityRow {
+  return {
+    id: activity.id,
+    projectId: activity.projectId,
+    type: activity.type,
+    summary: activity.summary,
+    subjectType: activity.subjectType,
+    subjectId: activity.subjectId,
+    metadata: activity.metadata,
+    actor: activity.actor,
+    createdAt: activity.createdAt,
+  };
 }
 
 /**

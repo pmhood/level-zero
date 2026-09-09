@@ -1,3 +1,4 @@
+import { type ActivityService } from '../activity/activity-service';
 import { type Entity, type EntityStatus } from '../entity/entity';
 import { type EntityService } from '../entity/entity-service';
 import { type EntityType } from '../entity/entity-type';
@@ -34,6 +35,7 @@ export class LineageService {
   constructor(
     private readonly entities: EntityService,
     private readonly relationships: EntityRelationshipService,
+    private readonly activity: ActivityService,
   ) {}
 
   /**
@@ -70,6 +72,20 @@ export class LineageService {
       targetEntityId: promoted.id,
       relation: 'promoted_to',
       metadata: { fromType: source.type, toType: promoted.type, ...(input.metadata ?? {}) },
+    });
+
+    await this.activity.record({
+      projectId,
+      type: 'entity_promoted',
+      summary: `${source.name} promoted to ${promoted.type.replace(/_/g, ' ')}`,
+      subjectType: 'entity',
+      subjectId: promoted.id,
+      metadata: {
+        sourceEntityId: source.id,
+        sourceType: source.type,
+        sourceName: source.name,
+        targetType: promoted.type,
+      },
     });
 
     return { source, promoted, relationship };

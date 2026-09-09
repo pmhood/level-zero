@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { ActivityService } from '../activity/activity-service';
 import { AssetService } from '../asset/asset-service';
 import { EntityService } from '../entity/entity-service';
 import { createProject, type Project } from '../project/project';
@@ -7,6 +8,7 @@ import { fixedClock } from '../shared/clock';
 import { ConflictError, NotFoundError, ValidationError } from '../shared/errors';
 import { sequentialIdGenerator } from '../shared/id';
 import {
+  InMemoryActivityRepository,
   InMemoryAssetRepository,
   InMemoryEntityRepository,
   InMemoryEntityVersionRepository,
@@ -23,6 +25,7 @@ let entities: EntityService;
 let versions: EntityVersionService;
 let assets: AssetService;
 let prototypes: PrototypeService;
+let activityRepo: InMemoryActivityRepository;
 let project: Project;
 let otherProject: Project;
 
@@ -32,15 +35,18 @@ beforeEach(async () => {
   const entityRepo = new InMemoryEntityRepository();
   const versionRepo = new InMemoryEntityVersionRepository();
   const assetRepo = new InMemoryAssetRepository();
+  activityRepo = new InMemoryActivityRepository();
+  const activity = new ActivityService(activityRepo, deps);
 
-  entities = new EntityService(entityRepo, projectRepo, deps);
-  versions = new EntityVersionService(versionRepo, entityRepo, deps);
+  entities = new EntityService(entityRepo, projectRepo, activity, deps);
+  versions = new EntityVersionService(versionRepo, entityRepo, activity, deps);
   assets = new AssetService(assetRepo, projectRepo, new InMemoryObjectStorageProvider(), deps);
   prototypes = new PrototypeService(
     new InMemoryPrototypeVersionRepository(),
     entities,
     versionRepo,
     assetRepo,
+    activity,
     deps,
   );
 
@@ -81,6 +87,26 @@ describe('creating a prototype', () => {
       { entityId: oxygen.id, entityVersionId: oxygen.currentVersionId },
       { entityId: trench.id, entityVersionId: trench.currentVersionId },
     ]);
+  });
+
+  it('records a prototype_version_created activity naming the prototype and version', async () => {
+    const diver = await committed('character', 'The Diver');
+
+    const { prototype, version } = await prototypes.create(project.id, {
+      prototypeName: 'Vertical slice',
+      name: 'First playable',
+      members: [{ entityId: diver.id }],
+    });
+
+    const feed = await activityRepo.listByProject(project.id, {});
+    const captured = feed.items.find((item) => item.type === 'prototype_version_created');
+
+    expect(captured).toMatchObject({
+      summary: 'Vertical slice v1 created: First playable',
+      subjectType: 'prototype_version',
+      subjectId: version.id,
+      metadata: { prototypeId: prototype.id, versionNumber: 1 },
+    });
   });
 
   it('pins an explicitly named version instead of the current one', async () => {

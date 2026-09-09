@@ -1,4 +1,5 @@
 import {
+  ActivityService,
   AssetService,
   EntityRelationshipService,
   EntityService,
@@ -12,6 +13,7 @@ import {
   type Project,
 } from '@level-zero/domain';
 import {
+  InMemoryActivityRepository,
   InMemoryAssetRepository,
   InMemoryEntityRelationshipRepository,
   InMemoryEntityRepository,
@@ -47,7 +49,12 @@ beforeEach(async () => {
   assetRepo = new InMemoryAssetRepository();
   generationRepo = new InMemoryGenerationRepository();
 
-  entities = new EntityService(entityRepo, projects, deps);
+  entities = new EntityService(
+    entityRepo,
+    projects,
+    new ActivityService(new InMemoryActivityRepository(), deps),
+    deps,
+  );
   relationships = new EntityRelationshipService(relationshipRepo, entityRepo, deps);
   assets = new AssetService(assetRepo, projects, new InMemoryObjectStorageProvider(), deps);
   resolver = new ContextResolver(projects, entityRepo, relationshipRepo, assetRepo, generationRepo);

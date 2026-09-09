@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { ActivityModule } from './activity/activity.module';
 import { AssetsModule } from './assets/assets.module';
 import { ApiConfigModule } from './config/config.module';
 import { DocumentsModule } from './documents/documents.module';
@@ -42,6 +43,7 @@ import { VersionsModule } from './versions/versions.module';
     GenerationsModule,
     PrototypesModule,
     JobsModule,
+    ActivityModule,
   ],
 })
 export class AppModule {}

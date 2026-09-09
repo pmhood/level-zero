@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { ActivityService } from '../activity/activity-service';
 import { EntityService } from '../entity/entity-service';
 import { createProject, type Project } from '../project/project';
 import { fixedClock } from '../shared/clock';
 import { ConflictError, NotFoundError, ValidationError } from '../shared/errors';
 import { sequentialIdGenerator } from '../shared/id';
 import {
+  InMemoryActivityRepository,
   InMemoryEntityRepository,
   InMemoryEntityVersionRepository,
   InMemoryProjectRepository,
@@ -28,8 +30,9 @@ beforeEach(async () => {
   const entityRepo = new InMemoryEntityRepository();
   const versionRepo = new InMemoryEntityVersionRepository();
 
-  entities = new EntityService(entityRepo, projectRepo, deps);
-  versions = new EntityVersionService(versionRepo, entityRepo, deps);
+  const activity = new ActivityService(new InMemoryActivityRepository(), deps);
+  entities = new EntityService(entityRepo, projectRepo, activity, deps);
+  versions = new EntityVersionService(versionRepo, entityRepo, activity, deps);
   documents = new DocumentService(entities, versions);
 
   project = await projectRepo.insert(

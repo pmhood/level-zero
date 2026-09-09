@@ -1,4 +1,5 @@
 import {
+  ActivityService,
   EntityService,
   NotFoundError,
   ProjectService,
@@ -14,6 +15,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { type DatabaseClient } from '../postgres/client';
 import { connectTestDatabase, truncateDomainTables } from '../testing/test-database';
+import { DrizzleActivityRepository } from './activity-repository';
 import { DrizzleEntityRepository } from './entity-repository';
 import { DrizzleProjectRepository } from './project-repository';
 
@@ -30,7 +32,8 @@ beforeAll(() => {
   projectRepo = new DrizzleProjectRepository(client.db);
   entityRepo = new DrizzleEntityRepository(client.db);
   projects = new ProjectService(projectRepo, deps);
-  entities = new EntityService(entityRepo, projectRepo, deps);
+  const activity = new ActivityService(new DrizzleActivityRepository(client.db), deps);
+  entities = new EntityService(entityRepo, projectRepo, activity, deps);
 });
 
 afterAll(async () => {

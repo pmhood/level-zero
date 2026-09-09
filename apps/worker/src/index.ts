@@ -6,6 +6,7 @@ import {
 } from '@level-zero/ai';
 import { loadDotEnv, parseEnv, workerEnvSchema } from '@level-zero/config';
 import {
+  DrizzleActivityRepository,
   DrizzleAssetRepository,
   DrizzleEntityRelationshipRepository,
   DrizzleEntityRepository,
@@ -21,6 +22,7 @@ import {
   createRedisClient,
 } from '@level-zero/database';
 import {
+  ActivityService,
   AssetService,
   EntityRelationshipService,
   EntityService,
@@ -54,10 +56,12 @@ async function main(): Promise<void> {
   const relationships = new DrizzleEntityRelationshipRepository(database.db);
   const assets = new DrizzleAssetRepository(database.db);
 
-  const entityService = new EntityService(entities, projects, deps);
+  const activity = new ActivityService(new DrizzleActivityRepository(database.db), deps);
+  const entityService = new EntityService(entities, projects, activity, deps);
   const lineage = new LineageService(
     entityService,
     new EntityRelationshipService(relationships, entities, deps),
+    activity,
   );
 
   const queue = createJobQueue({ connectionUrl: env.REDIS_URL });
@@ -75,6 +79,7 @@ async function main(): Promise<void> {
     entities,
     assets,
     lineage,
+    activity,
     deps,
   );
 

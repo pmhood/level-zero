@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { ActivityService } from '../activity/activity-service';
 import { EntityService } from '../entity/entity-service';
 import { createProject, type Project } from '../project/project';
 import { fixedClock } from '../shared/clock';
 import { NotFoundError, ValidationError } from '../shared/errors';
 import { sequentialIdGenerator } from '../shared/id';
 import {
+  InMemoryActivityRepository,
   InMemoryEntityRelationshipRepository,
   InMemoryEntityRepository,
   InMemoryProjectRepository,
@@ -18,6 +20,7 @@ const clock = fixedClock('2026-03-01T09:00:00.000Z');
 let entities: EntityService;
 let relationships: EntityRelationshipService;
 let lineage: LineageService;
+let activityRepo: InMemoryActivityRepository;
 let project: Project;
 let otherProject: Project;
 
@@ -26,10 +29,12 @@ beforeEach(async () => {
   const projectRepo = new InMemoryProjectRepository();
   const entityRepo = new InMemoryEntityRepository();
   const relationshipRepo = new InMemoryEntityRelationshipRepository();
+  activityRepo = new InMemoryActivityRepository();
+  const activity = new ActivityService(activityRepo, deps);
 
-  entities = new EntityService(entityRepo, projectRepo, deps);
+  entities = new EntityService(entityRepo, projectRepo, activity, deps);
   relationships = new EntityRelationshipService(relationshipRepo, entityRepo, deps);
-  lineage = new LineageService(entities, relationships);
+  lineage = new LineageService(entities, relationships, activity);
 
   project = await projectRepo.insert(
     createProject({ name: 'Deep Fathom' }, { clock, ids: sequentialIdGenerator('project-a') }),
@@ -65,6 +70,23 @@ describe('promoting an idea', () => {
       metadata: { fromType: 'idea', toType: 'mechanic' },
     });
     expect(source.id).toBe(idea.id);
+  });
+
+  it('records an entity_promoted activity naming the source and the promoted entity', async () => {
+    const idea = await entities.create(project.id, { type: 'idea', name: 'Oxygen is currency' });
+
+    const { promoted } = await lineage.promote(project.id, idea.id, { type: 'mechanic' });
+
+    const feed = await activityRepo.listByProject(project.id, {});
+    const promotion = feed.items.find((item) => item.type === 'entity_promoted');
+
+    expect(promotion).toMatchObject({
+      projectId: project.id,
+      summary: 'Oxygen is currency promoted to mechanic',
+      subjectType: 'entity',
+      subjectId: promoted.id,
+      metadata: { sourceEntityId: idea.id, sourceType: 'idea', targetType: 'mechanic' },
+    });
   });
 
   it('preserves the original idea rather than converting it', async () => {

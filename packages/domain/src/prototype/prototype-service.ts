@@ -1,3 +1,4 @@
+import { type ActivityService } from '../activity/activity-service';
 import { type Asset } from '../asset/asset';
 import { type AssetRepository } from '../asset/asset-repository';
 import { type Entity } from '../entity/entity';
@@ -84,6 +85,7 @@ export class PrototypeService {
     private readonly entities: EntityService,
     private readonly entityVersions: EntityVersionRepository,
     private readonly assets: AssetRepository,
+    private readonly activity: ActivityService,
     private readonly deps: PrototypeServiceDeps,
   ) {}
 
@@ -112,7 +114,7 @@ export class PrototypeService {
     prototypeId: string,
     input: CapturePrototypeVersionInput,
   ): Promise<PrototypeVersion> {
-    await this.requirePrototype(projectId, prototypeId);
+    const prototype = await this.requirePrototype(projectId, prototypeId);
 
     const members = await this.resolveMembers(projectId, input.members);
     await this.requireBuildAsset(projectId, input.buildAssetId);
@@ -120,12 +122,31 @@ export class PrototypeService {
     const versionNumber =
       (await this.prototypeVersions.latestVersionNumber(projectId, prototypeId)) + 1;
 
-    return this.prototypeVersions.insert(
+    const version = await this.prototypeVersions.insert(
       createPrototypeVersion(
         { ...input, projectId, prototypeId, versionNumber, members },
         this.deps,
       ),
     );
+
+    await this.activity.record({
+      projectId,
+      type: 'prototype_version_created',
+      summary: `${prototype.name} v${version.versionNumber} created${
+        version.name ? `: ${version.name}` : ''
+      }`,
+      subjectType: 'prototype_version',
+      subjectId: version.id,
+      metadata: {
+        prototypeId: prototype.id,
+        prototypeName: prototype.name,
+        versionNumber: version.versionNumber,
+        memberCount: version.members.length,
+      },
+      actor: version.createdBy,
+    });
+
+    return version;
   }
 
   /** Throws `NotFoundError` rather than returning null: callers want the record. */

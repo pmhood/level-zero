@@ -1,3 +1,4 @@
+export { DrizzleActivityRepository } from './activity-repository';
 export { DrizzleAssetRepository } from './asset-repository';
 export { DrizzleEntityRelationshipRepository } from './entity-relationship-repository';
 export { DrizzleEntityRepository } from './entity-repository';

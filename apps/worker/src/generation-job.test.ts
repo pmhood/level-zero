@@ -10,6 +10,7 @@ import {
 } from '@level-zero/ai';
 import { type JobDelivery } from '@level-zero/database';
 import {
+  ActivityService,
   AssetService,
   EntityRelationshipService,
   EntityService,
@@ -25,6 +26,7 @@ import {
   type Project,
 } from '@level-zero/domain';
 import {
+  InMemoryActivityRepository,
   InMemoryAssetRepository,
   InMemoryEntityRelationshipRepository,
   InMemoryEntityRepository,
@@ -87,7 +89,8 @@ beforeEach(async () => {
   const relationshipRepo = new InMemoryEntityRelationshipRepository();
   const assetRepo = new InMemoryAssetRepository();
 
-  entities = new EntityService(entityRepo, projectRepo, deps);
+  const activity = new ActivityService(new InMemoryActivityRepository(), deps);
+  entities = new EntityService(entityRepo, projectRepo, activity, deps);
   assets = new AssetService(assetRepo, projectRepo, new InMemoryObjectStorageProvider(), deps);
   jobs = new JobService(
     new InMemoryJobRepository(),
@@ -101,7 +104,12 @@ beforeEach(async () => {
     projectRepo,
     entityRepo,
     assetRepo,
-    new LineageService(entities, new EntityRelationshipService(relationshipRepo, entityRepo, deps)),
+    new LineageService(
+      entities,
+      new EntityRelationshipService(relationshipRepo, entityRepo, deps),
+      activity,
+    ),
+    activity,
     deps,
   );
   providers = new AiProviderRegistry();
@@ -289,9 +297,9 @@ describe('failure and retry', () => {
 
 describe('provider fallback', () => {
   it('completes with the next registered candidate when the first-choice provider throws', async () => {
-    providers.register(new FailingProvider('primary')).register(
-      new EchoAiProvider(['text.generate'], 'backup'),
-    );
+    providers
+      .register(new FailingProvider('primary'))
+      .register(new EchoAiProvider(['text.generate'], 'backup'));
     const { generation, job } = await queued();
 
     await handle()(delivery(job));

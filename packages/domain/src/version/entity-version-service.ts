@@ -1,3 +1,4 @@
+import { type ActivityService } from '../activity/activity-service';
 import {
   applyEntitySnapshot,
   snapshotEntity,
@@ -70,6 +71,7 @@ export class EntityVersionService {
   constructor(
     private readonly versions: EntityVersionRepository,
     private readonly entities: EntityRepository,
+    private readonly activity: ActivityService,
     private readonly deps: VersionServiceDeps,
   ) {}
 
@@ -174,7 +176,11 @@ export class EntityVersionService {
       branchName: parent?.branchName ?? version.branchName,
       snapshot: version.snapshot,
       reason: 'restore',
-      metadata: { restoredFromVersionId: version.id, ...(input.metadata ?? {}) },
+      metadata: {
+        restoredFromVersionId: version.id,
+        restoredFromVersionNumber: version.versionNumber,
+        ...(input.metadata ?? {}),
+      },
       createdBy: input.createdBy,
     });
   }
@@ -281,6 +287,25 @@ export class EntityVersionService {
     const restored = applyEntitySnapshot(entity, version.snapshot, this.deps);
     await this.entities.save(withCurrentVersion(restored, version.id, this.deps));
 
+    await this.activity.record({
+      projectId: entity.projectId,
+      type: version.reason === 'restore' ? 'entity_version_restored' : 'entity_version_created',
+      summary: versionSummary(version),
+      subjectType: 'entity_version',
+      subjectId: version.id,
+      metadata: {
+        entityId: entity.id,
+        entityType: entity.type,
+        // The version's own name, not the entity's current one: for a
+        // restore, branch or promotion those two can disagree.
+        entityName: version.snapshot.name,
+        versionNumber: version.versionNumber,
+        reason: version.reason,
+        branchName: version.branchName,
+      },
+      actor: version.createdBy,
+    });
+
     return version;
   }
 
@@ -304,5 +329,29 @@ export class EntityVersionService {
       });
     }
     return entity;
+  }
+}
+
+/**
+ * The activity sentence for one version, worded by why it was recorded.
+ *
+ * Uses the version's own snapshot name rather than the entity's current
+ * name: a restore, branch or promotion writes a version whose content can
+ * differ from what the entity is called right before the operation runs.
+ */
+function versionSummary(version: EntityVersion): string {
+  const name = version.snapshot.name;
+
+  switch (version.reason) {
+    case 'restore': {
+      const from = version.metadata.restoredFromVersionNumber;
+      return typeof from === 'number' ? `${name} restored to v${from}` : `${name} restored`;
+    }
+    case 'branch':
+      return `${name} branched to "${version.branchName}"`;
+    case 'promotion':
+      return `${name} — v${version.versionNumber} promoted to "${version.branchName}"`;
+    default:
+      return `${name} — v${version.versionNumber} saved`;
   }
 }

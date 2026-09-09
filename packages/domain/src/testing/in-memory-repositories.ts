@@ -1,3 +1,9 @@
+import { type Activity } from '../activity/activity';
+import {
+  type ActivityListFilter,
+  type ActivityPage,
+  type ActivityRepository,
+} from '../activity/activity-repository';
 import { type Asset } from '../asset/asset';
 import {
   type AssetListFilter,
@@ -365,6 +371,36 @@ export class InMemoryAssetRepository implements AssetRepository {
     }
     this.rows.set(asset.id, { ...asset });
     return { ...asset };
+  }
+}
+
+/** In-memory `ActivityRepository` for tests. Insert-only, like the real one. */
+export class InMemoryActivityRepository implements ActivityRepository {
+  private readonly rows = new Map<string, Activity>();
+
+  constructor(seed: readonly Activity[] = []) {
+    for (const activity of seed) this.rows.set(activity.id, structuredClone(activity));
+  }
+
+  async insert(activity: Activity): Promise<Activity> {
+    this.rows.set(activity.id, structuredClone(activity));
+    return structuredClone(activity);
+  }
+
+  async listByProject(projectId: string, filter: ActivityListFilter): Promise<ActivityPage> {
+    const matches = [...this.rows.values()]
+      .filter((activity) => activity.projectId === projectId)
+      .filter((activity) => !filter.types || filter.types.includes(activity.type))
+      .filter((activity) => !filter.subjectId || activity.subjectId === filter.subjectId)
+      .sort(byNewest);
+
+    const offset = filter.offset ?? 0;
+    const limit = filter.limit ?? matches.length;
+
+    return {
+      items: matches.slice(offset, offset + limit).map((activity) => structuredClone(activity)),
+      total: matches.length,
+    };
   }
 }
 

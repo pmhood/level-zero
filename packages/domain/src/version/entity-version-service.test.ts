@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { ActivityService } from '../activity/activity-service';
 import { EntityService } from '../entity/entity-service';
 import { createProject, type Project } from '../project/project';
 import { fixedClock } from '../shared/clock';
 import { ConflictError, NotFoundError, ValidationError } from '../shared/errors';
 import { sequentialIdGenerator } from '../shared/id';
 import {
+  InMemoryActivityRepository,
   InMemoryEntityRepository,
   InMemoryEntityVersionRepository,
   InMemoryProjectRepository,
@@ -17,6 +19,7 @@ const clock = fixedClock('2026-03-01T09:00:00.000Z');
 let entities: EntityService;
 let versions: EntityVersionService;
 let versionRepo: InMemoryEntityVersionRepository;
+let activityRepo: InMemoryActivityRepository;
 let project: Project;
 let otherProject: Project;
 
@@ -25,9 +28,11 @@ beforeEach(async () => {
   const projectRepo = new InMemoryProjectRepository();
   const entityRepo = new InMemoryEntityRepository();
   versionRepo = new InMemoryEntityVersionRepository();
+  activityRepo = new InMemoryActivityRepository();
+  const activity = new ActivityService(activityRepo, deps);
 
-  entities = new EntityService(entityRepo, projectRepo, deps);
-  versions = new EntityVersionService(versionRepo, entityRepo, deps);
+  entities = new EntityService(entityRepo, projectRepo, activity, deps);
+  versions = new EntityVersionService(versionRepo, entityRepo, activity, deps);
 
   project = await projectRepo.insert(
     createProject({ name: 'Deep Fathom' }, { clock, ids: sequentialIdGenerator('project-a') }),
@@ -95,6 +100,24 @@ describe('committing versions', () => {
       reason: 'ai_edit',
       createdBy: 'user-7',
       metadata: { generationId: 'gen-1' },
+    });
+  });
+
+  it('records an entity_version_created activity, but never for an ordinary edit', async () => {
+    const kael = await character();
+
+    const version = await versions.commit(project.id, kael.id, { reason: 'milestone' });
+    await entities.update(project.id, kael.id, { name: 'Kael Vex' }); // no version, no activity
+
+    const feed = await activityRepo.listByProject(project.id, {});
+    const versionActivity = feed.items.filter((item) => item.type === 'entity_version_created');
+
+    expect(versionActivity).toHaveLength(1);
+    expect(versionActivity[0]).toMatchObject({
+      summary: 'Kael — v1 saved',
+      subjectType: 'entity_version',
+      subjectId: version.id,
+      metadata: { entityId: kael.id, versionNumber: 1, reason: 'milestone' },
     });
   });
 
@@ -222,6 +245,24 @@ describe('restoring', () => {
     await expect(versions.list(project.id, kael.id)).resolves.toMatchObject({ total: 3 });
     await expect(versions.getById(project.id, second.id)).resolves.toMatchObject({
       snapshot: { name: 'Kael Vex' },
+    });
+  });
+
+  it('records an entity_version_restored activity naming the version restored to', async () => {
+    const kael = await character();
+    const first = await versions.commit(project.id, kael.id);
+    await entities.update(project.id, kael.id, { name: 'Kael Vex' });
+    await versions.commit(project.id, kael.id);
+
+    const restored = await versions.restoreVersion(project.id, first.id);
+
+    const feed = await activityRepo.listByProject(project.id, {});
+    const restoreActivity = feed.items.find((item) => item.type === 'entity_version_restored');
+
+    expect(restoreActivity).toMatchObject({
+      summary: 'Kael restored to v1',
+      subjectType: 'entity_version',
+      subjectId: restored.id,
     });
   });
 

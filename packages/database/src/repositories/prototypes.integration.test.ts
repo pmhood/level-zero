@@ -1,4 +1,5 @@
 import {
+  ActivityService,
   AssetService,
   ConflictError,
   EntityService,
@@ -16,6 +17,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { type DatabaseClient } from '../postgres/client';
 import { connectTestDatabase, truncateDomainTables } from '../testing/test-database';
+import { DrizzleActivityRepository } from './activity-repository';
 import { DrizzleAssetRepository } from './asset-repository';
 import { DrizzleEntityRepository } from './entity-repository';
 import { DrizzleEntityVersionRepository } from './entity-version-repository';
@@ -42,11 +44,20 @@ beforeAll(() => {
   const assetRepo = new DrizzleAssetRepository(client.db);
   prototypeRepo = new DrizzlePrototypeVersionRepository(client.db);
 
+  const activity = new ActivityService(new DrizzleActivityRepository(client.db), deps);
+
   projects = new ProjectService(projectRepo, deps);
-  entities = new EntityService(entityRepo, projectRepo, deps);
-  versions = new EntityVersionService(versionRepo, entityRepo, deps);
+  entities = new EntityService(entityRepo, projectRepo, activity, deps);
+  versions = new EntityVersionService(versionRepo, entityRepo, activity, deps);
   assets = new AssetService(assetRepo, projectRepo, new InMemoryObjectStorageProvider(), deps);
-  prototypes = new PrototypeService(prototypeRepo, entities, versionRepo, assetRepo, deps);
+  prototypes = new PrototypeService(
+    prototypeRepo,
+    entities,
+    versionRepo,
+    assetRepo,
+    activity,
+    deps,
+  );
 });
 
 afterAll(async () => {
