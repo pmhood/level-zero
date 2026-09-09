@@ -14,7 +14,13 @@
  * The `--color-*` block below aliases that palette onto the semantic names
  * Tailwind turns into utilities (bg-surface, text-muted-foreground, ...) so
  * components never reach for a raw hex value.
+ *
+ * The editor stylesheet is imported here because the rich-text surface renders
+ * raw semantic HTML that no component wraps, so it cannot be styled with
+ * utilities. `@import` has to lead the file.
  */
+@import './editor/editor.css';
+
 @theme {
   --lz-bg-canvas: #08131c;
   --lz-bg-sidebar: #09151e;
@@ -42,6 +48,8 @@
   --lz-ai-ink: #d8c8ff;
   --lz-ai-muted: rgba(169, 130, 244, 0.12);
   --lz-ai-border: rgba(169, 130, 244, 0.35);
+
+  --lz-shadow-floating: 0 16px 48px rgba(0, 0, 0, 0.36);
 
   --lz-success: #49d7a0;
   --lz-warning: #e8b94c;

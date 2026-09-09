@@ -17,6 +17,7 @@ import { TagInput } from '@/components/tag-input';
 import { ApiRequestError } from '@/lib/api';
 
 import { IdeaLineageList } from './idea-lineage';
+import { IdeaNotes } from './idea-notes';
 import { IDEA_PROMOTION_TARGETS } from './promotion';
 import {
   useArchiveIdea,
@@ -159,6 +160,8 @@ function IdeaLinksTab({ projectId, ideaId }: { projectId: string; ideaId: string
   );
 }
 
+type IdeaInspectorTab = 'details' | 'notes' | 'links';
+
 export function IdeaInspector({
   projectId,
   idea,
@@ -172,7 +175,7 @@ export function IdeaInspector({
   onArchived: () => void;
   onRestored: () => void;
 }) {
-  const [tab, setTab] = useState<'details' | 'links'>('details');
+  const [tab, setTab] = useState<IdeaInspectorTab>('details');
   const archiveIdea = useArchiveIdea(projectId);
   const restoreIdea = useRestoreIdea(projectId);
   const archived = idea.status === 'archived';
@@ -182,9 +185,10 @@ export function IdeaInspector({
       <div className="mb-3 flex items-center justify-between gap-2">
         <Tabs
           value={tab}
-          onChange={(value) => setTab(value as 'details' | 'links')}
+          onChange={(value) => setTab(value as IdeaInspectorTab)}
           items={[
             { value: 'details', label: 'Details' },
+            { value: 'notes', label: 'Notes' },
             { value: 'links', label: 'Links' },
           ]}
         />
@@ -212,11 +216,9 @@ export function IdeaInspector({
 
       {archived && <Tag className="mb-3">Archived</Tag>}
 
-      {tab === 'details' ? (
-        <IdeaDetailsForm projectId={projectId} idea={idea} />
-      ) : (
-        <IdeaLinksTab projectId={projectId} ideaId={idea.id} />
-      )}
+      {tab === 'details' && <IdeaDetailsForm projectId={projectId} idea={idea} />}
+      {tab === 'notes' && <IdeaNotes projectId={projectId} idea={idea} />}
+      {tab === 'links' && <IdeaLinksTab projectId={projectId} ideaId={idea.id} />}
     </Inspector>
   );
 }
