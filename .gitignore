@@ -15,6 +15,9 @@ out/
 .eslintcache
 coverage/
 
+# local development asset storage (see @level-zero/storage)
+.data/
+
 # environment
 .env
 .env.local

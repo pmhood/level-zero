@@ -111,6 +111,41 @@ export function requireJsonObject(field: string, value: unknown): Record<string,
   return { ...(value as Record<string, unknown>) };
 }
 
+/** Requires a whole number of zero or more, e.g. a byte size. */
+export function requireNonNegativeInt(field: string, value: unknown): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    throw new ValidationError(`${field} must be a non-negative integer`, {
+      field,
+      received: value,
+    });
+  }
+  return value;
+}
+
+/** An optional whole number greater than zero, e.g. pixel dimensions. Null/undefined pass through. */
+export function optionalPositiveInt(field: string, value: unknown): number | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+    throw new ValidationError(`${field} must be a positive integer`, {
+      field,
+      received: value,
+    });
+  }
+  return value;
+}
+
+/** An optional number of zero or more, e.g. a duration in seconds. Null/undefined pass through. */
+export function optionalNonNegativeNumber(field: string, value: unknown): number | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    throw new ValidationError(`${field} must be a non-negative number`, {
+      field,
+      received: value,
+    });
+  }
+  return value;
+}
+
 /** Rejects a value that is not one of `allowed`. */
 export function requireOneOf<T extends string>(
   field: string,

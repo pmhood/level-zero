@@ -26,6 +26,8 @@ export const sharedEnvSchema = z.object({
 export const apiEnvSchema = sharedEnvSchema.extend({
   API_PORT: port.default(3001),
   API_CORS_ORIGINS: originList,
+  /** Directory local asset bytes are written under. See `@level-zero/storage`. */
+  STORAGE_LOCAL_ROOT: z.string().min(1).default('./.data/assets'),
 });
 
 export const workerEnvSchema = sharedEnvSchema.extend({

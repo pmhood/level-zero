@@ -16,6 +16,13 @@ describe('apiEnvSchema', () => {
     expect(env.API_PORT).toBe(3001);
     expect(env.LOG_LEVEL).toBe('info');
     expect(env.API_CORS_ORIGINS).toEqual(['http://localhost:3000']);
+    expect(env.STORAGE_LOCAL_ROOT).toBe('./.data/assets');
+  });
+
+  it('accepts an overridden storage root', () => {
+    const env = parseEnv(apiEnvSchema, 'api', { ...validSource, STORAGE_LOCAL_ROOT: '/data' });
+
+    expect(env.STORAGE_LOCAL_ROOT).toBe('/data');
   });
 
   it('coerces ports from strings', () => {

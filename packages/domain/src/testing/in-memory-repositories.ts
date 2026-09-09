@@ -1,3 +1,14 @@
+import { type Asset } from '../asset/asset';
+import {
+  type AssetListFilter,
+  type AssetPage,
+  type AssetRepository,
+} from '../asset/asset-repository';
+import {
+  type GetUrlOptions,
+  type ObjectStorageProvider,
+  type PutObjectInput,
+} from '../asset/object-storage';
 import { type Entity } from '../entity/entity';
 import {
   type EntityListFilter,
@@ -284,5 +295,90 @@ export class InMemoryEntityVersionRepository implements EntityVersionRepository 
     return [...this.rows.values()].filter(
       (version) => version.projectId === projectId && version.entityId === entityId,
     );
+  }
+}
+
+/** In-memory `AssetRepository` for tests. Mirrors the Postgres adapter's filtering. */
+export class InMemoryAssetRepository implements AssetRepository {
+  private readonly rows = new Map<string, Asset>();
+
+  constructor(seed: readonly Asset[] = []) {
+    for (const asset of seed) this.rows.set(asset.id, { ...asset });
+  }
+
+  async insert(asset: Asset): Promise<Asset> {
+    this.rows.set(asset.id, { ...asset });
+    return { ...asset };
+  }
+
+  async findById(projectId: string, assetId: string): Promise<Asset | null> {
+    const asset = this.rows.get(assetId);
+    // A mismatched project reads as missing, never as another project's row.
+    if (!asset || asset.projectId !== projectId) return null;
+    return { ...asset };
+  }
+
+  async listByProject(projectId: string, filter: AssetListFilter): Promise<AssetPage> {
+    const search = filter.search?.trim().toLowerCase();
+
+    const matches = [...this.rows.values()]
+      .filter((asset) => asset.projectId === projectId)
+      .filter((asset) => {
+        if (filter.statuses) return filter.statuses.includes(asset.status);
+        return filter.includeArchived === true || asset.status !== 'archived';
+      })
+      .filter((asset) => !filter.kinds || filter.kinds.includes(asset.kind))
+      .filter((asset) => !filter.variants || filter.variants.includes(asset.variant))
+      .filter((asset) => !filter.sourceAssetId || asset.sourceAssetId === filter.sourceAssetId)
+      .filter((asset) => !search || asset.filename.toLowerCase().includes(search))
+      .sort(byNewest);
+
+    const offset = filter.offset ?? 0;
+    const limit = filter.limit ?? matches.length;
+
+    return {
+      items: matches.slice(offset, offset + limit).map((asset) => ({ ...asset })),
+      total: matches.length,
+    };
+  }
+
+  async save(asset: Asset): Promise<Asset> {
+    const existing = this.rows.get(asset.id);
+    if (!existing || existing.projectId !== asset.projectId) {
+      throw new NotFoundError('Asset', asset.id);
+    }
+    this.rows.set(asset.id, { ...asset });
+    return { ...asset };
+  }
+}
+
+/**
+ * In-memory `ObjectStorageProvider` for tests: a `Map` standing in for a disk
+ * or a bucket. Fast and dependency-free, so domain-level tests do not need a
+ * filesystem; `@level-zero/storage`'s `LocalObjectStorageProvider` is the one
+ * that genuinely touches disk.
+ */
+export class InMemoryObjectStorageProvider implements ObjectStorageProvider {
+  readonly id = 'in-memory';
+  private readonly objects = new Map<string, Buffer>();
+
+  async put(input: PutObjectInput): Promise<void> {
+    this.objects.set(input.key, Buffer.from(input.body));
+  }
+
+  async get(key: string): Promise<Buffer> {
+    const object = this.objects.get(key);
+    if (!object) throw new NotFoundError('Object', key);
+    return Buffer.from(object);
+  }
+
+  async getUrl(key: string, options?: GetUrlOptions): Promise<string> {
+    if (!this.objects.has(key)) throw new NotFoundError('Object', key);
+    const suffix = options?.expiresInSeconds ? `?expiresIn=${options.expiresInSeconds}` : '';
+    return `in-memory://${key}${suffix}`;
+  }
+
+  async delete(key: string): Promise<void> {
+    this.objects.delete(key);
   }
 }

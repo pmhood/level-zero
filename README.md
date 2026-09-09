@@ -13,6 +13,9 @@ Implemented so far, against the architecture epic
   creative lineage, including idea promotion and generation provenance.
 - [#4](https://github.com/pmhood/level-zero/issues/4) — entity versioning and
   creative branching: commit, compare, restore, branch and promote.
+- [#5](https://github.com/pmhood/level-zero/issues/5) — the `Asset` model and an
+  object-storage abstraction, so images, video, audio, 3D files, references,
+  exports and build artifacts are one reusable layer instead of a table per tool.
 
 ## Requirements
 
@@ -79,6 +82,7 @@ packages/
   domain/     Framework-free domain model, services and storage ports
   database/   Drizzle schema, migrations, repository adapters, Postgres + Redis clients
   ai/         Capability-based AI contracts; vendor SDKs live behind them
+  storage/    ObjectStorageProvider implementations; local disk today, S3/R2 later
   ui/         Shared Tailwind + Radix primitives (consumed as source)
   config/     Environment schemas and validation
 
@@ -116,7 +120,11 @@ Rules that hold across the codebase:
   early experiment can change shape without a migration. Add a type-specific
   _table_ only when a field needs constraints or indexes that JSONB cannot give.
 - **Assets and generations are not entities.** `asset_reference` is an entity that
-  _points at_ an asset; the asset itself is a separate concept (issue #5).
+  _points at_ an `Asset` row (via `data.assetId`); the asset itself — its file,
+  metadata and storage key — is a separate concept. A character portrait, a
+  moodboard tile and a GDD figure can all point at the _same_ asset by linking
+  their own entities to the same `asset_reference`, so nothing is duplicated and
+  there is no `character_images` or `moodboard_images` table.
 - **Project scoping is structural.** Every repository method takes `projectId`, and
   every statement carries it — including lookups by primary key. Reading another
   project's entity reports "not found" rather than "forbidden", so a caller cannot
@@ -152,6 +160,26 @@ Rules that hold across the codebase:
 controllers can be tested without a database. The Postgres adapters are covered
 separately by integration tests against real Postgres.
 
+### Assets
+
+```text
+Project ──owns──> Asset (kind, filename, mimeType, byteSize, storageKey, checksum,
+                          width, height, durationSeconds, variant, sourceAssetId)
+```
+
+`AssetService` composes the `AssetRepository` port with an `ObjectStorageProvider`
+port — the same provider-behind-an-interface shape as `@level-zero/ai`'s
+`AiProvider` — so metadata (Postgres) and bytes (disk, later S3/R2) are
+persisted independently, and the recorded `storageKey` is never a provider URL.
+`@level-zero/storage`'s `LocalObjectStorageProvider` is the local-development
+implementation; a production one is a different registration in
+`apps/api/src/infrastructure/storage.module.ts`, nothing else.
+
+`variant` (`source` / `thumbnail` / `preview`) and `sourceAssetId` leave room for
+derivatives without a generation pipeline: a thumbnail declares the source asset
+it was made from, and the database enforces the pairing (a `source` asset has no
+`sourceAssetId`; anything else must have one).
+
 ### API
 
 | Endpoint                                                                  | Purpose                                               |
@@ -180,6 +208,13 @@ neighbours stay visible rather than vanishing from the graph. It accepts
 The versions endpoint returns `{ entityId, currentVersionId, branches, versions,
 total }`. Comparison is field-level and looks _inside_ type-specific data, so a
 history view can say `data.drainPerSecond changed` rather than `data changed`.
+
+Assets live under `/api/projects/:projectId/assets`: `POST` uploads (metadata plus
+base64 `contentBase64`), `GET`/`GET :assetId` read, `GET :assetId/url` resolves a
+safe URL through the configured provider, `GET :assetId/content` streams the
+bytes back, and `POST :assetId/archive` · `/restore` change asset state. Linking
+one into the entity graph is done with an `asset_reference` entity and the
+relationships endpoint above, not a route here.
 
 Domain errors map to HTTP in one place: `NotFoundError` → 404,
 `ValidationError` → 400, `ConflictError` → 409, each with a stable `error` code
@@ -249,6 +284,9 @@ bypasses the services:
 - A unique constraint on `(entity_id, version_number)` keeps numbering monotonic
   even if two commits race: the loser fails with a 409 rather than reusing a
   number.
+- A check constraint on `assets` stops the `variant`/`sourceAssetId` pairing from
+  drifting: a `source` asset cannot carry a `sourceAssetId`, and every other
+  variant must.
 
 > **NestJS gotcha:** constructor injection relies on `design:paramtypes` metadata,
 > which TypeScript only emits for _value_ imports. `@typescript-eslint/consistent-type-imports`

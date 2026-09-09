@@ -18,8 +18,11 @@ export {
   MAX_TAGS,
   MAX_TAG_LENGTH,
   normalizeTags,
+  optionalNonNegativeNumber,
+  optionalPositiveInt,
   optionalText,
   requireJsonObject,
+  requireNonNegativeInt,
   requireOneOf,
   requireText,
 } from './shared/validation';
@@ -129,3 +132,44 @@ export {
   type PromoteVersionInput,
   type VersionServiceDeps,
 } from './version/entity-version-service';
+
+export {
+  ASSET_KINDS,
+  ASSET_STATUSES,
+  ASSET_VARIANTS,
+  MAX_ASSET_CHECKSUM_LENGTH,
+  MAX_ASSET_CREATED_BY_LENGTH,
+  MAX_ASSET_FILENAME_LENGTH,
+  MAX_ASSET_MIME_TYPE_LENGTH,
+  MAX_ASSET_STORAGE_KEY_LENGTH,
+  archiveAsset,
+  createAsset,
+  restoreAsset,
+  type Asset,
+  type AssetFactoryDeps,
+  type AssetKind,
+  type AssetStatus,
+  type AssetVariant,
+  type CreateAssetInput,
+} from './asset/asset';
+export {
+  ASSET_REFERENCE_ASSET_ID_KEY,
+  assetReferenceData,
+  referencedAssetId,
+} from './asset/asset-reference';
+export {
+  type AssetListFilter,
+  type AssetPage,
+  type AssetRepository,
+} from './asset/asset-repository';
+export {
+  type GetUrlOptions,
+  type ObjectStorageProvider,
+  type PutObjectInput,
+} from './asset/object-storage';
+export {
+  AssetService,
+  type AssetContent,
+  type AssetServiceDeps,
+  type UploadAssetInput,
+} from './asset/asset-service';
