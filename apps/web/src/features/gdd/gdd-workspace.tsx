@@ -1,6 +1,6 @@
 'use client';
 
-import type { Entity } from '@level-zero/domain';
+import type { Document } from '@level-zero/domain';
 import {
   Button,
   EmptyState,
@@ -12,16 +12,10 @@ import {
 } from '@level-zero/ui';
 import { useCallback, useMemo, useRef, useState } from 'react';
 
-import { entityDocument } from '@/features/entities/entity-document';
 import { ApiRequestError } from '@/lib/api';
 
 import { documentOutline } from './document-outline';
-import {
-  GDD_CONTENT_FIELD,
-  useCreateGddDocument,
-  useGddDocument,
-  useSaveGddDocument,
-} from './use-gdd-document';
+import { useCreateGddDocument, useGddDocument, useSaveGddDocument } from './use-gdd-document';
 
 function DocumentOutline({
   content,
@@ -67,15 +61,16 @@ function GddDocumentEditor({
   designDocument,
 }: {
   projectId: string;
-  designDocument: Entity;
+  designDocument: Document;
 }) {
-  const [content, setContent] = useState(() => entityDocument(designDocument, GDD_CONTENT_FIELD));
-  const saveDocument = useSaveGddDocument(projectId);
+  // The stored body is a document node; the editor reads it as TipTap JSON.
+  const [content, setContent] = useState<JSONContent>(() => designDocument.content as JSONContent);
+  const saveDocument = useSaveGddDocument(projectId, designDocument.entity.id);
   const surfaceRef = useRef<HTMLDivElement>(null);
 
   const save = useCallback(
-    (content: JSONContent) => saveDocument.mutateAsync({ designDocument, content }),
-    [saveDocument, designDocument],
+    (content: JSONContent) => saveDocument.mutateAsync(content),
+    [saveDocument],
   );
   const autosave = useEditorAutosave(save);
 
@@ -159,7 +154,7 @@ export function GddWorkspace({ projectId }: { projectId: string }) {
 
   return (
     <GddDocumentEditor
-      key={documentQuery.data.id}
+      key={documentQuery.data.entity.id}
       projectId={projectId}
       designDocument={documentQuery.data}
     />

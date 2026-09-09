@@ -279,3 +279,28 @@ export { type JobListFilter, type JobPage, type JobRepository } from './job/job-
 export { type JobQueue } from './job/job-queue';
 export { type JobEvents, type JobSubscription } from './job/job-events';
 export { JobService, type EnqueueJobInput, type JobServiceDeps } from './job/job-service';
+
+export {
+  DOCUMENT_CONTENT_KEY,
+  DOCUMENT_VERSION_NAME_KEY,
+  DOCUMENT_VERSION_REASONS,
+  MAX_DOCUMENT_VERSION_NAME_LENGTH,
+  documentContent,
+  documentData,
+  documentVersionName,
+  emptyDocumentContent,
+  requireDocumentContent,
+  type DocumentContent,
+  type DocumentVersionReason,
+} from './document/document';
+export {
+  DocumentService,
+  type CreateDocumentInput,
+  type Document,
+  type DocumentHistory,
+  type DocumentVersion,
+  type DocumentVersionComparison,
+  type DocumentVersionSnapshot,
+  type RestoreDocumentVersionInput,
+  type SnapshotDocumentInput,
+} from './document/document-service';

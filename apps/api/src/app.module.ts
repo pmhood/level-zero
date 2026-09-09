@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 
 import { AssetsModule } from './assets/assets.module';
 import { ApiConfigModule } from './config/config.module';
+import { DocumentsModule } from './documents/documents.module';
 import { DomainModule } from './domain/domain.module';
 import { EntitiesModule } from './entities/entities.module';
 import { GenerationsModule } from './generations/generations.module';
@@ -36,6 +37,7 @@ import { VersionsModule } from './versions/versions.module';
     EntitiesModule,
     RelationshipsModule,
     VersionsModule,
+    DocumentsModule,
     AssetsModule,
     GenerationsModule,
     PrototypesModule,
