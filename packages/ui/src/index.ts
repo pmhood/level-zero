@@ -3,12 +3,12 @@ export { Button, buttonVariants, type ButtonProps } from './button';
 export { Card, CardDescription, CardHeader, CardTitle, cardVariants, type CardProps } from './card';
 export { StatusBadge, type StatusBadgeProps, type StatusTone } from './status-badge';
 export { Tag, type TagProps } from './tag';
-export { Input, Textarea } from './input';
+export { Input, Select, Textarea } from './input';
 export { Panel, SectionPanel, type SectionPanelProps } from './panel';
 export { Tabs, type TabItem, type TabsProps } from './tabs';
 export { EmptyState, type EmptyStateProps } from './empty-state';
 export { Inspector, type InspectorProps } from './inspector';
-export { EntityCard, type EntityCardProps } from './entity-card';
+export { EntityCard, EntityCardSkeleton, type EntityCardProps } from './entity-card';
 export { PromoteAction, type PromoteActionProps } from './promote-action';
 export {
   AppShell,
@@ -19,11 +19,18 @@ export {
   type TopbarProps,
 } from './app-shell';
 export { WorkspaceHeader, type WorkspaceHeaderProps } from './workspace-header';
+export { WorkspacePage, type WorkspacePageProps } from './workspace-page';
+export { WorkspaceBrowser, type WorkspaceBrowserProps } from './workspace-browser';
+export { SearchField, type SearchFieldProps } from './search-field';
+export { Field, type FieldProps } from './field';
 export {
+  ChevronRightIcon,
   CloseIcon,
   DocumentIcon,
   HistoryIcon,
   IdeaLabIcon,
+  LinkIcon,
+  MechanicsIcon,
   OverviewIcon,
   PlusIcon,
   SearchIcon,

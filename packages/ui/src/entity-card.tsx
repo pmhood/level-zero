@@ -78,3 +78,22 @@ export function EntityCard({
     </button>
   );
 }
+
+/**
+ * The loading placeholder for an `EntityCard`. It lives next to the card so
+ * the two keep the same padding and line heights and a list never jumps size
+ * as it loads (spec section 42).
+ */
+export function EntityCardSkeleton({ className }: { className?: string }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={cn('animate-pulse rounded-lg border border-border bg-surface p-3', className)}
+    >
+      <div className="h-4 w-2/3 rounded bg-raised" />
+      <div className="mt-2 h-3 w-1/3 rounded bg-raised" />
+      <div className="mt-3 h-3 w-full rounded bg-raised" />
+      <div className="mt-1 h-3 w-4/5 rounded bg-raised" />
+    </div>
+  );
+}

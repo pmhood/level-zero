@@ -5,10 +5,13 @@ import type {
   Document,
   DocumentContent,
   Entity,
+  EntityHistory,
   EntityNeighborhood,
   EntityPage,
+  EntityRelationship,
   EntityStatus,
   EntityType,
+  EntityVersion,
   Project,
   ProjectPage,
   ProjectStatus,
@@ -18,6 +21,7 @@ import type {
   RelationType,
   UpdateEntityInput,
   UpdateProjectInput,
+  VersionReason,
 } from '@level-zero/domain';
 
 import { env } from './env';
@@ -41,6 +45,17 @@ export class ApiRequestError extends Error {
     super(message);
     this.name = 'ApiRequestError';
   }
+}
+
+/**
+ * The message to show a user for a failed request. The API's own message is
+ * the useful one whenever it reached us; anything else is a transport failure.
+ */
+export function apiErrorMessage(
+  error: unknown,
+  fallback = 'Something went wrong talking to the API.',
+): string {
+  return error instanceof ApiRequestError ? error.message : fallback;
 }
 
 /** Joins query params, dropping `undefined`/empty values and comma-joining arrays. */
@@ -207,6 +222,57 @@ export function promoteEntity(
   input: PromoteEntityInput,
 ): Promise<PromotionResult> {
   return post(`/api/projects/${projectId}/entities/${entityId}/promote`, input);
+}
+
+export interface CreateRelationshipInput {
+  targetEntityId: string;
+  relation: RelationType;
+  metadata?: Record<string, unknown>;
+}
+
+/** The edge is written from `entityId`, so it reads source-first: `A depends_on B`. */
+export function createRelationship(
+  projectId: string,
+  entityId: string,
+  input: CreateRelationshipInput,
+): Promise<EntityRelationship> {
+  return post(`/api/projects/${projectId}/entities/${entityId}/relationships`, input);
+}
+
+/** Structural links only — the API answers 409 for lineage relations. */
+export function deleteRelationship(
+  projectId: string,
+  entityId: string,
+  relationshipId: string,
+): Promise<void> {
+  return apiFetch(
+    `/api/projects/${projectId}/entities/${entityId}/relationships/${relationshipId}`,
+    { method: 'DELETE' },
+  );
+}
+
+// --- Entity versions -----------------------------------------------------
+
+export function getEntityHistory(projectId: string, entityId: string): Promise<EntityHistory> {
+  return apiFetch(`/api/projects/${projectId}/entities/${entityId}/versions`);
+}
+
+/** Records the entity's current content as a version; editing alone does not. */
+export function commitEntityVersion(
+  projectId: string,
+  entityId: string,
+  input: { reason?: VersionReason; metadata?: Record<string, unknown> } = {},
+): Promise<EntityVersion> {
+  return post(`/api/projects/${projectId}/entities/${entityId}/versions`, input);
+}
+
+/** Re-applies a version as a new version; everything after it stays reachable. */
+export function restoreEntityVersion(
+  projectId: string,
+  entityId: string,
+  versionId: string,
+): Promise<EntityVersion> {
+  return post(`/api/projects/${projectId}/entities/${entityId}/versions/${versionId}/restore`, {});
 }
 
 // --- Documents -----------------------------------------------------------
