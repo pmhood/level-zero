@@ -28,6 +28,18 @@ field-dropping in the result, not a build error pointing at the real cause.
 Workspaces: `@level-zero/{web,api,worker}` (apps) and `@level-zero/{domain,database,ui,ai,config,storage}`
 (packages).
 
+**Run `pnpm install` after any pull that changed a `package.json`.** A new workspace dependency
+(`"@level-zero/domain": "workspace:*"`, say) only becomes resolvable once pnpm writes the symlink
+under that package's `node_modules`. Skip the install and the dev server dies on
+`Module not found: Can't resolve '@level-zero/domain'`, pointing at whichever file imports it —
+an innocent file, in the package that gained the dependency, not the one that is actually wrong.
+
+**Turbo's cache can hide this, so don't take a green `pnpm build` as proof.** Cache keys are
+content hashes, so a task built in another worktree — or before the dependency existed — replays
+as `FULL TURBO` without ever resolving a module in the current checkout. When verifying a merge
+rather than iterating, use `--force` to bypass the cache. The same caveat applies to any check
+whose result depends on the environment rather than on file contents.
+
 **`pnpm test` needs live infrastructure.** The repository adapters are integration-tested against
 real Postgres, so run `pnpm infra:up && pnpm db:migrate` first or those suites fail on connection,
 not on logic. CI does the same against service containers.
