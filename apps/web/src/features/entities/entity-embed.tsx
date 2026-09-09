@@ -1,7 +1,7 @@
 'use client';
 
-import type { Entity, EntityType } from '@level-zero/domain';
-import { Button, EntityCard, Input, StatusBadge } from '@level-zero/ui';
+import { readParameters, type Entity, type EntityType } from '@level-zero/domain';
+import { Button, EntityCard, Input, ParameterSummary, StatusBadge } from '@level-zero/ui';
 import { mergeAttributes, Node } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react';
 import { useState } from 'react';
@@ -71,9 +71,14 @@ function EntityEmbedView({ node, editor, updateAttributes, deleteNode }: NodeVie
             description={entity.description}
             tags={entity.tags}
             footer={
-              <Button variant="secondary" size="sm" onClick={() => onOpen(entity)}>
-                Open
-              </Button>
+              <>
+                {/* Whatever the entity is tuned by, if anything: a section
+                    about a mechanic is usually about its numbers. */}
+                <ParameterSummary parameters={readParameters(entity)} className="mb-3" />
+                <Button variant="secondary" size="sm" onClick={() => onOpen(entity)}>
+                  Open
+                </Button>
+              </>
             }
           />
         </div>

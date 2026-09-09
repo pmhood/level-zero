@@ -134,6 +134,29 @@ export {
 } from './version/entity-version-service';
 
 export {
+  PARAMETER_TYPES,
+  PERCENT_UNITS,
+  TUNING_PARAMETERS_KEY,
+  clampParameterValue,
+  createParameter,
+  formatParameterValue,
+  groupParameters,
+  isNumericParameter,
+  isParameterType,
+  parameterBounds,
+  parameterDefinitionIssues,
+  parameterId,
+  parameterValueIssue,
+  readParameters,
+  type CreateParameterInput,
+  type Parameter,
+  type ParameterGroup,
+  type ParameterOption,
+  type ParameterType,
+  type ParameterValue,
+} from './parameter/parameter';
+
+export {
   ASSET_KINDS,
   ASSET_STATUSES,
   ASSET_VARIANTS,

@@ -1,4 +1,4 @@
-import type { Entity, EntityType } from '@level-zero/domain';
+import { readParameters, type Entity, type EntityType, type Parameter } from '@level-zero/domain';
 import type { StatusTone } from '@level-zero/ui';
 
 /**
@@ -91,8 +91,8 @@ export const MECHANIC_RATIONALE_FIELD = 'rationale';
  *
  * Deliberately not here: `linkedMechanics`, which is the relationship graph
  * rather than a field, and `rationale`, which is TipTap JSON read through
- * `entityDocument`. Tuning parameters (issue #45) will join this shape; until
- * then unknown `data` fields are carried through untouched by `writeMechanic`.
+ * `entityDocument`. Anything else a later issue adds to `data` is carried
+ * through untouched by `writeMechanic`.
  */
 export interface MechanicData {
   area: MechanicArea;
@@ -102,6 +102,12 @@ export interface MechanicData {
   inputs: string[];
   outputs: string[];
   implementationStatus: ImplementationStatus;
+  /**
+   * The numbers, switches and choices this mechanic is tuned by. The shape is
+   * the domain's, because prototypes and playtests refer to the same
+   * parameters by the same ids; the workspace only edits them.
+   */
+  tuningParameters: Parameter[];
 }
 
 const EMPTY_MECHANIC: MechanicData = {
@@ -111,6 +117,7 @@ const EMPTY_MECHANIC: MechanicData = {
   inputs: [],
   outputs: [],
   implementationStatus: 'concept',
+  tuningParameters: [],
 };
 
 /**
@@ -134,6 +141,7 @@ export function readMechanic(entity: Entity): MechanicData {
       IMPLEMENTATION_STATUSES,
       EMPTY_MECHANIC.implementationStatus,
     ),
+    tuningParameters: readParameters(entity),
   };
 }
 
