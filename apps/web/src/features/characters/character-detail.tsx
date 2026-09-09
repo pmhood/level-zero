@@ -1,0 +1,114 @@
+'use client';
+
+import type { Entity } from '@level-zero/domain';
+import { StatusBadge, Tabs, Tag } from '@level-zero/ui';
+import { useState } from 'react';
+
+import { entityStatusBadge, entityTypeLabel } from '@/features/entities/entity-presentation';
+
+import { CHARACTER_BACKGROUND_FIELD, CHARACTER_NOTES_FIELD, readCharacter } from './character';
+import { CharacterProfileForm, type ProfileSection } from './character-profile-form';
+import { CharacterProse } from './character-prose';
+import { CharacterRelationships } from './character-relationships';
+import { CharacterVisuals } from './character-visuals';
+
+type DetailTab = ProfileSection | 'visuals' | 'background' | 'relationships' | 'notes';
+
+const TABS: { value: DetailTab; label: string }[] = [
+  { value: 'overview', label: 'Overview' },
+  { value: 'visuals', label: 'Visuals' },
+  { value: 'background', label: 'Background' },
+  { value: 'inventory', label: 'Inventory' },
+  { value: 'relationships', label: 'Relationships' },
+  { value: 'notes', label: 'Notes' },
+];
+
+function isProfileSection(tab: DetailTab): tab is ProfileSection {
+  return tab === 'overview' || tab === 'inventory';
+}
+
+/**
+ * The centre column: one character, in the six sections the spec gives them
+ * (section 31) — who they are, what they look like, where they came from, what
+ * they carry, who they are bound to, and what is still open.
+ *
+ * Nothing here is a second store. The structured sections write the entity's
+ * `data`, the written ones write TipTap JSON into the same place, visuals are
+ * edges to reusable assets, and relationships are the graph itself.
+ */
+export function CharacterDetail({
+  projectId,
+  character,
+}: {
+  projectId: string;
+  character: Entity;
+}) {
+  const [tab, setTab] = useState<DetailTab>('overview');
+
+  const archived = character.status === 'archived';
+  const { role, quote } = readCharacter(character);
+  const status = entityStatusBadge(character.status);
+
+  return (
+    <section aria-label="Character detail" className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+      <header className="flex items-start justify-between gap-3 border-b border-border-subtle px-5 py-4">
+        <div className="min-w-0">
+          <h2 className="truncate text-xl font-semibold text-foreground">{character.name}</h2>
+          <p className="mt-0.5 text-xs text-faint-foreground">{entityTypeLabel(character.type)}</p>
+          {quote && (
+            <p className="mt-2 text-sm text-muted-foreground italic">&ldquo;{quote}&rdquo;</p>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {role && <Tag>{role}</Tag>}
+          <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
+        </div>
+      </header>
+
+      <div className="px-5 pt-3">
+        <Tabs value={tab} onChange={(value) => setTab(value as DetailTab)} items={TABS} />
+      </div>
+
+      {archived && (
+        <p className="px-5 pt-3 text-xs text-faint-foreground">
+          Restore this character before editing it. Its visuals, relationships and history are
+          intact.
+        </p>
+      )}
+
+      <div className="px-5 py-4">
+        {isProfileSection(tab) && (
+          <CharacterProfileForm projectId={projectId} character={character} section={tab} />
+        )}
+
+        {tab === 'visuals' && <CharacterVisuals projectId={projectId} character={character} />}
+
+        {tab === 'background' && (
+          <CharacterProse
+            projectId={projectId}
+            character={character}
+            field={CHARACTER_BACKGROUND_FIELD}
+            label="Background"
+            mode="document"
+            placeholder="Where they came from, who they were before, and what it cost them."
+          />
+        )}
+
+        {tab === 'relationships' && (
+          <CharacterRelationships projectId={projectId} character={character} />
+        )}
+
+        {tab === 'notes' && (
+          <CharacterProse
+            projectId={projectId}
+            character={character}
+            field={CHARACTER_NOTES_FIELD}
+            label="Notes"
+            mode="notes"
+            placeholder="Casting thoughts, open questions, things to come back to…"
+          />
+        )}
+      </div>
+    </section>
+  );
+}
