@@ -70,6 +70,13 @@ export interface Generation {
   inputAssetIds: string[];
   /** Entities pulled in as ambient project context, not named by the caller. */
   contextEntityIds: string[];
+  /**
+   * The assembled project context exactly as it was sent, so provenance can say
+   * *why* each object was included and not only that it was. Written by
+   * `@level-zero/ai`'s `ContextResolver`; opaque JSON here, because the domain
+   * does not depend on the provider layer.
+   */
+  resolvedContext: Record<string, unknown> | null;
   outputAssetIds: string[];
   /** The generation this one refines or re-rolls. */
   parentGenerationId: string | null;
@@ -93,6 +100,7 @@ export interface CreateGenerationInput {
   inputEntityIds?: readonly string[];
   inputAssetIds?: readonly string[];
   contextEntityIds?: readonly string[];
+  resolvedContext?: Record<string, unknown> | null;
   parentGenerationId?: string | null;
   seed?: string | null;
   createdBy?: string | null;
@@ -119,6 +127,10 @@ export function createGeneration(
     inputEntityIds: normalizeIds('inputEntityIds', input.inputEntityIds),
     inputAssetIds: normalizeIds('inputAssetIds', input.inputAssetIds),
     contextEntityIds: normalizeIds('contextEntityIds', input.contextEntityIds),
+    resolvedContext:
+      input.resolvedContext == null
+        ? null
+        : requireJsonObject('resolvedContext', input.resolvedContext),
     outputAssetIds: [],
     parentGenerationId: optionalText('parentGenerationId', input.parentGenerationId, 200),
     seed: optionalText('seed', input.seed, MAX_GENERATION_SEED_LENGTH),

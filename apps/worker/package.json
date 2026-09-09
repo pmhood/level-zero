@@ -17,7 +17,8 @@
     "@level-zero/ai": "workspace:*",
     "@level-zero/config": "workspace:*",
     "@level-zero/database": "workspace:*",
-    "@level-zero/domain": "workspace:*"
+    "@level-zero/domain": "workspace:*",
+    "@level-zero/storage": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

@@ -1,4 +1,9 @@
-import { AiProviderRegistry, EchoAiProvider } from '@level-zero/ai';
+import {
+  AiProviderRegistry,
+  AnthropicProvider,
+  EchoAiProvider,
+  LocalImageProvider,
+} from '@level-zero/ai';
 import { loadDotEnv, parseEnv, workerEnvSchema } from '@level-zero/config';
 import {
   DrizzleAssetRepository,
@@ -16,6 +21,7 @@ import {
   createRedisClient,
 } from '@level-zero/database';
 import {
+  AssetService,
   EntityRelationshipService,
   EntityService,
   GenerationService,
@@ -24,6 +30,7 @@ import {
   systemClock,
   uuidIdGenerator,
 } from '@level-zero/domain';
+import { LocalObjectStorageProvider } from '@level-zero/storage';
 
 import { createGenerationJobHandler } from './generation-job';
 import { createWorkerRuntime, type WorkerProbe } from './runtime';
@@ -56,6 +63,12 @@ async function main(): Promise<void> {
   const queue = createJobQueue({ connectionUrl: env.REDIS_URL });
   const events = createJobEvents({ connectionUrl: env.REDIS_URL });
   const jobs = new JobService(new DrizzleJobRepository(database.db), projects, queue, events, deps);
+  const assetService = new AssetService(
+    assets,
+    projects,
+    new LocalObjectStorageProvider({ rootDir: env.STORAGE_LOCAL_ROOT }),
+    deps,
+  );
   const generations = new GenerationService(
     new DrizzleGenerationRepository(database.db),
     projects,
@@ -65,8 +78,15 @@ async function main(): Promise<void> {
     deps,
   );
 
-  // The echo provider stands in until the vendor adapters land in issue #8.
-  const providers = new AiProviderRegistry().register(new EchoAiProvider(['text.generate']));
+  // Registration order is preference order, and a failing provider falls
+  // through to the next candidate for the same capability.
+  const providers = new AiProviderRegistry().register(new LocalImageProvider());
+  if (env.ANTHROPIC_API_KEY) {
+    providers.register(new AnthropicProvider({ apiKey: env.ANTHROPIC_API_KEY }));
+  } else {
+    // Nothing hosted is configured: local development still runs end to end.
+    providers.register(new EchoAiProvider(['text.generate']));
+  }
 
   const probes: WorkerProbe[] = [
     { name: 'postgres', check: () => checkPostgres(database.db) },
@@ -75,7 +95,13 @@ async function main(): Promise<void> {
 
   const consumer = createJobConsumer({
     connectionUrl: env.REDIS_URL,
-    handle: createGenerationJobHandler({ jobs, generations, providers, logger: console }),
+    handle: createGenerationJobHandler({
+      jobs,
+      generations,
+      assets: assetService,
+      providers,
+      logger: console,
+    }),
     onError: (error) => console.error('[worker] queue error', error),
   });
 

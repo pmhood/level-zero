@@ -1,3 +1,4 @@
+import { ContextResolver, type ResolvedContext } from '@level-zero/ai';
 import {
   GENERATION_JOB_STEPS,
   GenerationService,
@@ -5,6 +6,7 @@ import {
   type Generation,
   type GenerationPage,
   type GenerationProvenance,
+  type RecordGenerationInput,
 } from '@level-zero/domain';
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 
@@ -29,6 +31,11 @@ import {
  * by whichever process is doing the work. `/dispatch`, `/complete` and `/fail`
  * remain open for a caller that runs its own generation.
  *
+ * A request may name its inputs itself, or send a `context` block describing
+ * what the user pointed at and let `ContextResolver` assemble it. Either way
+ * the record ends up carrying the ids that went in, and a resolved context is
+ * stored alongside them so provenance can say why each one was included.
+ *
  * Reading provenance backwards — "how was this image made?" — is a listing
  * filtered by `outputAssetId` (or `entityId` for the entities that influenced
  * one), and `/provenance` resolves a record's ids to the entities, assets and
@@ -39,6 +46,7 @@ export class GenerationsController {
   constructor(
     private readonly generations: GenerationService,
     private readonly jobs: JobService,
+    private readonly context: ContextResolver,
   ) {}
 
   /**
@@ -51,7 +59,20 @@ export class GenerationsController {
     @Param('projectId') projectId: string,
     @Body() body: CreateGenerationDto,
   ): Promise<Generation> {
-    const generation = await this.generations.record(projectId, body);
+    const { context, ...request } = body;
+    const generation = await this.generations.record(
+      projectId,
+      context
+        ? withResolvedContext(
+            request,
+            await this.context.resolve(projectId, {
+              ...context,
+              instruction: request.prompt,
+              parentGenerationId: request.parentGenerationId,
+            }),
+          )
+        : request,
+    );
 
     await this.jobs.enqueue(projectId, {
       kind: 'generation',
@@ -136,4 +157,28 @@ export class GenerationsController {
     await this.jobs.cancelForTarget(projectId, 'generation', generationId);
     return cancelled;
   }
+}
+
+/**
+ * Folds an assembled context into the record's own fields.
+ *
+ * Entities the user pointed at become named inputs; the ones the relationship
+ * walk discovered become ambient project context — the distinction the
+ * generation record already draws. Ids the caller supplied itself are kept:
+ * `createGeneration` de-duplicates the union.
+ */
+function withResolvedContext(
+  request: Omit<CreateGenerationDto, 'context'>,
+  context: ResolvedContext,
+): RecordGenerationInput {
+  const named = context.entities.filter((entity) => entity.source !== 'related');
+  const ambient = context.entities.filter((entity) => entity.source === 'related');
+
+  return {
+    ...request,
+    inputEntityIds: [...named.map((entity) => entity.id), ...(request.inputEntityIds ?? [])],
+    contextEntityIds: [...ambient.map((entity) => entity.id), ...(request.contextEntityIds ?? [])],
+    inputAssetIds: [...context.assets.map((asset) => asset.id), ...(request.inputAssetIds ?? [])],
+    resolvedContext: { ...context },
+  };
 }

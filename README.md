@@ -22,6 +22,9 @@ Implemented so far, against the architecture epic
 - [#7](https://github.com/pmhood/level-zero/issues/7) — background jobs, so
   generation and other long-running work runs in the worker process with
   explicit progress, retries and cancellation instead of a held-open request.
+- [#8](https://github.com/pmhood/level-zero/issues/8) — AI orchestration and
+  project-context resolution, so a feature asks for a capability and gets a
+  provider, and a prompt arrives carrying the project material behind it.
 - [#12](https://github.com/pmhood/level-zero/issues/12) — prototypes pinned to
   exact entity versions, so a playable experiment keeps resolving to what was
   actually in it, and two prototype versions can be compared.
@@ -247,6 +250,47 @@ _and_ the request that produced them, and a retry is a new generation carrying
   `completedAt`, only a `failed` generation may carry `failure`, and a
   generation something was re-rolled from cannot be deleted.
 
+### AI orchestration and project context
+
+```text
+ContextRequest ──ContextResolver──> ResolvedContext ──> Generation.resolvedContext
+                                          │
+AiCapability ──AiProviderRegistry──> AiProvider ──> AiResult ──> Asset
+```
+
+A feature asks for a **capability** — `text.generate`, `image.generate` — and
+`AiProviderRegistry` picks a provider. Registration order is preference order,
+and a provider that fails falls through to the next candidate for the same
+capability, so a feature never names a vendor and never handles one being down.
+
+- **The resolver assembles the prompt's world.** `ContextResolver` starts from
+  what the user pointed at — a selection, an `@mention`, a reference asset, the
+  generation being re-rolled — and walks the relationship graph outwards, so a
+  request about a character arrives carrying the location, faction and mechanic
+  it is actually linked to. Document entities come in as their headed sections.
+- **Context is resolved once, when the request is made.** `POST /generations`
+  resolves it and stores it on the record, so the worker sends the project as it
+  was when the user asked rather than whenever the queue got there.
+- **Every member says why it is there.** Each entry carries its source
+  (`selected`, `mention`, `related`, `reference`, `lineage`), how many hops out
+  it was found, and the edge it came through — which is what makes an assembled
+  context inspectable, and what `resolvedContext` keeps for provenance. Entities
+  the user named become the generation's `inputEntityIds`; the ones the walk
+  found become `contextEntityIds`.
+- **Archived material stays out.** The walk skips archived entities, though one
+  the user named explicitly is still included.
+- **Provider output becomes an Asset.** Text is stored as `text/plain`, files as
+  themselves, both through `AssetService` — so nothing records a provider URL
+  and a generated GDD section is read back exactly like a generated portrait.
+- **Adapters own their vendor.** `AnthropicProvider` is the only file that knows
+  what an Anthropic request looks like; `LocalImageProvider` serves
+  `image.generate` with no credentials, the way `LocalObjectStorageProvider`
+  serves object storage. Swapping in a hosted image model is one registration in
+  `apps/worker/src/index.ts` and nothing else.
+
+Set `ANTHROPIC_API_KEY` to enable the Anthropic adapter; without it the worker
+registers the echo provider so local development still runs end to end.
+
 ### Prototypes
 
 ```text
@@ -378,7 +422,10 @@ relationships endpoint above, not a route here.
 
 Generations live under `/api/projects/:projectId/generations`: `POST` records a
 request before any provider is called and queues the work, returning
-immediately with the generation id. `POST :generationId/dispatch` ·
+immediately with the generation id. A `context` block on that request
+(`selectedEntityIds`, `mentionedEntityIds`, `assetIds`, `relatedDepth`,
+`relations`, `maxEntities`) is resolved into the record's inputs and stored with
+it; a caller that already knows its ids sends those instead. `POST :generationId/dispatch` ·
 `/complete` · `/fail` · `/cancel` move it through its states — the worker uses
 the same transitions, and `/cancel` also cancels the job running it — and
 `GET :generationId/provenance` resolves a record's ids to the entities, assets
@@ -429,7 +476,8 @@ review comment, not a preference:
   Next, Drizzle, `pg` or `ioredis`. ESLint enforces this.
 - **Provider integrations sit behind interfaces.** Feature code requests an AI
   _capability_ (`text.generate`, `image.generate`, …) and the registry picks a
-  provider. Nothing outside an adapter imports a vendor SDK.
+  provider. Nothing outside an adapter imports a vendor SDK, and no feature
+  assembles its own prompt context — that is `ContextResolver`'s job.
 - **Environment is validated at startup.** Every process parses its variables
   through `@level-zero/config` and fails immediately, listing every problem at once.
   Browser code imports `@level-zero/config/env`, which has no Node built-ins.

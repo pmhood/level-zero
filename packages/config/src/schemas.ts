@@ -21,17 +21,22 @@ export const sharedEnvSchema = z.object({
   LOG_LEVEL: logLevel,
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required').startsWith('postgres'),
   REDIS_URL: z.string().min(1, 'REDIS_URL is required').startsWith('redis'),
+  /** Directory local asset bytes are written under. See `@level-zero/storage`. */
+  STORAGE_LOCAL_ROOT: z.string().min(1).default('./.data/assets'),
 });
 
 export const apiEnvSchema = sharedEnvSchema.extend({
   API_PORT: port.default(3001),
   API_CORS_ORIGINS: originList,
-  /** Directory local asset bytes are written under. See `@level-zero/storage`. */
-  STORAGE_LOCAL_ROOT: z.string().min(1).default('./.data/assets'),
 });
 
 export const workerEnvSchema = sharedEnvSchema.extend({
   WORKER_PORT: port.default(3002),
+  /**
+   * Enables the Anthropic adapter for text capabilities. Without it the worker
+   * registers the echo provider instead, so local development still runs.
+   */
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
 });
 
 /** Variables the browser bundle is allowed to see. */

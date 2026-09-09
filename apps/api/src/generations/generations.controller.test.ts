@@ -1,3 +1,4 @@
+import { ContextResolver } from '@level-zero/ai';
 import {
   AssetService,
   EntityRelationshipService,
@@ -38,6 +39,7 @@ let app: INestApplication;
 let entityService: EntityService;
 let assetService: AssetService;
 let jobService: JobService;
+let relationshipService: EntityRelationshipService;
 let queue: InMemoryJobQueue;
 let project: Project;
 let otherProject: Project;
@@ -50,13 +52,15 @@ beforeEach(async () => {
   const assets = new InMemoryAssetRepository();
 
   entityService = new EntityService(entities, projects, deps);
+  relationshipService = new EntityRelationshipService(relationships, entities, deps);
   assetService = new AssetService(assets, projects, new InMemoryObjectStorageProvider(), deps);
+  const generationRepository = new InMemoryGenerationRepository();
   const generationService = new GenerationService(
-    new InMemoryGenerationRepository(),
+    generationRepository,
     projects,
     entities,
     assets,
-    new LineageService(entityService, new EntityRelationshipService(relationships, entities, deps)),
+    new LineageService(entityService, relationshipService),
     deps,
   );
 
@@ -74,6 +78,16 @@ beforeEach(async () => {
     providers: [
       { provide: GenerationService, useValue: generationService },
       { provide: JobService, useValue: jobService },
+      {
+        provide: ContextResolver,
+        useValue: new ContextResolver(
+          projects,
+          entities,
+          relationships,
+          assets,
+          generationRepository,
+        ),
+      },
       { provide: APP_FILTER, useClass: DomainExceptionFilter },
     ],
   }).compile();
@@ -174,6 +188,91 @@ describe('recording a generation', () => {
       .post('/api/projects/missing/generations')
       .send({ capability: 'image.generate', prompt })
       .expect(404);
+  });
+});
+
+describe('resolving project context for a request', () => {
+  it('records what the user pointed at as named inputs and what the graph added as context', async () => {
+    const diver = await entityService.create(project.id, {
+      type: 'character',
+      name: 'The Diver',
+    });
+    const trench = await entityService.create(project.id, {
+      type: 'location',
+      name: 'Cradle Trench',
+    });
+    await relationshipService.link(project.id, {
+      sourceEntityId: diver.id,
+      targetEntityId: trench.id,
+      relation: 'appears_in',
+    });
+    const plate = await image('palette.png');
+
+    const response = await http()
+      .post(generationsUrl())
+      .send({
+        capability: 'image.generate',
+        prompt,
+        context: { selectedEntityIds: [diver.id], assetIds: [plate.id] },
+      })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      inputEntityIds: [diver.id],
+      contextEntityIds: [trench.id],
+      inputAssetIds: [plate.id],
+    });
+  });
+
+  it('stores the assembled context, saying why each object was included', async () => {
+    const diver = await entityService.create(project.id, {
+      type: 'character',
+      name: 'The Diver',
+    });
+
+    const response = await http()
+      .post(generationsUrl())
+      .send({ capability: 'image.generate', prompt, context: { selectedEntityIds: [diver.id] } })
+      .expect(201);
+
+    expect(response.body.resolvedContext).toMatchObject({
+      project: { id: project.id, name: 'Deep Fathom' },
+      instruction: prompt,
+      entities: [{ id: diver.id, name: 'The Diver', source: 'selected', distance: 0 }],
+    });
+  });
+
+  it('leaves the context null when the caller named its own inputs', async () => {
+    const pillarEntity = await pillar();
+
+    const response = await http()
+      .post(generationsUrl())
+      .send({ capability: 'image.generate', prompt, inputEntityIds: [pillarEntity.id] })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      inputEntityIds: [pillarEntity.id],
+      resolvedContext: null,
+    });
+  });
+
+  it('reports an entity from another project as not found', async () => {
+    const outsider = await entityService.create(otherProject.id, {
+      type: 'character',
+      name: 'Sky Captain',
+    });
+
+    await http()
+      .post(generationsUrl())
+      .send({ capability: 'image.generate', prompt, context: { selectedEntityIds: [outsider.id] } })
+      .expect(404);
+  });
+
+  it('rejects a walk deeper than the resolver allows', async () => {
+    await http()
+      .post(generationsUrl())
+      .send({ capability: 'image.generate', prompt, context: { relatedDepth: 9 } })
+      .expect(400);
   });
 });
 

@@ -1,10 +1,18 @@
-import { isAiCapability, type AiCapability, type AiProviderRegistry } from '@level-zero/ai';
+import {
+  isAiCapability,
+  readResolvedContext,
+  type AiArtifact,
+  type AiCapability,
+  type AiProviderRegistry,
+  type AiResult,
+} from '@level-zero/ai';
 import { type JobDelivery } from '@level-zero/database';
 import {
   GENERATION_JOB_STEPS,
   ValidationError,
   isDomainError,
   isJobActive,
+  type AssetService,
   type FailJobInput,
   type Generation,
   type GenerationService,
@@ -19,6 +27,7 @@ const [PREPARING_STEP, GENERATING_STEP, STORING_STEP] = GENERATION_JOB_STEPS;
 export interface GenerationJobDeps {
   jobs: JobService;
   generations: GenerationService;
+  assets: AssetService;
   providers: AiProviderRegistry;
   logger: WorkerLogger;
 }
@@ -38,6 +47,10 @@ class JobCancelled extends Error {
  * preparing context, generating, storing the result — and moves the generation
  * record alongside it, so the API never holds a connection open for provider
  * work and a browser can watch either record.
+ *
+ * Whatever a provider returns is stored as an ordinary project `Asset`: text as
+ * `text/plain`, files as themselves. Nothing here knows which vendor answered,
+ * and no provider URL is ever recorded.
  *
  * Throwing is how a failed attempt asks the queue for another one, so the
  * failure is recorded *before* the error is re-thrown. Cancellation is the
@@ -75,7 +88,9 @@ async function runGeneration(deps: GenerationJobDeps, job: Job): Promise<void> {
     status: 'preparing_context',
     step: PREPARING_STEP,
   });
-  const provenance = await deps.generations.provenance(projectId, generation.id);
+  // Assembled when the request was recorded, so it describes the project as it
+  // was when the user asked rather than whenever the queue got here.
+  const context = readResolvedContext(generation.resolvedContext);
 
   await requireNotCancelled(deps, projectId, jobId);
   await deps.jobs.advance(projectId, jobId, {
@@ -97,11 +112,7 @@ async function runGeneration(deps: GenerationJobDeps, job: Job): Promise<void> {
     capability,
     prompt: generation.prompt,
     parameters: generation.parameters,
-    context: {
-      inputEntities: provenance.inputEntities,
-      contextEntities: provenance.contextEntities,
-      inputAssets: provenance.inputAssets,
-    },
+    context,
   });
 
   await requireNotCancelled(deps, projectId, jobId);
@@ -111,10 +122,8 @@ async function runGeneration(deps: GenerationJobDeps, job: Job): Promise<void> {
     step: STORING_STEP,
   });
 
-  // Output assets arrive with the vendor adapters (issue #8): completing with
-  // none still closes the record and writes the lineage the request declared.
   await deps.generations.complete(projectId, generation.id, {
-    outputAssetIds: [],
+    outputAssetIds: await storeOutputs(deps, generation, result),
     providerRequestId: result.requestId ?? null,
   });
 
@@ -123,6 +132,43 @@ async function runGeneration(deps: GenerationJobDeps, job: Job): Promise<void> {
     completed: GENERATION_JOB_STEPS.length,
     step: null,
   });
+}
+
+/**
+ * Uploads everything the provider produced and returns the asset ids.
+ *
+ * Text is an asset too: it makes one rule for every capability, and it means a
+ * feature reads a generated GDD section back exactly the way it reads a
+ * generated portrait.
+ */
+async function storeOutputs(
+  deps: GenerationJobDeps,
+  generation: Generation,
+  result: AiResult,
+): Promise<string[]> {
+  const artifacts: AiArtifact[] = [
+    ...(result.output
+      ? [
+          {
+            kind: 'export' as const,
+            filename: `${generation.id}.txt`,
+            mimeType: 'text/plain',
+            content: Buffer.from(result.output, 'utf8'),
+          },
+        ]
+      : []),
+    ...(result.artifacts ?? []),
+  ];
+
+  const stored: string[] = [];
+  for (const artifact of artifacts) {
+    const asset = await deps.assets.upload(generation.projectId, {
+      ...artifact,
+      createdBy: generation.createdBy,
+    });
+    stored.push(asset.id);
+  }
+  return stored;
 }
 
 /**

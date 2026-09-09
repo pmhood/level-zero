@@ -135,6 +135,45 @@ describe('generation records', () => {
     });
   });
 
+  it('round-trips the assembled context, so provenance keeps its reasons', async () => {
+    const pillar = await entities.create(project.id, {
+      type: 'design_pillar',
+      name: 'Oppressive scale',
+    });
+
+    const created = await generations.record(project.id, {
+      capability: 'text.generate',
+      prompt: 'name three drowned cathedrals',
+      contextEntityIds: [pillar.id],
+      resolvedContext: {
+        project: { id: project.id, name: 'Deep Fathom', description: null },
+        instruction: 'name three drowned cathedrals',
+        entities: [{ id: pillar.id, source: 'related', distance: 1, relation: 'inspired_by' }],
+        assets: [],
+        lineage: null,
+        truncated: false,
+      },
+    });
+
+    await expect(generations.getById(project.id, created.id)).resolves.toMatchObject({
+      resolvedContext: {
+        entities: [{ id: pillar.id, source: 'related', relation: 'inspired_by' }],
+        truncated: false,
+      },
+    });
+  });
+
+  it('leaves the context null for a caller that named its own inputs', async () => {
+    const created = await generations.record(project.id, {
+      capability: 'text.generate',
+      prompt: 'name three drowned cathedrals',
+    });
+
+    await expect(generations.getById(project.id, created.id)).resolves.toMatchObject({
+      resolvedContext: null,
+    });
+  });
+
   it('records the provider, model and outputs as the generation progresses', async () => {
     const created = await generations.record(project.id, {
       capability: 'image.generate',

@@ -4,8 +4,9 @@ import { BaseAiProvider, type AiRequest, type AiResult } from './provider';
 /**
  * Development/test provider that echoes its prompt back.
  *
- * It exists so the orchestration contracts can be exercised end to end before
- * any real vendor adapter lands in issue #8.
+ * The worker registers it only when no hosted text provider is configured, so
+ * the whole path — capability, context, job, asset, lineage — still runs on a
+ * machine with no credentials.
  */
 export class EchoAiProvider extends BaseAiProvider {
   readonly id: string;

@@ -65,6 +65,11 @@ export const generations = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::uuid[]`),
+    /**
+     * The assembled project context as it was sent to the provider. Null for a
+     * caller that named its inputs itself rather than resolving a context.
+     */
+    resolvedContext: jsonb('resolved_context').$type<Record<string, unknown>>(),
     outputAssetIds: uuid('output_asset_ids')
       .array()
       .notNull()
