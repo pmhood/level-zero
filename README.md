@@ -19,6 +19,9 @@ Implemented so far, against the architecture epic
 - [#6](https://github.com/pmhood/level-zero/issues/6) — AI generation records and
   provenance, so every generated output can say which provider, model, prompt,
   parameters, inputs and project context produced it.
+- [#7](https://github.com/pmhood/level-zero/issues/7) — background jobs, so
+  generation and other long-running work runs in the worker process with
+  explicit progress, retries and cancellation instead of a held-open request.
 - [#12](https://github.com/pmhood/level-zero/issues/12) — prototypes pinned to
   exact entity versions, so a playable experiment keeps resolving to what was
   actually in it, and two prototype versions can be compared.
@@ -82,11 +85,11 @@ service containers.
 apps/
   web/        Next.js + React (App Router, Tailwind, TanStack Query, Zustand)
   api/        NestJS modular monolith
-  worker/     Independently executable background process
+  worker/     Independently executable background process: runs queued jobs
 
 packages/
   domain/     Framework-free domain model, services and storage ports
-  database/   Drizzle schema, migrations, repository adapters, Postgres + Redis clients
+  database/   Drizzle schema, migrations, repository adapters, Postgres + Redis clients, job queue
   ai/         Capability-based AI contracts; vendor SDKs live behind them
   storage/    ObjectStorageProvider implementations; local disk today, S3/R2 later
   ui/         Shared Tailwind + Radix primitives (consumed as source)
@@ -273,6 +276,38 @@ from.
   come from another project. The build artifact and the prototype entity are
   protected the same way.
 
+### Background jobs
+
+```text
+Project ──owns──> Job (kind, targetId, status, progress, attempt/maxAttempts, failure)
+```
+
+Nothing long-running happens inside a request. `POST /generations` records the
+request, queues a `Job` for it and returns; the worker process picks the job up,
+calls the provider and moves both records forward. The job's states are what a
+progress indicator needs to say something true: `queued`,
+`preparing_context`, `running`, `processing`, then `complete`, `failed` or
+`cancelled`.
+
+- **The row is the state, not the queue.** Redis carries a job's identity and
+  nothing else, so a browser reconnecting after a refresh and a worker starting
+  a second attempt read the same record. A flushed queue loses throughput, not
+  history.
+- **Progress is explicit.** `progress` is `{ completed, total, step }`, so a UI
+  can say "2 of 3 — Generating" rather than animating an indeterminate bar. The
+  step names live in `GENERATION_JOB_STEPS`, which the API sizes the job from
+  and the worker reads as it goes.
+- **Retries belong to the queue.** BullMQ applies exponential backoff up to the
+  record's `maxAttempts`; the worker reports which happened, so `attempt` on the
+  row and the schedule in Redis cannot drift. A job waiting for its next attempt
+  keeps the failure that caused it.
+- **Cancelling is one action.** `POST /generations/:id/cancel` cancels the
+  generation _and_ its job, dropping it from the queue. A worker already inside a
+  provider call stops at its next step, because that call cannot be recalled.
+- **Changes are pushed, not polled.** The worker publishes each state change on
+  Redis; `GET /jobs/stream` relays them to the browser as server-sent events.
+  Delivery is best effort — a client that misses one re-reads the record.
+
 ### API
 
 | Endpoint                                                                  | Purpose                                               |
@@ -310,8 +345,10 @@ one into the entity graph is done with an `asset_reference` entity and the
 relationships endpoint above, not a route here.
 
 Generations live under `/api/projects/:projectId/generations`: `POST` records a
-request before any provider is called, `POST :generationId/dispatch` ·
-`/complete` · `/fail` · `/cancel` move it through its states, and
+request before any provider is called and queues the work, returning
+immediately with the generation id. `POST :generationId/dispatch` ·
+`/complete` · `/fail` · `/cancel` move it through its states — the worker uses
+the same transitions, and `/cancel` also cancels the job running it — and
 `GET :generationId/provenance` resolves a record's ids to the entities, assets
 and parent generation they name. The listing filters by `status`, `capability`,
 `parentGenerationId`, `outputAssetId` and `entityId`, which is how provenance is
@@ -326,6 +363,12 @@ resolves a version to the entity versions and build artifact it names, and
 `PATCH` on a version updates its status, notes or build artifact — never its
 pins.
 
+Jobs live under `/api/projects/:projectId/jobs`: `GET` lists them (filtering by
+`status`, `kind` and `targetId`, which is how a page finds the job running one
+generation), `GET :jobId` reads one, and `GET stream` is a server-sent event
+stream of every job change in the project. There is no route to start or cancel
+a job directly: work is queued and cancelled through the feature that owns it.
+
 Domain errors map to HTTP in one place: `NotFoundError` → 404,
 `ValidationError` → 400, `ConflictError` → 409, each with a stable `error` code
 and structured `details`.
@@ -338,6 +381,9 @@ review comment, not a preference:
 - **Modular monolith.** Feature modules are added to `apps/api`, not split into
   separate deployables. The worker is a separate _process_, not a separate service:
   it shares the same packages.
+- **Long-running work is queued, never awaited in a handler.** A domain service
+  enqueues a `Job`; provider-specific execution belongs in the worker. No HTTP
+  request stays open for a provider call.
 - **Domain stays framework-free.** `packages/domain` must not import NestJS, React,
   Next, Drizzle, `pg` or `ioredis`. ESLint enforces this.
 - **Provider integrations sit behind interfaces.** Feature code requests an AI
@@ -401,6 +447,9 @@ bypasses the services:
   so a pin cannot name another entity's or another project's history, and
   `ON DELETE RESTRICT` keeps that history alive for as long as something played
   it.
+- Check constraints on `jobs` keep progress and attempts honest: a job cannot
+  report more steps done than it has, and cannot exceed the attempts it was
+  given.
 
 > **NestJS gotcha:** constructor injection relies on `design:paramtypes` metadata,
 > which TypeScript only emits for _value_ imports. `@typescript-eslint/consistent-type-imports`

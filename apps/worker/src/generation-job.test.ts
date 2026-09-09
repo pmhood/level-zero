@@ -1,0 +1,287 @@
+import {
+  AiProviderRegistry,
+  BaseAiProvider,
+  EchoAiProvider,
+  type AiCapability,
+  type AiRequest,
+  type AiResult,
+} from '@level-zero/ai';
+import { type JobDelivery } from '@level-zero/database';
+import {
+  EntityRelationshipService,
+  EntityService,
+  GENERATION_JOB_STEPS,
+  GenerationService,
+  JobService,
+  LineageService,
+  createProject,
+  systemClock,
+  uuidIdGenerator,
+  type Generation,
+  type Job,
+  type Project,
+} from '@level-zero/domain';
+import {
+  InMemoryAssetRepository,
+  InMemoryEntityRelationshipRepository,
+  InMemoryEntityRepository,
+  InMemoryGenerationRepository,
+  InMemoryJobEvents,
+  InMemoryJobQueue,
+  InMemoryJobRepository,
+  InMemoryProjectRepository,
+} from '@level-zero/domain/testing';
+import { beforeEach, describe, expect, it } from 'vitest';
+
+import { createGenerationJobHandler } from './generation-job';
+
+/** A provider that fails until it has been called `succeedOnAttempt` times. */
+class FlakyProvider extends BaseAiProvider {
+  readonly id = 'flaky';
+  readonly capabilities: readonly AiCapability[] = ['text.generate'];
+  readonly defaultModel = 'flaky-1';
+  calls = 0;
+
+  constructor(private readonly succeedOnAttempt = Number.POSITIVE_INFINITY) {
+    super();
+  }
+
+  async execute(request: AiRequest): Promise<AiResult> {
+    this.calls += 1;
+    if (this.calls < this.succeedOnAttempt) throw new Error('provider unavailable');
+    return { capability: request.capability, providerId: this.id, model: this.defaultModel };
+  }
+}
+
+const silentLogger = { log: () => {}, error: () => {} };
+
+let jobs: JobService;
+let generations: GenerationService;
+let entities: EntityService;
+let providers: AiProviderRegistry;
+let project: Project;
+
+beforeEach(async () => {
+  const deps = { clock: systemClock, ids: uuidIdGenerator };
+  const projectRepo = new InMemoryProjectRepository();
+  const entityRepo = new InMemoryEntityRepository();
+  const relationshipRepo = new InMemoryEntityRelationshipRepository();
+  const assetRepo = new InMemoryAssetRepository();
+
+  entities = new EntityService(entityRepo, projectRepo, deps);
+  jobs = new JobService(
+    new InMemoryJobRepository(),
+    projectRepo,
+    new InMemoryJobQueue(),
+    new InMemoryJobEvents(),
+    deps,
+  );
+  generations = new GenerationService(
+    new InMemoryGenerationRepository(),
+    projectRepo,
+    entityRepo,
+    assetRepo,
+    new LineageService(entities, new EntityRelationshipService(relationshipRepo, entityRepo, deps)),
+    deps,
+  );
+  providers = new AiProviderRegistry();
+
+  project = await projectRepo.insert(createProject({ name: 'Deep Fathom' }, deps));
+});
+
+/** Records a generation and queues it, the state the API leaves behind. */
+async function queued(
+  input: { prompt?: string; parameters?: Record<string, unknown>; inputEntityIds?: string[] } = {},
+): Promise<{ generation: Generation; job: Job }> {
+  const generation = await generations.record(project.id, {
+    capability: 'text.generate',
+    prompt: input.prompt ?? 'name three drowned cathedrals',
+    parameters: input.parameters,
+    inputEntityIds: input.inputEntityIds,
+  });
+  const job = await jobs.enqueue(project.id, {
+    kind: 'generation',
+    targetId: generation.id,
+    totalSteps: GENERATION_JOB_STEPS.length,
+  });
+
+  return { generation, job };
+}
+
+function delivery(job: Job, overrides: Partial<JobDelivery> = {}): JobDelivery {
+  return {
+    jobId: job.id,
+    projectId: job.projectId,
+    kind: 'generation',
+    attempt: 1,
+    willRetry: false,
+    ...overrides,
+  };
+}
+
+const handle = () =>
+  createGenerationJobHandler({ jobs, generations, providers, logger: silentLogger });
+
+describe('running a generation job', () => {
+  beforeEach(() => {
+    providers.register(new EchoAiProvider(['text.generate']));
+  });
+
+  it('completes the job and the generation record it was queued for', async () => {
+    const { generation, job } = await queued();
+
+    await handle()(delivery(job));
+
+    await expect(jobs.getById(project.id, job.id)).resolves.toMatchObject({
+      status: 'complete',
+      progress: { completed: 3, total: 3, step: null },
+    });
+    await expect(generations.getById(project.id, generation.id)).resolves.toMatchObject({
+      status: 'complete',
+      provider: 'echo',
+      model: 'echo-1',
+    });
+  });
+
+  it('uses the model the request named over the provider default', async () => {
+    const { generation, job } = await queued({ parameters: { model: 'echo-preview' } });
+
+    await handle()(delivery(job));
+
+    await expect(generations.getById(project.id, generation.id)).resolves.toMatchObject({
+      model: 'echo-preview',
+    });
+  });
+
+  it('does nothing for a job that was cancelled before it was picked up', async () => {
+    const { generation, job } = await queued();
+    await jobs.cancel(project.id, job.id);
+
+    await handle()(delivery(job));
+
+    await expect(generations.getById(project.id, generation.id)).resolves.toMatchObject({
+      status: 'queued',
+    });
+  });
+
+  it('fails the job when no provider serves the capability', async () => {
+    const generation = await generations.record(project.id, {
+      capability: 'image.generate',
+      prompt: 'a drowned cathedral',
+    });
+    const job = await jobs.enqueue(project.id, {
+      kind: 'generation',
+      targetId: generation.id,
+      totalSteps: GENERATION_JOB_STEPS.length,
+    });
+
+    await expect(handle()(delivery(job))).rejects.toThrow();
+
+    await expect(jobs.getById(project.id, job.id)).resolves.toMatchObject({ status: 'failed' });
+  });
+});
+
+describe('cancelling work in flight', () => {
+  it('stops at the next step and leaves the queue alone', async () => {
+    const { generation, job } = await queued();
+    // A provider call is where a cancellation lands in practice.
+    providers.register(
+      new (class extends BaseAiProvider {
+        readonly id = 'slow';
+        readonly capabilities: readonly AiCapability[] = ['text.generate'];
+        readonly defaultModel = 'slow-1';
+        async execute(request: AiRequest): Promise<AiResult> {
+          await generations.cancel(project.id, generation.id);
+          await jobs.cancel(project.id, job.id);
+          return { capability: request.capability, providerId: this.id, model: this.defaultModel };
+        }
+      })(),
+    );
+
+    // Resolves rather than throwing: a cancelled job must not be retried.
+    await expect(handle()(delivery(job))).resolves.toBeUndefined();
+
+    await expect(jobs.getById(project.id, job.id)).resolves.toMatchObject({
+      status: 'cancelled',
+      progress: { completed: 1, total: 3 },
+    });
+    await expect(generations.getById(project.id, generation.id)).resolves.toMatchObject({
+      status: 'cancelled',
+    });
+  });
+});
+
+describe('failure and retry', () => {
+  it('sends the job back to the queue and leaves the generation running', async () => {
+    providers.register(new FlakyProvider());
+    const { generation, job } = await queued();
+
+    await expect(handle()(delivery(job, { willRetry: true }))).rejects.toThrow(
+      'provider unavailable',
+    );
+
+    await expect(jobs.getById(project.id, job.id)).resolves.toMatchObject({
+      status: 'queued',
+      attempt: 2,
+      failure: { code: 'provider_error', message: 'provider unavailable' },
+    });
+    // Still running: the next attempt continues this generation, not a new one.
+    await expect(generations.getById(project.id, generation.id)).resolves.toMatchObject({
+      status: 'running',
+    });
+  });
+
+  it('finishes a generation the second attempt gets through', async () => {
+    const provider = new FlakyProvider(2);
+    providers.register(provider);
+    const { generation, job } = await queued();
+
+    await expect(handle()(delivery(job, { willRetry: true }))).rejects.toThrow();
+    await handle()(delivery(job, { attempt: 2, willRetry: false }));
+
+    expect(provider.calls).toBe(2);
+    await expect(jobs.getById(project.id, job.id)).resolves.toMatchObject({ status: 'complete' });
+    await expect(generations.getById(project.id, generation.id)).resolves.toMatchObject({
+      status: 'complete',
+    });
+  });
+
+  it('fails both records once the queue is out of attempts', async () => {
+    providers.register(new FlakyProvider());
+    const { generation, job } = await queued();
+
+    await expect(handle()(delivery(job, { attempt: 3, willRetry: false }))).rejects.toThrow();
+
+    await expect(jobs.getById(project.id, job.id)).resolves.toMatchObject({ status: 'failed' });
+    await expect(generations.getById(project.id, generation.id)).resolves.toMatchObject({
+      status: 'failed',
+      failure: { code: 'provider_error', message: 'provider unavailable' },
+    });
+  });
+});
+
+describe('context', () => {
+  it('hands the provider the entities the request named', async () => {
+    let seen: AiRequest | undefined;
+    providers.register(
+      new (class extends BaseAiProvider {
+        readonly id = 'recording';
+        readonly capabilities: readonly AiCapability[] = ['text.generate'];
+        readonly defaultModel = 'recording-1';
+        async execute(request: AiRequest): Promise<AiResult> {
+          seen = request;
+          return { capability: request.capability, providerId: this.id, model: this.defaultModel };
+        }
+      })(),
+    );
+    const pillar = await entities.create(project.id, {
+      type: 'design_pillar',
+      name: 'Oppressive scale',
+    });
+    const { job } = await queued({ inputEntityIds: [pillar.id] });
+
+    await handle()(delivery(job));
+
+    expect(seen?.context?.inputEntities).toMatchObject([{ id: pillar.id }]);
+  });
+});

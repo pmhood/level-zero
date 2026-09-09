@@ -4,6 +4,7 @@ import {
   DrizzleEntityRepository,
   DrizzleEntityVersionRepository,
   DrizzleGenerationRepository,
+  DrizzleJobRepository,
   DrizzleProjectRepository,
   DrizzlePrototypeVersionRepository,
   type DatabaseClient,
@@ -14,6 +15,7 @@ import {
   EntityService,
   EntityVersionService,
   GenerationService,
+  JobService,
   LineageService,
   ProjectService,
   PrototypeService,
@@ -25,6 +27,9 @@ import {
   type EntityVersionRepository,
   type EntityServiceDeps,
   type GenerationRepository,
+  type JobEvents,
+  type JobQueue,
+  type JobRepository,
   type ObjectStorageProvider,
   type ProjectRepository,
   type PrototypeVersionRepository,
@@ -34,6 +39,7 @@ import { APP_FILTER } from '@nestjs/core';
 
 import { DomainExceptionFilter } from '../common/domain-exception.filter';
 import { DATABASE_CLIENT } from '../infrastructure/database.module';
+import { JOB_EVENTS, JOB_QUEUE } from '../infrastructure/queue.module';
 import { OBJECT_STORAGE } from '../infrastructure/storage.module';
 
 export const PROJECT_REPOSITORY = Symbol('PROJECT_REPOSITORY');
@@ -43,6 +49,7 @@ export const VERSION_REPOSITORY = Symbol('VERSION_REPOSITORY');
 export const ASSET_REPOSITORY = Symbol('ASSET_REPOSITORY');
 export const GENERATION_REPOSITORY = Symbol('GENERATION_REPOSITORY');
 export const PROTOTYPE_VERSION_REPOSITORY = Symbol('PROTOTYPE_VERSION_REPOSITORY');
+export const JOB_REPOSITORY = Symbol('JOB_REPOSITORY');
 export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
 
 /**
@@ -189,6 +196,22 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
       ): PrototypeService =>
         new PrototypeService(prototypeVersions, entities, versions, assets, deps),
     },
+    {
+      provide: JOB_REPOSITORY,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: DatabaseClient): JobRepository => new DrizzleJobRepository(client.db),
+    },
+    {
+      provide: JobService,
+      inject: [JOB_REPOSITORY, PROJECT_REPOSITORY, JOB_QUEUE, JOB_EVENTS, DOMAIN_DEPS],
+      useFactory: (
+        jobs: JobRepository,
+        projects: ProjectRepository,
+        queue: JobQueue,
+        events: JobEvents,
+        deps: EntityServiceDeps,
+      ): JobService => new JobService(jobs, projects, queue, events, deps),
+    },
     { provide: APP_FILTER, useClass: DomainExceptionFilter },
   ],
   exports: [
@@ -200,6 +223,7 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     AssetService,
     GenerationService,
     PrototypeService,
+    JobService,
     PROJECT_REPOSITORY,
     ENTITY_REPOSITORY,
     RELATIONSHIP_REPOSITORY,
@@ -207,6 +231,7 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     ASSET_REPOSITORY,
     GENERATION_REPOSITORY,
     PROTOTYPE_VERSION_REPOSITORY,
+    JOB_REPOSITORY,
     DOMAIN_DEPS,
   ],
 })

@@ -199,6 +199,7 @@ export {
   type GenerationFailure,
   type GenerationStatus,
 } from './generation/generation';
+export { GENERATION_JOB_STEPS } from './generation/generation-job';
 export {
   type GenerationListFilter,
   type GenerationPage,
@@ -245,3 +246,36 @@ export {
   type PrototypeMemberInput,
   type PrototypeServiceDeps,
 } from './prototype/prototype-service';
+
+export {
+  ACTIVE_JOB_STATUSES,
+  DEFAULT_JOB_FAILURE_CODE,
+  DEFAULT_JOB_MAX_ATTEMPTS,
+  JOB_KINDS,
+  JOB_STATUSES,
+  MAX_JOB_ATTEMPTS,
+  MAX_JOB_FAILURE_MESSAGE_LENGTH,
+  MAX_JOB_STEPS,
+  MAX_JOB_STEP_LENGTH,
+  advanceJob,
+  cancelJob,
+  createJob,
+  failJob,
+  isJobActive,
+  reportJobProgress,
+  retryJob,
+  type AdvanceJobInput,
+  type CreateJobInput,
+  type FailJobInput,
+  type Job,
+  type JobFactoryDeps,
+  type JobFailure,
+  type JobKind,
+  type JobProgress,
+  type JobProgressInput,
+  type JobStatus,
+} from './job/job';
+export { type JobListFilter, type JobPage, type JobRepository } from './job/job-repository';
+export { type JobQueue } from './job/job-queue';
+export { type JobEvents, type JobSubscription } from './job/job-events';
+export { JobService, type EnqueueJobInput, type JobServiceDeps } from './job/job-service';

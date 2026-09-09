@@ -3,6 +3,7 @@ import {
   EntityRelationshipService,
   EntityService,
   GenerationService,
+  JobService,
   LineageService,
   createProject,
   fixedClock,
@@ -16,6 +17,9 @@ import {
   InMemoryEntityRelationshipRepository,
   InMemoryEntityRepository,
   InMemoryGenerationRepository,
+  InMemoryJobEvents,
+  InMemoryJobQueue,
+  InMemoryJobRepository,
   InMemoryObjectStorageProvider,
   InMemoryProjectRepository,
 } from '@level-zero/domain/testing';
@@ -33,6 +37,8 @@ const clock = fixedClock('2026-03-01T09:00:00.000Z');
 let app: INestApplication;
 let entityService: EntityService;
 let assetService: AssetService;
+let jobService: JobService;
+let queue: InMemoryJobQueue;
 let project: Project;
 let otherProject: Project;
 
@@ -54,10 +60,20 @@ beforeEach(async () => {
     deps,
   );
 
+  queue = new InMemoryJobQueue();
+  jobService = new JobService(
+    new InMemoryJobRepository(),
+    projects,
+    queue,
+    new InMemoryJobEvents(),
+    deps,
+  );
+
   const moduleRef = await Test.createTestingModule({
     controllers: [GenerationsController],
     providers: [
       { provide: GenerationService, useValue: generationService },
+      { provide: JobService, useValue: jobService },
       { provide: APP_FILTER, useClass: DomainExceptionFilter },
     ],
   }).compile();
@@ -129,6 +145,24 @@ describe('recording a generation', () => {
       provider: null,
       model: null,
     });
+  });
+
+  it('queues the work and returns without waiting for a provider', async () => {
+    const response = await http()
+      .post(generationsUrl())
+      .send({ capability: 'image.generate', prompt })
+      .expect(201);
+
+    const jobs = await jobService.listByProject(project.id, {
+      kind: 'generation',
+      targetId: response.body.id,
+    });
+
+    expect(jobs.items[0]).toMatchObject({
+      status: 'queued',
+      progress: { completed: 0, total: 3, step: null },
+    });
+    expect(queue.enqueued.map((job) => job.targetId)).toEqual([response.body.id]);
   });
 
   it('rejects a capability no provider could serve', async () => {
@@ -204,6 +238,19 @@ describe('moving a generation forward', () => {
       .expect(201);
 
     expect(cancelled.body).toMatchObject({ status: 'cancelled', failure: null });
+  });
+
+  it('cancels the job running a generation, so the queue stops carrying it', async () => {
+    const created = await http()
+      .post(generationsUrl())
+      .send({ capability: 'image.generate', prompt })
+      .expect(201);
+
+    await http().post(`${generationsUrl()}/${created.body.id}/cancel`).expect(201);
+
+    const jobs = await jobService.listByProject(project.id, { targetId: created.body.id });
+    expect(jobs.items[0]?.status).toBe('cancelled');
+    expect(queue.removed.map((job) => job.targetId)).toEqual([created.body.id]);
   });
 });
 

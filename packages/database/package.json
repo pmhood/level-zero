@@ -28,6 +28,7 @@
   "dependencies": {
     "@level-zero/config": "workspace:*",
     "@level-zero/domain": "workspace:*",
+    "bullmq": "^6.3.4",
     "drizzle-orm": "^0.45.2",
     "ioredis": "^5.11.1",
     "pg": "^8.23.0"

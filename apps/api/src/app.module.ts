@@ -7,8 +7,10 @@ import { EntitiesModule } from './entities/entities.module';
 import { GenerationsModule } from './generations/generations.module';
 import { HealthModule } from './health/health.module';
 import { DatabaseModule } from './infrastructure/database.module';
+import { QueueModule } from './infrastructure/queue.module';
 import { RedisModule } from './infrastructure/redis.module';
 import { StorageModule } from './infrastructure/storage.module';
+import { JobsModule } from './jobs/jobs.module';
 import { ProjectsModule } from './projects/projects.module';
 import { PrototypesModule } from './prototypes/prototypes.module';
 import { RelationshipsModule } from './relationships/relationships.module';
@@ -26,6 +28,7 @@ import { VersionsModule } from './versions/versions.module';
     ApiConfigModule,
     DatabaseModule,
     RedisModule,
+    QueueModule,
     StorageModule,
     DomainModule,
     HealthModule,
@@ -36,6 +39,7 @@ import { VersionsModule } from './versions/versions.module';
     AssetsModule,
     GenerationsModule,
     PrototypesModule,
+    JobsModule,
   ],
 })
 export class AppModule {}

@@ -30,8 +30,9 @@ export interface WorkerRuntime {
 /**
  * The worker's process shell: a health server plus an orderly shutdown path.
  *
- * Queue consumers (issue #7) register here so that draining them happens before
- * the process exits, and so that an unhealthy worker is visible to operators.
+ * The queue consumer is closed through `onShutdown`, so jobs already in flight
+ * finish before the process exits and an unhealthy worker is visible to
+ * operators.
  */
 export function createWorkerRuntime(options: WorkerRuntimeOptions): WorkerRuntime {
   const logger = options.logger ?? {

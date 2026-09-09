@@ -4,6 +4,7 @@ import {
   type EntityRelationship,
   type EntityVersion,
   type Generation,
+  type Job,
   type Project,
   type PrototypeVersion,
 } from '@level-zero/domain';
@@ -16,6 +17,7 @@ import {
   type NewEntityRelationshipRow,
 } from '../schema/entity-relationships';
 import { type EntityVersionRow, type NewEntityVersionRow } from '../schema/entity-versions';
+import { type JobRow, type NewJobRow } from '../schema/jobs';
 import { type NewProjectRow, type ProjectRow } from '../schema/projects';
 import {
   type NewPrototypeEntityVersionRow,
@@ -235,6 +237,48 @@ export function toGenerationRow(generation: Generation): NewGenerationRow {
     startedAt: generation.startedAt,
     completedAt: generation.completedAt,
     createdBy: generation.createdBy,
+  };
+}
+
+export function toJob(row: JobRow): Job {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    kind: row.kind,
+    targetId: row.targetId,
+    status: row.status,
+    progress: {
+      completed: row.progressCompleted,
+      total: row.progressTotal,
+      step: row.progressStep,
+    },
+    attempt: row.attempt,
+    maxAttempts: row.maxAttempts,
+    failure: row.failure,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    startedAt: row.startedAt,
+    completedAt: row.completedAt,
+  };
+}
+
+export function toJobRow(job: Job): NewJobRow {
+  return {
+    id: job.id,
+    projectId: job.projectId,
+    kind: job.kind,
+    targetId: job.targetId,
+    status: job.status,
+    progressCompleted: job.progress.completed,
+    progressTotal: job.progress.total,
+    progressStep: job.progress.step,
+    attempt: job.attempt,
+    maxAttempts: job.maxAttempts,
+    failure: job.failure,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+    startedAt: job.startedAt,
+    completedAt: job.completedAt,
   };
 }
 

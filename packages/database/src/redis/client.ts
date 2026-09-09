@@ -4,7 +4,7 @@ export interface RedisClientOptions {
   connectionUrl: string;
   /** Prefix applied to every key, so apps sharing one Redis stay isolated. */
   keyPrefix?: string;
-  /** BullMQ (issue #7) requires this to be null; keep the default unless you know better. */
+  /** A blocking consumer needs this to be null; keep the default unless you know better. */
   maxRetriesPerRequest?: number | null;
   connectTimeoutMs?: number;
 }

@@ -10,6 +10,7 @@ import { BaseAiProvider, type AiRequest, type AiResult } from './provider';
 export class EchoAiProvider extends BaseAiProvider {
   readonly id: string;
   readonly capabilities: readonly AiCapability[];
+  readonly defaultModel = 'echo-1';
 
   constructor(capabilities: readonly AiCapability[] = ['text.generate'], id = 'echo') {
     super();
@@ -21,7 +22,7 @@ export class EchoAiProvider extends BaseAiProvider {
     return {
       capability: request.capability,
       providerId: this.id,
-      model: 'echo-1',
+      model: this.defaultModel,
       output: request.prompt,
       data: { parameters: request.parameters ?? {} },
     };
