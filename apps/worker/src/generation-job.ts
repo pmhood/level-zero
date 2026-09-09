@@ -9,6 +9,7 @@ import {
 import { type JobDelivery } from '@level-zero/database';
 import {
   GENERATION_JOB_STEPS,
+  NotFoundError,
   ValidationError,
   isDomainError,
   isJobActive,
@@ -99,21 +100,38 @@ async function runGeneration(deps: GenerationJobDeps, job: Job): Promise<void> {
     step: GENERATING_STEP,
   });
 
-  const provider = deps.providers.resolve(capability);
+  // Preference order: the first candidate to support the capability wins, and
+  // later ones stand by as fallbacks if it fails.
+  const candidates = deps.providers.candidatesFor(capability);
+  const firstChoice = candidates[0];
+  if (!firstChoice) {
+    throw new NotFoundError('AI provider for capability', capability);
+  }
+
   // A second attempt re-enters a generation that was already dispatched.
   if (generation.status === 'queued') {
     await deps.generations.dispatch(projectId, generation.id, {
-      provider: provider.id,
-      model: requestedModel(generation) ?? provider.defaultModel,
+      provider: firstChoice.id,
+      model: requestedModel(generation) ?? firstChoice.defaultModel,
     });
   }
 
-  const result = await provider.execute({
+  const result = await deps.providers.execute({
     capability,
     prompt: generation.prompt,
     parameters: generation.parameters,
     context,
   });
+
+  // `execute` may have fallen through to a later candidate; correct the
+  // record so it never names a provider that did not produce the result.
+  const actual = candidates.find((candidate) => candidate.id === result.providerId) ?? firstChoice;
+  if (actual.id !== firstChoice.id) {
+    await deps.generations.redispatch(projectId, generation.id, {
+      provider: actual.id,
+      model: requestedModel(generation) ?? actual.defaultModel,
+    });
+  }
 
   await requireNotCancelled(deps, projectId, jobId);
   await deps.jobs.advance(projectId, jobId, {

@@ -190,6 +190,7 @@ export {
   createGeneration,
   dispatchGeneration,
   failGeneration,
+  redispatchGeneration,
   type CompleteGenerationInput,
   type CreateGenerationInput,
   type DispatchGenerationInput,
@@ -198,6 +199,7 @@ export {
   type GenerationFactoryDeps,
   type GenerationFailure,
   type GenerationStatus,
+  type RedispatchGenerationInput,
 } from './generation/generation';
 export { GENERATION_JOB_STEPS } from './generation/generation-job';
 export {

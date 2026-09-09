@@ -156,6 +156,28 @@ describe('a successful generation', () => {
   });
 });
 
+describe('redispatch', () => {
+  it('corrects the provider and model on an already-running generation', async () => {
+    const generation = await generations.record(project.id, request());
+    await generations.dispatch(project.id, generation.id, { provider: 'primary', model: 'p-1' });
+
+    const redispatched = await generations.redispatch(project.id, generation.id, {
+      provider: 'backup',
+      model: 'b-1',
+    });
+
+    expect(redispatched).toMatchObject({ status: 'running', provider: 'backup', model: 'b-1' });
+  });
+
+  it('refuses to redispatch a generation that was never dispatched', async () => {
+    const generation = await generations.record(project.id, request());
+
+    await expect(
+      generations.redispatch(project.id, generation.id, { provider: 'backup', model: 'b-1' }),
+    ).rejects.toThrow(ConflictError);
+  });
+});
+
 describe('generation failure', () => {
   it('keeps the diagnostics and the original request side by side', async () => {
     const generation = await generations.record(project.id, request({ parameters: { steps: 30 } }));
