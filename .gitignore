@@ -29,6 +29,11 @@ coverage/
 npm-debug.log*
 pnpm-debug.log*
 
+# claude code local state (agent worktrees, session scratch)
+.claude/*
+# ...but keep the repo-level overlay that /do and /do-next read
+!.claude/do-overlay.md
+
 # editors / os
 .DS_Store
 .idea/
