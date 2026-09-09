@@ -9,6 +9,7 @@ export {
   InMemoryJobEvents,
   InMemoryJobQueue,
   InMemoryJobRepository,
+  InMemoryMoodboardRepository,
   InMemoryObjectStorageProvider,
   InMemoryProjectRepository,
   InMemoryPrototypeVersionRepository,

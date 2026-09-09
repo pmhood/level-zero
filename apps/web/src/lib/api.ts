@@ -16,6 +16,11 @@ import type {
   EntityStatus,
   EntityType,
   EntityVersion,
+  Moodboard,
+  MoodboardConnector,
+  MoodboardConnectorPromotion,
+  MoodboardNode,
+  MoodboardNodePatch,
   Project,
   ProjectPage,
   ProjectStatus,
@@ -380,6 +385,102 @@ export function listAssets(projectId: string, params: ListAssetsParams = {}): Pr
 /** The asset's bytes, streamed by the API — usable directly as an `<img src>`. */
 export function assetContentUrl(projectId: string, assetId: string): string {
   return `${env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/assets/${assetId}/content`;
+}
+
+// --- Moodboards -----------------------------------------------------------
+
+/**
+ * A board and everything on it.
+ *
+ * The board is a `moodboard` entity, so it is created, renamed and archived
+ * through the entities endpoints above. These calls only ever touch layout —
+ * placing an asset on a board never copies it, and removing it never archives
+ * it.
+ */
+export function getMoodboard(projectId: string, boardId: string): Promise<Moodboard> {
+  return apiFetch(`/api/projects/${projectId}/moodboards/${boardId}`);
+}
+
+export interface AddMoodboardNodeInput {
+  type: MoodboardNode['type'];
+  assetId?: string;
+  entityId?: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  rotation?: number;
+  zOrder?: number;
+  groupId?: string | null;
+  locked?: boolean;
+  data?: Record<string, unknown>;
+}
+
+export function addMoodboardNode(
+  projectId: string,
+  boardId: string,
+  input: AddMoodboardNodeInput,
+): Promise<MoodboardNode> {
+  return post(`/api/projects/${projectId}/moodboards/${boardId}/nodes`, input);
+}
+
+/** One request for one gesture: a drag moves the whole selection. */
+export function updateMoodboardNodes(
+  projectId: string,
+  boardId: string,
+  nodes: readonly MoodboardNodePatch[],
+): Promise<MoodboardNode[]> {
+  return patch(`/api/projects/${projectId}/moodboards/${boardId}/nodes`, { nodes });
+}
+
+export function duplicateMoodboardNodes(
+  projectId: string,
+  boardId: string,
+  nodeIds: readonly string[],
+): Promise<MoodboardNode[]> {
+  return post(`/api/projects/${projectId}/moodboards/${boardId}/nodes/duplicate`, { nodeIds });
+}
+
+/** Removes the placement. The asset or entity it pointed at is untouched. */
+export function removeMoodboardNode(
+  projectId: string,
+  boardId: string,
+  nodeId: string,
+): Promise<void> {
+  return apiFetch(`/api/projects/${projectId}/moodboards/${boardId}/nodes/${nodeId}`, {
+    method: 'DELETE',
+  });
+}
+
+export function connectMoodboardNodes(
+  projectId: string,
+  boardId: string,
+  input: { fromNodeId: string; toNodeId: string; label?: string },
+): Promise<MoodboardConnector> {
+  return post(`/api/projects/${projectId}/moodboards/${boardId}/connectors`, input);
+}
+
+export function deleteMoodboardConnector(
+  projectId: string,
+  boardId: string,
+  connectorId: string,
+): Promise<void> {
+  return apiFetch(`/api/projects/${projectId}/moodboards/${boardId}/connectors/${connectorId}`, {
+    method: 'DELETE',
+  });
+}
+
+/** The one call that turns a line on a board into an edge in the project graph. */
+export function promoteMoodboardConnector(
+  projectId: string,
+  boardId: string,
+  connectorId: string,
+  relation: RelationType,
+): Promise<MoodboardConnectorPromotion> {
+  return post(
+    `/api/projects/${projectId}/moodboards/${boardId}/connectors/${connectorId}/promote`,
+    { relation },
+  );
 }
 
 // --- Search ---------------------------------------------------------------
