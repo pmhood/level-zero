@@ -1,9 +1,15 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Button } from './button';
 import { cn } from './cn';
+import { EmptyState } from './empty-state';
+import { EntityCard } from './entity-card';
+import { PromoteAction } from './promote-action';
 import { StatusBadge } from './status-badge';
+import { Tabs } from './tabs';
+import { Tag } from './tag';
 
 describe('cn', () => {
   it('joins conditional class names', () => {
@@ -45,14 +51,137 @@ describe('Button', () => {
     const classes = screen.getByRole('button').className.split(' ');
     expect(classes).toContain('bg-red-500');
     expect(classes).not.toContain('bg-primary');
-    expect(classes).toContain('hover:bg-primary/90');
+    expect(classes).toContain('hover:bg-primary-hover');
+  });
+
+  it('renders the ai and danger variants reserved for generative and destructive actions', () => {
+    render(
+      <>
+        <Button variant="ai">Explore variations</Button>
+        <Button variant="danger">Archive</Button>
+      </>,
+    );
+
+    expect(screen.getByRole('button', { name: 'Explore variations' }).className).toContain(
+      'text-ai-foreground',
+    );
+    expect(screen.getByRole('button', { name: 'Archive' }).className).toContain('text-error');
   });
 });
 
 describe('StatusBadge', () => {
   it('exposes the tone for styling and assertions', () => {
-    render(<StatusBadge tone="down">redis</StatusBadge>);
+    render(<StatusBadge tone="error">redis</StatusBadge>);
 
-    expect(screen.getByText('redis').dataset.tone).toBe('down');
+    expect(screen.getByText('redis').dataset.tone).toBe('error');
+  });
+});
+
+describe('Tag', () => {
+  it('renders a remove button that calls onRemove', async () => {
+    const onRemove = vi.fn();
+    render(<Tag onRemove={onRemove}>Sci-Fi</Tag>);
+
+    screen.getByRole('button', { name: 'Remove tag Sci-Fi' }).click();
+
+    expect(onRemove).toHaveBeenCalledOnce();
+  });
+
+  it('omits the remove button when read-only', () => {
+    render(<Tag>Sci-Fi</Tag>);
+
+    expect(screen.queryByRole('button')).toBeNull();
+  });
+});
+
+describe('Tabs', () => {
+  function ControlledTabs() {
+    const [value, setValue] = useState('ideas');
+    return (
+      <Tabs
+        value={value}
+        onChange={setValue}
+        items={[
+          { value: 'ideas', label: 'Ideas' },
+          { value: 'archived', label: 'Archived' },
+        ]}
+      />
+    );
+  }
+
+  it('marks the active tab and switches on click', () => {
+    render(<ControlledTabs />);
+
+    expect(screen.getByRole('tab', { name: 'Ideas' }).getAttribute('aria-selected')).toBe('true');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Archived' }));
+
+    expect(screen.getByRole('tab', { name: 'Archived' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    expect(screen.getByRole('tab', { name: 'Ideas' }).getAttribute('aria-selected')).toBe('false');
+  });
+});
+
+describe('EmptyState', () => {
+  it('renders a title, description and actions', () => {
+    render(
+      <EmptyState
+        title="No ideas yet"
+        description="Capture a rough thought to get started."
+        actions={<button>New idea</button>}
+      />,
+    );
+
+    expect(screen.getByText('No ideas yet')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'New idea' })).not.toBeNull();
+  });
+});
+
+describe('EntityCard', () => {
+  it('calls onClick and reflects the selected state', () => {
+    const onClick = vi.fn();
+    render(
+      <EntityCard
+        name="Scavenger's Drift"
+        typeLabel="Idea"
+        status={{ tone: 'neutral', label: 'Draft' }}
+        description="A crew salvages derelict ships in a dying system."
+        tags={['Sci-Fi', 'Survival']}
+        selected
+        onClick={onClick}
+      />,
+    );
+
+    const card = screen.getByRole('button', { name: /Scavenger's Drift/ });
+    card.click();
+
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(card.className).toContain('border-primary');
+    expect(screen.getByText('Draft')).not.toBeNull();
+    expect(screen.getByText('Sci-Fi')).not.toBeNull();
+  });
+});
+
+describe('PromoteAction', () => {
+  it('invokes onPromote and shows a pending label', () => {
+    const onPromote = vi.fn();
+    const { rerender } = render(
+      <PromoteAction from="idea" to="mechanic" label="Turn into Mechanic" onPromote={onPromote} />,
+    );
+
+    screen.getByRole('button', { name: 'Turn into Mechanic' }).click();
+    expect(onPromote).toHaveBeenCalledOnce();
+
+    rerender(
+      <PromoteAction
+        from="idea"
+        to="mechanic"
+        label="Turn into Mechanic"
+        pending
+        onPromote={onPromote}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Promoting…' })).toHaveProperty('disabled', true);
   });
 });

@@ -1,29 +1,203 @@
+import type {
+  CreateEntityInput,
+  CreateProjectInput,
+  Entity,
+  EntityNeighborhood,
+  EntityPage,
+  EntityStatus,
+  EntityType,
+  Project,
+  ProjectPage,
+  ProjectStatus,
+  PromoteEntityInput,
+  PromotionResult,
+  RelationshipDirection,
+  RelationType,
+  UpdateEntityInput,
+  UpdateProjectInput,
+} from '@level-zero/domain';
+
 import { env } from './env';
 import type { HealthReport } from './health';
+
+/** Shape of an error response written by `DomainExceptionFilter`. */
+interface ApiErrorBody {
+  statusCode?: number;
+  error?: string;
+  message?: string;
+  details?: Record<string, unknown>;
+}
 
 export class ApiRequestError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly code?: string,
+    readonly details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = 'ApiRequestError';
   }
 }
 
+/** Joins query params, dropping `undefined`/empty values and comma-joining arrays. */
+function toQueryString(params: object): string {
+  const search = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params) as [string, unknown][]) {
+    if (value === undefined || value === null || value === '') continue;
+    if (Array.isArray(value)) {
+      if (value.length === 0) continue;
+      search.set(key, value.join(','));
+    } else {
+      search.set(key, String(value));
+    }
+  }
+
+  const query = search.toString();
+  return query ? `?${query}` : '';
+}
+
+async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${env.NEXT_PUBLIC_API_URL}${path}`, {
+    cache: 'no-store',
+    ...init,
+    headers: {
+      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+      ...init.headers,
+    },
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch((): ApiErrorBody => ({}));
+    throw new ApiRequestError(
+      body.message ?? `Request failed (${response.status})`,
+      response.status,
+      body.error,
+      body.details,
+    );
+  }
+
+  if (response.status === 204) return undefined as T;
+  return (await response.json()) as T;
+}
+
+function post<T>(path: string, body?: unknown): Promise<T> {
+  return apiFetch<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined });
+}
+
+function patch<T>(path: string, body: unknown): Promise<T> {
+  return apiFetch<T>(path, { method: 'PATCH', body: JSON.stringify(body) });
+}
+
 /**
  * Reads the API's health summary. The summary endpoint answers 200 even when a
  * dependency is down, so the panel can show *which* one is broken.
  */
-export async function fetchHealth(signal?: AbortSignal): Promise<HealthReport> {
-  const response = await fetch(`${env.NEXT_PUBLIC_API_URL}/api/health`, {
-    cache: 'no-store',
-    ...(signal ? { signal } : {}),
-  });
+export function fetchHealth(signal?: AbortSignal): Promise<HealthReport> {
+  return apiFetch('/api/health', signal ? { signal } : {});
+}
 
-  if (!response.ok) {
-    throw new ApiRequestError(`API health request failed (${response.status})`, response.status);
-  }
+// --- Projects ----------------------------------------------------------
 
-  return (await response.json()) as HealthReport;
+export interface ListProjectsParams {
+  status?: ProjectStatus[];
+  search?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export function listProjects(params: ListProjectsParams = {}): Promise<ProjectPage> {
+  return apiFetch(`/api/projects${toQueryString(params)}`);
+}
+
+export function getProject(projectId: string): Promise<Project> {
+  return apiFetch(`/api/projects/${projectId}`);
+}
+
+export function createProject(input: CreateProjectInput): Promise<Project> {
+  return post('/api/projects', input);
+}
+
+export function updateProject(projectId: string, patchInput: UpdateProjectInput): Promise<Project> {
+  return patch(`/api/projects/${projectId}`, patchInput);
+}
+
+export function archiveProject(projectId: string): Promise<Project> {
+  return post(`/api/projects/${projectId}/archive`);
+}
+
+export function restoreProject(projectId: string): Promise<Project> {
+  return post(`/api/projects/${projectId}/restore`);
+}
+
+// --- Entities ------------------------------------------------------------
+
+export interface ListEntitiesParams {
+  type?: EntityType[];
+  status?: EntityStatus[];
+  tag?: string[];
+  search?: string;
+  includeArchived?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export function listEntities(
+  projectId: string,
+  params: ListEntitiesParams = {},
+): Promise<EntityPage> {
+  return apiFetch(`/api/projects/${projectId}/entities${toQueryString(params)}`);
+}
+
+export function getEntity(projectId: string, entityId: string): Promise<Entity> {
+  return apiFetch(`/api/projects/${projectId}/entities/${entityId}`);
+}
+
+export function createEntity(
+  projectId: string,
+  input: Omit<CreateEntityInput, 'projectId'>,
+): Promise<Entity> {
+  return post(`/api/projects/${projectId}/entities`, input);
+}
+
+export function updateEntity(
+  projectId: string,
+  entityId: string,
+  patchInput: UpdateEntityInput,
+): Promise<Entity> {
+  return patch(`/api/projects/${projectId}/entities/${entityId}`, patchInput);
+}
+
+export function archiveEntity(projectId: string, entityId: string): Promise<Entity> {
+  return post(`/api/projects/${projectId}/entities/${entityId}/archive`);
+}
+
+export function restoreEntity(projectId: string, entityId: string): Promise<Entity> {
+  return post(`/api/projects/${projectId}/entities/${entityId}/restore`);
+}
+
+// --- Relationships & lineage ----------------------------------------------
+
+export interface NeighborhoodParams {
+  direction?: RelationshipDirection;
+  relation?: RelationType[];
+}
+
+export function getEntityNeighborhood(
+  projectId: string,
+  entityId: string,
+  params: NeighborhoodParams = {},
+): Promise<EntityNeighborhood> {
+  return apiFetch(
+    `/api/projects/${projectId}/entities/${entityId}/relationships${toQueryString(params)}`,
+  );
+}
+
+export function promoteEntity(
+  projectId: string,
+  entityId: string,
+  input: PromoteEntityInput,
+): Promise<PromotionResult> {
+  return post(`/api/projects/${projectId}/entities/${entityId}/promote`, input);
 }
