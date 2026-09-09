@@ -14,6 +14,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 
+import { CharactersIcon } from '@/features/characters/character-icons';
+
 /**
  * `AppSidebar.linkComponent` takes a plain `{ href: string }` component so
  * `packages/ui` stays framework-agnostic; Next's typed routes give `Link`
@@ -45,6 +47,7 @@ export function ProjectSidebar({
   const pathname = usePathname();
   const overviewHref = `/projects/${projectId}`;
   const ideaLabHref = `/projects/${projectId}/idea-lab`;
+  const charactersHref = `/projects/${projectId}/characters`;
   const mechanicsHref = `/projects/${projectId}/mechanics`;
   const gddHref = `/projects/${projectId}/gdd`;
   const searchHref = `/projects/${projectId}/search`;
@@ -63,6 +66,13 @@ export function ProjectSidebar({
       label: 'Idea Lab',
       icon: <IdeaLabIcon className="size-4" />,
       active: pathname?.startsWith(ideaLabHref) ?? false,
+    },
+    {
+      key: 'characters',
+      href: charactersHref,
+      label: 'Characters',
+      icon: <CharactersIcon className="size-4" />,
+      active: pathname?.startsWith(charactersHref) ?? false,
     },
     {
       key: 'mechanics',

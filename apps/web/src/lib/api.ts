@@ -1,4 +1,7 @@
 import type {
+  AssetKind,
+  AssetPage,
+  AssetStatus,
   CreateDocumentInput,
   CreateEntityInput,
   CreateProjectInput,
@@ -309,6 +312,31 @@ export function saveDocumentContent(
   content: DocumentContent,
 ): Promise<Document> {
   return put(`/api/projects/${projectId}/documents/${documentId}/content`, { content });
+}
+
+// --- Assets ---------------------------------------------------------------
+
+export interface ListAssetsParams {
+  kind?: AssetKind[];
+  status?: AssetStatus[];
+  search?: string;
+  includeArchived?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * The project's files. An asset is not an entity: a tool that shows one links
+ * to it through an `asset_reference` entity and the relationship graph, so
+ * nothing here creates or resolves those links.
+ */
+export function listAssets(projectId: string, params: ListAssetsParams = {}): Promise<AssetPage> {
+  return apiFetch(`/api/projects/${projectId}/assets${toQueryString(params)}`);
+}
+
+/** The asset's bytes, streamed by the API — usable directly as an `<img src>`. */
+export function assetContentUrl(projectId: string, assetId: string): string {
+  return `${env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/assets/${assetId}/content`;
 }
 
 // --- Search ---------------------------------------------------------------
