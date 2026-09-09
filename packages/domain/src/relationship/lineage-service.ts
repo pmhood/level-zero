@@ -2,6 +2,7 @@ import { type Entity, type EntityStatus } from '../entity/entity';
 import { type EntityService } from '../entity/entity-service';
 import { type EntityType } from '../entity/entity-type';
 import { ValidationError } from '../shared/errors';
+import { MAX_PAGE_SIZE } from '../shared/paging';
 import { type EntityRelationship } from './entity-relationship';
 import { type EntityRelationshipService } from './entity-relationship-service';
 
@@ -80,6 +81,10 @@ export class LineageService {
    *
    * Called by the generation pipeline (issues #6 and #8); the edges it writes
    * are ordinary `generated_from` relationships.
+   *
+   * Sources already recorded are skipped rather than rejected as duplicates:
+   * an entity regenerated from the same references twice has the same lineage
+   * both times, so the second call adds only what is new.
    */
   async recordGeneratedFrom(
     projectId: string,
@@ -87,7 +92,16 @@ export class LineageService {
     sourceEntityIds: readonly string[],
     metadata: Record<string, unknown> = {},
   ): Promise<EntityRelationship[]> {
-    const unique = [...new Set(sourceEntityIds)].filter((id) => id !== generatedEntityId);
+    const existing = await this.relationships.listForEntity(projectId, generatedEntityId, {
+      direction: 'outgoing',
+      relations: ['generated_from'],
+      limit: MAX_PAGE_SIZE,
+    });
+    const recorded = new Set(existing.items.map((edge) => edge.targetEntityId));
+
+    const unique = [...new Set(sourceEntityIds)].filter(
+      (id) => id !== generatedEntityId && !recorded.has(id),
+    );
 
     return this.relationships.linkMany(
       projectId,

@@ -3,10 +3,12 @@ import {
   type Entity,
   type EntityRelationship,
   type EntityVersion,
+  type Generation,
   type Project,
 } from '@level-zero/domain';
 
 import { type AssetRow, type NewAssetRow } from '../schema/assets';
+import { type GenerationRow, type NewGenerationRow } from '../schema/generations';
 import { type EntityRow, type NewEntityRow } from '../schema/entities';
 import {
   type EntityRelationshipRow,
@@ -176,6 +178,56 @@ export function toAssetRow(asset: Asset): NewAssetRow {
     updatedAt: asset.updatedAt,
     archivedAt: asset.archivedAt,
     createdBy: asset.createdBy,
+  };
+}
+
+export function toGeneration(row: GenerationRow): Generation {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    capability: row.capability,
+    provider: row.provider,
+    model: row.model,
+    prompt: row.prompt,
+    parameters: row.parameters,
+    status: row.status,
+    inputEntityIds: row.inputEntityIds,
+    inputAssetIds: row.inputAssetIds,
+    contextEntityIds: row.contextEntityIds,
+    outputAssetIds: row.outputAssetIds,
+    parentGenerationId: row.parentGenerationId,
+    seed: row.seed,
+    providerRequestId: row.providerRequestId,
+    failure: row.failure,
+    createdAt: row.createdAt,
+    startedAt: row.startedAt,
+    completedAt: row.completedAt,
+    createdBy: row.createdBy,
+  };
+}
+
+export function toGenerationRow(generation: Generation): NewGenerationRow {
+  return {
+    id: generation.id,
+    projectId: generation.projectId,
+    capability: generation.capability,
+    provider: generation.provider,
+    model: generation.model,
+    prompt: generation.prompt,
+    parameters: generation.parameters,
+    status: generation.status,
+    inputEntityIds: generation.inputEntityIds,
+    inputAssetIds: generation.inputAssetIds,
+    contextEntityIds: generation.contextEntityIds,
+    outputAssetIds: generation.outputAssetIds,
+    parentGenerationId: generation.parentGenerationId,
+    seed: generation.seed,
+    providerRequestId: generation.providerRequestId,
+    failure: generation.failure,
+    createdAt: generation.createdAt,
+    startedAt: generation.startedAt,
+    completedAt: generation.completedAt,
+    createdBy: generation.createdBy,
   };
 }
 

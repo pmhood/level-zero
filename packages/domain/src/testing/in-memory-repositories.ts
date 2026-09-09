@@ -15,6 +15,12 @@ import {
   type EntityPage,
   type EntityRepository,
 } from '../entity/entity-repository';
+import { type Generation } from '../generation/generation';
+import {
+  type GenerationListFilter,
+  type GenerationPage,
+  type GenerationRepository,
+} from '../generation/generation-repository';
 import { type Project } from '../project/project';
 import { type EntityRelationship } from '../relationship/entity-relationship';
 import {
@@ -380,5 +386,65 @@ export class InMemoryObjectStorageProvider implements ObjectStorageProvider {
 
   async delete(key: string): Promise<void> {
     this.objects.delete(key);
+  }
+}
+
+/** In-memory `GenerationRepository` for tests. Mirrors the Postgres adapter's filtering. */
+export class InMemoryGenerationRepository implements GenerationRepository {
+  private readonly rows = new Map<string, Generation>();
+
+  constructor(seed: readonly Generation[] = []) {
+    for (const generation of seed) this.rows.set(generation.id, structuredClone(generation));
+  }
+
+  async insert(generation: Generation): Promise<Generation> {
+    this.rows.set(generation.id, structuredClone(generation));
+    return structuredClone(generation);
+  }
+
+  async findById(projectId: string, generationId: string): Promise<Generation | null> {
+    const generation = this.rows.get(generationId);
+    // A mismatched project reads as missing, never as another project's row.
+    if (!generation || generation.projectId !== projectId) return null;
+    return structuredClone(generation);
+  }
+
+  async listByProject(projectId: string, filter: GenerationListFilter): Promise<GenerationPage> {
+    const matches = [...this.rows.values()]
+      .filter((generation) => generation.projectId === projectId)
+      .filter((generation) => !filter.statuses || filter.statuses.includes(generation.status))
+      .filter((generation) => !filter.capability || generation.capability === filter.capability)
+      .filter(
+        (generation) =>
+          !filter.parentGenerationId || generation.parentGenerationId === filter.parentGenerationId,
+      )
+      .filter(
+        (generation) =>
+          !filter.outputAssetId || generation.outputAssetIds.includes(filter.outputAssetId),
+      )
+      .filter(
+        (generation) =>
+          !filter.entityId ||
+          generation.inputEntityIds.includes(filter.entityId) ||
+          generation.contextEntityIds.includes(filter.entityId),
+      )
+      .sort(byNewest);
+
+    const offset = filter.offset ?? 0;
+    const limit = filter.limit ?? matches.length;
+
+    return {
+      items: matches.slice(offset, offset + limit).map((generation) => structuredClone(generation)),
+      total: matches.length,
+    };
+  }
+
+  async save(generation: Generation): Promise<Generation> {
+    const existing = this.rows.get(generation.id);
+    if (!existing || existing.projectId !== generation.projectId) {
+      throw new NotFoundError('Generation', generation.id);
+    }
+    this.rows.set(generation.id, structuredClone(generation));
+    return structuredClone(generation);
   }
 }
