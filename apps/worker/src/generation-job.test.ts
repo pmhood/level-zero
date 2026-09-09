@@ -2,12 +2,15 @@ import {
   AiProviderRegistry,
   BaseAiProvider,
   EchoAiProvider,
+  LocalImageProvider,
   type AiCapability,
   type AiRequest,
   type AiResult,
+  type ResolvedContext,
 } from '@level-zero/ai';
 import { type JobDelivery } from '@level-zero/database';
 import {
+  AssetService,
   EntityRelationshipService,
   EntityService,
   GENERATION_JOB_STEPS,
@@ -29,6 +32,7 @@ import {
   InMemoryJobEvents,
   InMemoryJobQueue,
   InMemoryJobRepository,
+  InMemoryObjectStorageProvider,
   InMemoryProjectRepository,
 } from '@level-zero/domain/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -58,6 +62,7 @@ const silentLogger = { log: () => {}, error: () => {} };
 let jobs: JobService;
 let generations: GenerationService;
 let entities: EntityService;
+let assets: AssetService;
 let providers: AiProviderRegistry;
 let project: Project;
 
@@ -69,6 +74,7 @@ beforeEach(async () => {
   const assetRepo = new InMemoryAssetRepository();
 
   entities = new EntityService(entityRepo, projectRepo, deps);
+  assets = new AssetService(assetRepo, projectRepo, new InMemoryObjectStorageProvider(), deps);
   jobs = new JobService(
     new InMemoryJobRepository(),
     projectRepo,
@@ -91,13 +97,20 @@ beforeEach(async () => {
 
 /** Records a generation and queues it, the state the API leaves behind. */
 async function queued(
-  input: { prompt?: string; parameters?: Record<string, unknown>; inputEntityIds?: string[] } = {},
+  input: {
+    capability?: string;
+    prompt?: string;
+    parameters?: Record<string, unknown>;
+    inputEntityIds?: string[];
+    resolvedContext?: Record<string, unknown>;
+  } = {},
 ): Promise<{ generation: Generation; job: Job }> {
   const generation = await generations.record(project.id, {
-    capability: 'text.generate',
+    capability: input.capability ?? 'text.generate',
     prompt: input.prompt ?? 'name three drowned cathedrals',
     parameters: input.parameters,
     inputEntityIds: input.inputEntityIds,
+    resolvedContext: input.resolvedContext,
   });
   const job = await jobs.enqueue(project.id, {
     kind: 'generation',
@@ -120,7 +133,7 @@ function delivery(job: Job, overrides: Partial<JobDelivery> = {}): JobDelivery {
 }
 
 const handle = () =>
-  createGenerationJobHandler({ jobs, generations, providers, logger: silentLogger });
+  createGenerationJobHandler({ jobs, generations, assets, providers, logger: silentLogger });
 
 describe('running a generation job', () => {
   beforeEach(() => {
@@ -261,7 +274,7 @@ describe('failure and retry', () => {
 });
 
 describe('context', () => {
-  it('hands the provider the entities the request named', async () => {
+  it('hands the provider the context resolved when the request was recorded', async () => {
     let seen: AiRequest | undefined;
     providers.register(
       new (class extends BaseAiProvider {
@@ -278,10 +291,84 @@ describe('context', () => {
       type: 'design_pillar',
       name: 'Oppressive scale',
     });
-    const { job } = await queued({ inputEntityIds: [pillar.id] });
+    const resolvedContext = {
+      project: { id: project.id, name: project.name, description: null },
+      instruction: 'name three drowned cathedrals',
+      entities: [
+        {
+          id: pillar.id,
+          type: 'design_pillar',
+          name: 'Oppressive scale',
+          description: null,
+          status: 'draft',
+          tags: [],
+          source: 'selected',
+          distance: 0,
+          relation: null,
+          viaEntityId: null,
+        },
+      ],
+      assets: [],
+      lineage: null,
+      truncated: false,
+    } satisfies ResolvedContext as unknown as Record<string, unknown>;
+    const { job } = await queued({ inputEntityIds: [pillar.id], resolvedContext });
 
     await handle()(delivery(job));
 
-    expect(seen?.context?.inputEntities).toMatchObject([{ id: pillar.id }]);
+    expect(seen?.context?.entities).toMatchObject([{ id: pillar.id, source: 'selected' }]);
+  });
+
+  it('leaves the context undefined when the request resolved none', async () => {
+    let seen: AiRequest | undefined;
+    providers.register(
+      new (class extends BaseAiProvider {
+        readonly id = 'recording';
+        readonly capabilities: readonly AiCapability[] = ['text.generate'];
+        readonly defaultModel = 'recording-1';
+        async execute(request: AiRequest): Promise<AiResult> {
+          seen = request;
+          return { capability: request.capability, providerId: this.id, model: this.defaultModel };
+        }
+      })(),
+    );
+    const { job } = await queued();
+
+    await handle()(delivery(job));
+
+    expect(seen?.context).toBeUndefined();
+  });
+});
+
+describe('storing what a provider produced', () => {
+  it('keeps text output as a project asset the generation points at', async () => {
+    providers.register(new EchoAiProvider(['text.generate']));
+    const { generation, job } = await queued({ prompt: 'name three drowned cathedrals' });
+
+    await handle()(delivery(job));
+
+    const { outputAssetIds } = await generations.getById(project.id, generation.id);
+    expect(outputAssetIds).toHaveLength(1);
+
+    const stored = await assets.download(project.id, outputAssetIds[0] as string);
+    expect(stored.asset.mimeType).toBe('text/plain');
+    expect(stored.content.toString('utf8')).toBe('name three drowned cathedrals');
+  });
+
+  it('stores generated image bytes the same way', async () => {
+    providers.register(new LocalImageProvider());
+    const { generation, job } = await queued({
+      capability: 'image.generate',
+      prompt: 'a drowned cathedral',
+    });
+
+    await handle()(delivery(job));
+
+    const record = await generations.getById(project.id, generation.id);
+    expect(record).toMatchObject({ status: 'complete', provider: 'local-image' });
+
+    const stored = await assets.download(project.id, record.outputAssetIds[0] as string);
+    expect(stored.asset).toMatchObject({ kind: 'image', mimeType: 'image/svg+xml' });
+    expect(stored.content.toString('utf8')).toContain('<svg');
   });
 });

@@ -22,6 +22,7 @@
     "clean": "rm -rf dist .turbo *.tsbuildinfo"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.124.0",
     "@level-zero/domain": "workspace:*"
   },
   "devDependencies": {
