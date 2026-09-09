@@ -217,7 +217,7 @@ export function IdeaInspector({
       {archived && <Tag className="mb-3">Archived</Tag>}
 
       {tab === 'details' && <IdeaDetailsForm projectId={projectId} idea={idea} />}
-      {tab === 'notes' && <IdeaNotes projectId={projectId} idea={idea} />}
+      {tab === 'notes' && <IdeaNotes key={idea.id} projectId={projectId} idea={idea} />}
       {tab === 'links' && <IdeaLinksTab projectId={projectId} ideaId={idea.id} />}
     </Inspector>
   );

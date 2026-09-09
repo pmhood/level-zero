@@ -53,4 +53,4 @@ export {
   type SaveStatus,
 } from './editor/use-editor-autosave';
 /** TipTap JSON is the canonical stored form of every document. */
-export type { Extensions, JSONContent } from '@tiptap/core';
+export type { Editor, Extensions, JSONContent } from '@tiptap/core';

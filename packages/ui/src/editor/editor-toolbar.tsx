@@ -10,12 +10,12 @@ import type { ToolbarGroup } from './editor-modes';
  * The design system's small ghost button (spec section 14/16), plus the one
  * thing a formatting control needs that a button does not: a pressed state for
  * the mark or block under the caret.
+ *
+ * `active` is left undefined by the controls that insert something rather than
+ * toggle it, which drops `aria-pressed` — a divider is a button, not a switch
+ * that happens to be off.
  */
-function ToolbarButton({
-  active = false,
-  className,
-  ...props
-}: ButtonProps & { active?: boolean }) {
+function ToolbarButton({ active, className, ...props }: ButtonProps & { active?: boolean }) {
   return (
     <Button
       variant="ghost"

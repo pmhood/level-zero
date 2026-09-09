@@ -185,6 +185,23 @@ describe('RichTextEditor', () => {
     expect(screen.queryByRole('button', { name: 'Table' })).toBeNull();
   });
 
+  it('announces the toggles as pressable and the insert controls as plain buttons', async () => {
+    render(<RichTextEditor mode="document" content={null} label="Game design document" />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Bold' }).getAttribute('aria-pressed')).toBe(
+        'false',
+      ),
+    );
+    expect(screen.getByRole('button', { name: 'Divider' }).hasAttribute('aria-pressed')).toBe(
+      false,
+    );
+    expect(screen.getByRole('button', { name: 'Table' }).hasAttribute('aria-pressed')).toBe(false);
+    expect(screen.getByRole('button', { name: 'Copy Markdown' }).hasAttribute('aria-pressed')).toBe(
+      false,
+    );
+  });
+
   it('renders the content it is given', async () => {
     const content = {
       type: 'doc',
