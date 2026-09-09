@@ -78,7 +78,9 @@ setup is visible immediately.
 | `pnpm infra:down`  | Stops them, keeping data                                        |
 | `pnpm infra:reset` | Stops them and deletes the volumes                              |
 
-Scope a command to one workspace with `pnpm --filter @level-zero/api <script>`.
+For tasks with `dependsOn` rules (like `test` and `typecheck`), scope to one workspace with
+`pnpm turbo run <task> --filter=@level-zero/api`. Direct `pnpm --filter` bypasses Turbo's build
+prerequisites. See the Commands section in `CLAUDE.md` for detailed guidance.
 
 Most tests are pure unit tests, but the repository adapters are covered by
 integration tests against real Postgres, so `pnpm test` expects
