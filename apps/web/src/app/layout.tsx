@@ -5,7 +5,7 @@ import { Providers } from './providers';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Level Zero Workbench',
+  title: 'Level Zero',
   description: 'A connected game-development workspace.',
 };
 

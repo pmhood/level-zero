@@ -29,6 +29,9 @@ coverage/
 npm-debug.log*
 pnpm-debug.log*
 
+# browser automation scratch (playwright-mcp page snapshots)
+.playwright-mcp/
+
 # claude code local state (agent worktrees, session scratch)
 .claude/*
 # ...but keep the repo-level overlay that /do and /do-next read
