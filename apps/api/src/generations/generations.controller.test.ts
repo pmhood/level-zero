@@ -1,5 +1,6 @@
 import { ContextResolver } from '@level-zero/ai';
 import {
+  ActivityService,
   AssetService,
   EntityRelationshipService,
   EntityService,
@@ -14,6 +15,7 @@ import {
   type Project,
 } from '@level-zero/domain';
 import {
+  InMemoryActivityRepository,
   InMemoryAssetRepository,
   InMemoryEntityRelationshipRepository,
   InMemoryEntityRepository,
@@ -51,7 +53,8 @@ beforeEach(async () => {
   const relationships = new InMemoryEntityRelationshipRepository();
   const assets = new InMemoryAssetRepository();
 
-  entityService = new EntityService(entities, projects, deps);
+  const activity = new ActivityService(new InMemoryActivityRepository(), deps);
+  entityService = new EntityService(entities, projects, activity, deps);
   relationshipService = new EntityRelationshipService(relationships, entities, deps);
   assetService = new AssetService(assets, projects, new InMemoryObjectStorageProvider(), deps);
   const generationRepository = new InMemoryGenerationRepository();
@@ -60,7 +63,8 @@ beforeEach(async () => {
     projects,
     entities,
     assets,
-    new LineageService(entityService, relationshipService),
+    new LineageService(entityService, relationshipService, activity),
+    activity,
     deps,
   );
 

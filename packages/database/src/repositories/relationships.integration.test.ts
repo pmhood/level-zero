@@ -1,4 +1,5 @@
 import {
+  ActivityService,
   ConflictError,
   EntityRelationshipService,
   EntityService,
@@ -17,6 +18,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { type DatabaseClient } from '../postgres/client';
 import { connectTestDatabase, truncateDomainTables } from '../testing/test-database';
+import { DrizzleActivityRepository } from './activity-repository';
 import { DrizzleEntityRelationshipRepository } from './entity-relationship-repository';
 import { DrizzleEntityRepository } from './entity-repository';
 import { DrizzleProjectRepository } from './project-repository';
@@ -60,9 +62,10 @@ beforeAll(() => {
   const entityRepo = new DrizzleEntityRepository(client.db);
   relationshipRepo = new DrizzleEntityRelationshipRepository(client.db);
 
-  entities = new EntityService(entityRepo, projectRepo, deps);
+  const activity = new ActivityService(new DrizzleActivityRepository(client.db), deps);
+  entities = new EntityService(entityRepo, projectRepo, activity, deps);
   relationships = new EntityRelationshipService(relationshipRepo, entityRepo, deps);
-  lineage = new LineageService(entities, relationships);
+  lineage = new LineageService(entities, relationships, activity);
   void new ProjectService(projectRepo, deps);
 });
 

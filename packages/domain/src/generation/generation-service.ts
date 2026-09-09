@@ -1,3 +1,5 @@
+import { truncateForSummary } from '../activity/activity';
+import { type ActivityService } from '../activity/activity-service';
 import { type Asset } from '../asset/asset';
 import { type AssetRepository } from '../asset/asset-repository';
 import { type Entity } from '../entity/entity';
@@ -76,6 +78,7 @@ export class GenerationService {
     private readonly entities: EntityRepository,
     private readonly assets: AssetRepository,
     private readonly lineage: LineageService,
+    private readonly activity: ActivityService,
     private readonly deps: GenerationServiceDeps,
   ) {}
 
@@ -195,7 +198,20 @@ export class GenerationService {
       });
     }
 
-    return this.generations.save(completed);
+    const saved = await this.generations.save(completed);
+
+    const assetCount = saved.outputAssetIds.length;
+    await this.activity.record({
+      projectId,
+      type: 'generation_completed',
+      summary: `Generation completed: ${assetCount} asset${assetCount === 1 ? '' : 's'} produced`,
+      subjectType: 'generation',
+      subjectId: saved.id,
+      metadata: { capability: saved.capability, outputAssetIds: saved.outputAssetIds },
+      actor: saved.createdBy,
+    });
+
+    return saved;
   }
 
   /** Keeps the request intact and records why the provider could not fulfil it. */
@@ -205,7 +221,22 @@ export class GenerationService {
     input: FailGenerationInput,
   ): Promise<Generation> {
     const generation = await this.getById(projectId, generationId);
-    return this.generations.save(failGeneration(generation, input, this.deps));
+    const failed = await this.generations.save(failGeneration(generation, input, this.deps));
+
+    await this.activity.record({
+      projectId,
+      type: 'generation_failed',
+      summary: truncateForSummary(`Generation failed: ${input.message}`),
+      subjectType: 'generation',
+      subjectId: failed.id,
+      metadata: {
+        capability: failed.capability,
+        failureCode: failed.failure?.code ?? null,
+      },
+      actor: failed.createdBy,
+    });
+
+    return failed;
   }
 
   async cancel(projectId: string, generationId: string): Promise<Generation> {

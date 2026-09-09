@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { ActivityList } from './activity-list';
 import { Button } from './button';
 import { cn } from './cn';
 import { EmptyState } from './empty-state';
@@ -135,6 +136,44 @@ describe('EmptyState', () => {
 
     expect(screen.getByText('No ideas yet')).not.toBeNull();
     expect(screen.getByRole('button', { name: 'New idea' })).not.toBeNull();
+  });
+});
+
+describe('ActivityList', () => {
+  it('renders a plain empty state when there is no activity', () => {
+    render(<ActivityList items={[]} />);
+
+    expect(screen.getByText('No activity yet')).not.toBeNull();
+  });
+
+  it('renders each summary, newest item first as given by the caller', () => {
+    render(
+      <ActivityList
+        items={[
+          { id: 'a-2', summary: 'Kael Voss archived', createdAt: new Date() },
+          { id: 'a-1', summary: 'Kael Voss created', createdAt: new Date() },
+        ]}
+      />,
+    );
+
+    const rows = screen.getAllByText(/Kael Voss/);
+    expect(rows.map((row) => row.textContent)).toEqual(['Kael Voss archived', 'Kael Voss created']);
+  });
+
+  it('links a row only when the caller resolved a deep link for its subject', () => {
+    render(
+      <ActivityList
+        items={[
+          { id: 'a-1', summary: 'Prototype v1 created', createdAt: new Date(), href: '/p/1' },
+          { id: 'a-2', summary: 'Archived character restored', createdAt: new Date() },
+        ]}
+      />,
+    );
+
+    const link = screen.getByRole('link', { name: /Prototype v1 created/ }) as HTMLAnchorElement;
+    expect(link.getAttribute('href')).toBe('/p/1');
+    expect(screen.queryByRole('link', { name: /Archived character restored/ })).toBeNull();
+    expect(screen.getByText('Archived character restored')).not.toBeNull();
   });
 });
 

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { ActivityService } from '../activity/activity-service';
 import { AssetService } from '../asset/asset-service';
 import { EntityService } from '../entity/entity-service';
 import { createProject, type Project } from '../project/project';
@@ -10,6 +11,7 @@ import { fixedClock } from '../shared/clock';
 import { ConflictError, NotFoundError } from '../shared/errors';
 import { sequentialIdGenerator } from '../shared/id';
 import {
+  InMemoryActivityRepository,
   InMemoryAssetRepository,
   InMemoryEntityRelationshipRepository,
   InMemoryEntityRepository,
@@ -26,6 +28,7 @@ let entities: EntityService;
 let relationships: EntityRelationshipService;
 let assets: AssetService;
 let generations: GenerationService;
+let activityRepo: InMemoryActivityRepository;
 let project: Project;
 let otherProject: Project;
 
@@ -42,9 +45,11 @@ beforeEach(async () => {
   const relationshipRepo = new InMemoryEntityRelationshipRepository();
   const assetRepo = new InMemoryAssetRepository();
   const generationRepo = new InMemoryGenerationRepository();
+  activityRepo = new InMemoryActivityRepository();
+  const activity = new ActivityService(activityRepo, deps);
 
   projects = new ProjectService(projectRepo, deps);
-  entities = new EntityService(entityRepo, projectRepo, deps);
+  entities = new EntityService(entityRepo, projectRepo, activity, deps);
   relationships = new EntityRelationshipService(relationshipRepo, entityRepo, deps);
   assets = new AssetService(assetRepo, projectRepo, new InMemoryObjectStorageProvider(), deps);
   generations = new GenerationService(
@@ -52,7 +57,8 @@ beforeEach(async () => {
     projectRepo,
     entityRepo,
     assetRepo,
-    new LineageService(entities, relationships),
+    new LineageService(entities, relationships, activity),
+    activity,
     deps,
   );
 
@@ -137,6 +143,22 @@ describe('a successful generation', () => {
     expect(completed.completedAt).not.toBeNull();
   });
 
+  it('records a generation_completed activity naming the output count', async () => {
+    const generation = await generations.record(project.id, request());
+    await generations.dispatch(project.id, generation.id, { provider: 'echo', model: 'echo-1' });
+    const output = await image('cathedral.png');
+
+    await generations.complete(project.id, generation.id, { outputAssetIds: [output.id] });
+
+    const feed = await activityRepo.listByProject(project.id, {});
+    expect(feed.items.find((item) => item.type === 'generation_completed')).toMatchObject({
+      summary: 'Generation completed: 1 asset produced',
+      subjectType: 'generation',
+      subjectId: generation.id,
+      metadata: { outputAssetIds: [output.id] },
+    });
+  });
+
   it('refuses to complete with an output asset from another project', async () => {
     const generation = await generations.record(project.id, request());
     await generations.dispatch(project.id, generation.id, { provider: 'echo', model: 'echo-1' });
@@ -197,6 +219,24 @@ describe('generation failure', () => {
       model: 'echo-1',
       failure: { code: 'timeout', details: { waitedSeconds: 60 } },
     });
+  });
+
+  it('records a generation_failed activity with a truncated summary', async () => {
+    const generation = await generations.record(project.id, request());
+    await generations.dispatch(project.id, generation.id, { provider: 'echo', model: 'echo-1' });
+
+    await generations.fail(project.id, generation.id, {
+      code: 'timeout',
+      message: 'x'.repeat(2000),
+    });
+
+    const feed = await activityRepo.listByProject(project.id, {});
+    const failure = feed.items.find((item) => item.type === 'generation_failed');
+
+    expect(failure?.subjectId).toBe(generation.id);
+    expect(failure?.summary.length).toBeLessThanOrEqual(300);
+    expect(failure?.summary.startsWith('Generation failed: xxx')).toBe(true);
+    expect(failure?.metadata).toMatchObject({ failureCode: 'timeout' });
   });
 
   it('can be retried as a child generation that points back at the failure', async () => {

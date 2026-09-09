@@ -1,4 +1,5 @@
 import {
+  ActivityService,
   DocumentService,
   EntityService,
   EntityVersionService,
@@ -9,6 +10,7 @@ import {
   type Project,
 } from '@level-zero/domain';
 import {
+  InMemoryActivityRepository,
   InMemoryEntityRepository,
   InMemoryEntityVersionRepository,
   InMemoryProjectRepository,
@@ -35,8 +37,9 @@ beforeEach(async () => {
   const entityRepo = new InMemoryEntityRepository();
   const versionRepo = new InMemoryEntityVersionRepository();
 
-  entities = new EntityService(entityRepo, projects, deps);
-  const versions = new EntityVersionService(versionRepo, entityRepo, deps);
+  const activity = new ActivityService(new InMemoryActivityRepository(), deps);
+  entities = new EntityService(entityRepo, projects, activity, deps);
+  const versions = new EntityVersionService(versionRepo, entityRepo, activity, deps);
 
   const moduleRef = await Test.createTestingModule({
     controllers: [DocumentsController],

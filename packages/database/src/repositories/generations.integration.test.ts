@@ -1,4 +1,5 @@
 import {
+  ActivityService,
   AssetService,
   EntityRelationshipService,
   EntityService,
@@ -17,6 +18,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { type DatabaseClient } from '../postgres/client';
 import { connectTestDatabase, truncateDomainTables } from '../testing/test-database';
+import { DrizzleActivityRepository } from './activity-repository';
 import { DrizzleAssetRepository } from './asset-repository';
 import { DrizzleEntityRelationshipRepository } from './entity-relationship-repository';
 import { DrizzleEntityRepository } from './entity-repository';
@@ -64,8 +66,10 @@ beforeAll(() => {
   const assetRepo = new DrizzleAssetRepository(client.db);
   generationRepo = new DrizzleGenerationRepository(client.db);
 
+  const activity = new ActivityService(new DrizzleActivityRepository(client.db), deps);
+
   projects = new ProjectService(projectRepo, deps);
-  entities = new EntityService(entityRepo, projectRepo, deps);
+  entities = new EntityService(entityRepo, projectRepo, activity, deps);
   relationships = new EntityRelationshipService(relationshipRepo, entityRepo, deps);
   assets = new AssetService(assetRepo, projectRepo, new InMemoryObjectStorageProvider(), deps);
   generations = new GenerationService(
@@ -73,7 +77,8 @@ beforeAll(() => {
     projectRepo,
     entityRepo,
     assetRepo,
-    new LineageService(entities, relationships),
+    new LineageService(entities, relationships, activity),
+    activity,
     deps,
   );
 });

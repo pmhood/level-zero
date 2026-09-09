@@ -1,4 +1,5 @@
 import {
+  ActivityService,
   EntityService,
   ProjectService,
   createProject,
@@ -6,7 +7,11 @@ import {
   sequentialIdGenerator,
   type Project,
 } from '@level-zero/domain';
-import { InMemoryEntityRepository, InMemoryProjectRepository } from '@level-zero/domain/testing';
+import {
+  InMemoryActivityRepository,
+  InMemoryEntityRepository,
+  InMemoryProjectRepository,
+} from '@level-zero/domain/testing';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
@@ -29,7 +34,8 @@ beforeEach(async () => {
   const projects = new InMemoryProjectRepository();
   const entities = new InMemoryEntityRepository();
   projectService = new ProjectService(projects, deps);
-  const entityService = new EntityService(entities, projects, deps);
+  const activity = new ActivityService(new InMemoryActivityRepository(), deps);
+  const entityService = new EntityService(entities, projects, activity, deps);
 
   const moduleRef = await Test.createTestingModule({
     controllers: [ProjectsController, EntitiesController],

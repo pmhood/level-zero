@@ -1,4 +1,5 @@
 export { cn } from './cn';
+export { ActivityList, type ActivityListItem, type ActivityListProps } from './activity-list';
 export { Button, buttonVariants, type ButtonProps } from './button';
 export { Card, CardDescription, CardHeader, CardTitle, cardVariants, type CardProps } from './card';
 export { StatusBadge, type StatusBadgeProps, type StatusTone } from './status-badge';

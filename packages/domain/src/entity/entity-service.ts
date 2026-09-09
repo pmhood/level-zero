@@ -1,3 +1,4 @@
+import { type ActivityService } from '../activity/activity-service';
 import { ConflictError, NotFoundError } from '../shared/errors';
 import { normalizePaging } from '../shared/paging';
 import { type Clock } from '../shared/clock';
@@ -31,6 +32,7 @@ export class EntityService {
   constructor(
     private readonly entities: EntityRepository,
     private readonly projects: ProjectRepository,
+    private readonly activity: ActivityService,
     private readonly deps: EntityServiceDeps,
   ) {}
 
@@ -41,7 +43,18 @@ export class EntityService {
       throw new ConflictError('Cannot add entities to an archived project', { projectId });
     }
 
-    return this.entities.insert(createEntity({ ...input, projectId }, this.deps));
+    const entity = await this.entities.insert(createEntity({ ...input, projectId }, this.deps));
+
+    await this.activity.record({
+      projectId,
+      type: 'entity_created',
+      summary: `${entity.name} created`,
+      subjectType: 'entity',
+      subjectId: entity.id,
+      metadata: { entityType: entity.type, name: entity.name },
+    });
+
+    return entity;
   }
 
   /**
@@ -78,11 +91,33 @@ export class EntityService {
 
   async archive(projectId: string, entityId: string): Promise<Entity> {
     const entity = await this.getById(projectId, entityId);
-    return this.entities.save(archiveEntity(entity, this.deps));
+    const archived = await this.entities.save(archiveEntity(entity, this.deps));
+
+    await this.activity.record({
+      projectId,
+      type: 'entity_archived',
+      summary: `${archived.name} archived`,
+      subjectType: 'entity',
+      subjectId: archived.id,
+      metadata: { entityType: archived.type, name: archived.name },
+    });
+
+    return archived;
   }
 
   async restore(projectId: string, entityId: string): Promise<Entity> {
     const entity = await this.getById(projectId, entityId);
-    return this.entities.save(restoreEntity(entity, this.deps));
+    const restored = await this.entities.save(restoreEntity(entity, this.deps));
+
+    await this.activity.record({
+      projectId,
+      type: 'entity_restored',
+      summary: `${restored.name} restored`,
+      subjectType: 'entity',
+      subjectId: restored.id,
+      metadata: { entityType: restored.type, name: restored.name },
+    });
+
+    return restored;
   }
 }

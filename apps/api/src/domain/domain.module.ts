@@ -1,4 +1,5 @@
 import {
+  DrizzleActivityRepository,
   DrizzleAssetRepository,
   DrizzleEntityRelationshipRepository,
   DrizzleEntityRepository,
@@ -10,6 +11,7 @@ import {
   type DatabaseClient,
 } from '@level-zero/database';
 import {
+  ActivityService,
   AssetService,
   DocumentService,
   EntityRelationshipService,
@@ -22,6 +24,7 @@ import {
   PrototypeService,
   systemClock,
   uuidIdGenerator,
+  type ActivityRepository,
   type AssetRepository,
   type EntityRelationshipRepository,
   type EntityRepository,
@@ -45,6 +48,7 @@ import { OBJECT_STORAGE } from '../infrastructure/storage.module';
 
 export const PROJECT_REPOSITORY = Symbol('PROJECT_REPOSITORY');
 export const ENTITY_REPOSITORY = Symbol('ENTITY_REPOSITORY');
+export const ACTIVITY_REPOSITORY = Symbol('ACTIVITY_REPOSITORY');
 export const RELATIONSHIP_REPOSITORY = Symbol('RELATIONSHIP_REPOSITORY');
 export const VERSION_REPOSITORY = Symbol('VERSION_REPOSITORY');
 export const ASSET_REPOSITORY = Symbol('ASSET_REPOSITORY');
@@ -79,6 +83,18 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
         new DrizzleEntityRepository(client.db),
     },
     {
+      provide: ACTIVITY_REPOSITORY,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: DatabaseClient): ActivityRepository =>
+        new DrizzleActivityRepository(client.db),
+    },
+    {
+      provide: ActivityService,
+      inject: [ACTIVITY_REPOSITORY, DOMAIN_DEPS],
+      useFactory: (activities: ActivityRepository, deps: EntityServiceDeps): ActivityService =>
+        new ActivityService(activities, deps),
+    },
+    {
       provide: ProjectService,
       inject: [PROJECT_REPOSITORY, DOMAIN_DEPS],
       useFactory: (projects: ProjectRepository, deps: EntityServiceDeps): ProjectService =>
@@ -86,12 +102,13 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     },
     {
       provide: EntityService,
-      inject: [ENTITY_REPOSITORY, PROJECT_REPOSITORY, DOMAIN_DEPS],
+      inject: [ENTITY_REPOSITORY, PROJECT_REPOSITORY, ActivityService, DOMAIN_DEPS],
       useFactory: (
         entities: EntityRepository,
         projects: ProjectRepository,
+        activity: ActivityService,
         deps: EntityServiceDeps,
-      ): EntityService => new EntityService(entities, projects, deps),
+      ): EntityService => new EntityService(entities, projects, activity, deps),
     },
     {
       provide: RELATIONSHIP_REPOSITORY,
@@ -110,11 +127,12 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     },
     {
       provide: LineageService,
-      inject: [EntityService, EntityRelationshipService],
+      inject: [EntityService, EntityRelationshipService, ActivityService],
       useFactory: (
         entities: EntityService,
         relationships: EntityRelationshipService,
-      ): LineageService => new LineageService(entities, relationships),
+        activity: ActivityService,
+      ): LineageService => new LineageService(entities, relationships, activity),
     },
     {
       provide: VERSION_REPOSITORY,
@@ -124,12 +142,13 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     },
     {
       provide: EntityVersionService,
-      inject: [VERSION_REPOSITORY, ENTITY_REPOSITORY, DOMAIN_DEPS],
+      inject: [VERSION_REPOSITORY, ENTITY_REPOSITORY, ActivityService, DOMAIN_DEPS],
       useFactory: (
         versions: EntityVersionRepository,
         entities: EntityRepository,
+        activity: ActivityService,
         deps: EntityServiceDeps,
-      ): EntityVersionService => new EntityVersionService(versions, entities, deps),
+      ): EntityVersionService => new EntityVersionService(versions, entities, activity, deps),
     },
     {
       provide: DocumentService,
@@ -167,6 +186,7 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
         ENTITY_REPOSITORY,
         ASSET_REPOSITORY,
         LineageService,
+        ActivityService,
         DOMAIN_DEPS,
       ],
       useFactory: (
@@ -175,9 +195,10 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
         entities: EntityRepository,
         assets: AssetRepository,
         lineage: LineageService,
+        activity: ActivityService,
         deps: EntityServiceDeps,
       ): GenerationService =>
-        new GenerationService(generations, projects, entities, assets, lineage, deps),
+        new GenerationService(generations, projects, entities, assets, lineage, activity, deps),
     },
     {
       provide: PROTOTYPE_VERSION_REPOSITORY,
@@ -192,6 +213,7 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
         EntityService,
         VERSION_REPOSITORY,
         ASSET_REPOSITORY,
+        ActivityService,
         DOMAIN_DEPS,
       ],
       useFactory: (
@@ -199,9 +221,10 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
         entities: EntityService,
         versions: EntityVersionRepository,
         assets: AssetRepository,
+        activity: ActivityService,
         deps: EntityServiceDeps,
       ): PrototypeService =>
-        new PrototypeService(prototypeVersions, entities, versions, assets, deps),
+        new PrototypeService(prototypeVersions, entities, versions, assets, activity, deps),
     },
     {
       provide: JOB_REPOSITORY,
@@ -232,6 +255,7 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     GenerationService,
     PrototypeService,
     JobService,
+    ActivityService,
     PROJECT_REPOSITORY,
     ENTITY_REPOSITORY,
     RELATIONSHIP_REPOSITORY,
@@ -240,6 +264,7 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     GENERATION_REPOSITORY,
     PROTOTYPE_VERSION_REPOSITORY,
     JOB_REPOSITORY,
+    ACTIVITY_REPOSITORY,
     DOMAIN_DEPS,
   ],
 })

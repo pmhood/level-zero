@@ -1,11 +1,16 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { ActivityService } from '../activity/activity-service';
 import { createProject, type Project } from '../project/project';
 import { ProjectService } from '../project/project-service';
 import { fixedClock } from '../shared/clock';
 import { ConflictError, NotFoundError, ValidationError } from '../shared/errors';
 import { sequentialIdGenerator } from '../shared/id';
-import { InMemoryEntityRepository, InMemoryProjectRepository } from '../testing';
+import {
+  InMemoryActivityRepository,
+  InMemoryEntityRepository,
+  InMemoryProjectRepository,
+} from '../testing';
 import { EntityService } from './entity-service';
 
 const clock = fixedClock('2026-03-01T09:00:00.000Z');
@@ -14,6 +19,7 @@ let projects: InMemoryProjectRepository;
 let entities: InMemoryEntityRepository;
 let entityService: EntityService;
 let projectService: ProjectService;
+let activityRepo: InMemoryActivityRepository;
 let projectA: Project;
 let projectB: Project;
 
@@ -22,7 +28,9 @@ beforeEach(async () => {
   projects = new InMemoryProjectRepository();
   entities = new InMemoryEntityRepository();
   projectService = new ProjectService(projects, deps);
-  entityService = new EntityService(entities, projects, deps);
+  activityRepo = new InMemoryActivityRepository();
+  const activity = new ActivityService(activityRepo, deps);
+  entityService = new EntityService(entities, projects, activity, deps);
 
   projectA = await projects.insert(
     createProject({ name: 'Deep Fathom' }, { clock, ids: sequentialIdGenerator('project-a') }),
@@ -66,6 +74,29 @@ describe('creating entities', () => {
     await expect(entityService.create(projectA.id, { type: 'idea', name: ' ' })).rejects.toThrow(
       ValidationError,
     );
+  });
+});
+
+describe('the activity feed', () => {
+  it('records entity_created, entity_archived and entity_restored', async () => {
+    const kael = await entityService.create(projectA.id, { type: 'character', name: 'Kael' });
+    await entityService.archive(projectA.id, kael.id);
+    await entityService.restore(projectA.id, kael.id);
+
+    const feed = await activityRepo.listByProject(projectA.id, {});
+
+    expect(feed.items.map((item) => item.type)).toEqual([
+      'entity_restored',
+      'entity_archived',
+      'entity_created',
+    ]);
+    expect(feed.items[2]).toMatchObject({
+      summary: 'Kael created',
+      subjectType: 'entity',
+      subjectId: kael.id,
+    });
+    expect(feed.items[1]).toMatchObject({ summary: 'Kael archived', subjectId: kael.id });
+    expect(feed.items[0]).toMatchObject({ summary: 'Kael restored', subjectId: kael.id });
   });
 });
 
