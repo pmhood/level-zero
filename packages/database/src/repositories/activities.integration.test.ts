@@ -22,8 +22,8 @@ let activity: ActivityService;
 let project: Project;
 let otherProject: Project;
 
-beforeAll(() => {
-  client = connectTestDatabase();
+beforeAll(async () => {
+  client = await connectTestDatabase();
   const projectRepo = new DrizzleProjectRepository(client.db);
   activityRepo = new DrizzleActivityRepository(client.db);
 

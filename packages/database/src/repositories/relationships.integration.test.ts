@@ -56,8 +56,8 @@ let lineage: LineageService;
 let projectA: Project;
 let projectB: Project;
 
-beforeAll(() => {
-  client = connectTestDatabase();
+beforeAll(async () => {
+  client = await connectTestDatabase();
   projectRepo = new DrizzleProjectRepository(client.db);
   const entityRepo = new DrizzleEntityRepository(client.db);
   relationshipRepo = new DrizzleEntityRelationshipRepository(client.db);

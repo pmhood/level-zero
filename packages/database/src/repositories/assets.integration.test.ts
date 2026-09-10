@@ -46,8 +46,8 @@ let projects: ProjectService;
 let assets: AssetService;
 let storage: InMemoryObjectStorageProvider;
 
-beforeAll(() => {
-  client = connectTestDatabase();
+beforeAll(async () => {
+  client = await connectTestDatabase();
   projectRepo = new DrizzleProjectRepository(client.db);
   assetRepo = new DrizzleAssetRepository(client.db);
   projects = new ProjectService(projectRepo, deps);

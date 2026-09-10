@@ -9,7 +9,7 @@ const QUEUE_NAME = 'jobs';
  * Namespace for BullMQ's own keys. It is passed to BullMQ rather than set as an
  * ioredis `keyPrefix`, which BullMQ does not support.
  */
-const QUEUE_PREFIX = 'level-zero';
+const DEFAULT_QUEUE_PREFIX = 'level-zero';
 
 /** Delay before the first retry; BullMQ doubles it for each attempt after that. */
 const RETRY_BACKOFF_MS = 1_000;
@@ -36,6 +36,12 @@ export interface JobQueueClient extends JobQueue {
 
 export interface JobQueueOptions {
   connectionUrl: string;
+  /**
+   * Namespace for BullMQ's keys. Defaults to the shared production prefix;
+   * tests running against a shared Redis pass a run-specific one so a worker
+   * only ever sees the jobs its own queue enqueued.
+   */
+  prefix?: string;
 }
 
 /**
@@ -48,7 +54,10 @@ export interface JobQueueOptions {
  */
 export function createJobQueue(options: JobQueueOptions): JobQueueClient {
   const connection = createQueueConnection(options.connectionUrl);
-  const queue = new Queue<JobMessage>(QUEUE_NAME, { connection, prefix: QUEUE_PREFIX });
+  const queue = new Queue<JobMessage>(QUEUE_NAME, {
+    connection,
+    prefix: options.prefix ?? DEFAULT_QUEUE_PREFIX,
+  });
 
   return {
     enqueue: async (job: Job) => {
@@ -111,7 +120,11 @@ export function createJobConsumer(options: JobConsumerOptions): JobConsumer {
         willRetry: message.attemptsStarted < (message.opts.attempts ?? 1),
       });
     },
-    { connection, prefix: QUEUE_PREFIX, concurrency: options.concurrency ?? 4 },
+    {
+      connection,
+      prefix: options.prefix ?? DEFAULT_QUEUE_PREFIX,
+      concurrency: options.concurrency ?? 4,
+    },
   );
 
   if (options.onError) worker.on('error', options.onError);

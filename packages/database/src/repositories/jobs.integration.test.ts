@@ -45,8 +45,8 @@ let projects: ProjectService;
 let jobs: JobService;
 let project: Project;
 
-beforeAll(() => {
-  client = connectTestDatabase();
+beforeAll(async () => {
+  client = await connectTestDatabase();
   const projectRepo = new DrizzleProjectRepository(client.db);
   jobRepo = new DrizzleJobRepository(client.db);
 

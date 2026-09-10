@@ -90,9 +90,18 @@ For tasks with `dependsOn` rules (like `test` and `typecheck`), scope to one wor
 prerequisites. See the Commands section in `CLAUDE.md` for detailed guidance.
 
 Most tests are pure unit tests, but the repository adapters are covered by
-integration tests against real Postgres, so `pnpm test` expects
-`pnpm infra:up && pnpm db:migrate` to have run first. CI does the same against
-service containers.
+integration tests against real Postgres, so `pnpm test` expects `pnpm infra:up`
+to have run first. CI does the same against service containers.
+
+`pnpm db:migrate` prepares the **development** database (`DATABASE_URL`) —
+integration tests never touch it. Every checkout's `@level-zero/database`
+suite instead connects to its own `level_zero_test_<hash>` database, named
+after where the checkout lives on disk, and creates and migrates it on first
+use. That is what lets concurrent `pnpm test` runs from different git
+worktrees share the one Postgres and Redis `pnpm infra:up` starts (see below)
+without truncating each other's fixtures or stealing each other's BullMQ
+deliveries — each worktree gets its own database and its own
+`level-zero-test-<hash>` queue prefix, derived the same way.
 
 The `infra:*` scripts always read the **main checkout's root `.env`** (gitignored, from
 `.env.example`), never one in the current working directory. They resolve it via
