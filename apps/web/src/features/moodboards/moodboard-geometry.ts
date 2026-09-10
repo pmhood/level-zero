@@ -85,6 +85,14 @@ export function zoomViewportAt(viewport: Viewport, screen: Point, factor: number
   };
 }
 
+/**
+ * The point two touches are pinching about: exactly between them, in
+ * whichever coordinate space the two points share.
+ */
+export function midpointOf(a: Point, b: Point): Point {
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
 /** The viewport that shows all of `content` inside a canvas of `size`. */
 export function fitViewport(
   content: Rect | null,

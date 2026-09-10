@@ -27,6 +27,7 @@ import { MoodboardToolbar, type MoodboardCanvasActions } from './moodboard-toolb
 import {
   boundsOf,
   fitViewport,
+  midpointOf,
   moveBox,
   panViewport,
   rectFromCorners,
@@ -68,7 +69,10 @@ type Gesture =
   | { kind: 'marquee'; pointerId: number; origin: Point; additive: boolean }
   | { kind: 'move'; pointerId: number; boardOrigin: Point; boxes: ReadonlyMap<string, Box> }
   | { kind: 'resize'; pointerId: number; nodeId: string; handle: ResizeHandle; box: Box }
-  | { kind: 'rotate'; pointerId: number; nodeId: string; box: Box };
+  | { kind: 'rotate'; pointerId: number; nodeId: string; box: Box }
+  // A second touch landing mid-gesture, screen points keyed by pointer id so
+  // either finger can move while the other holds still.
+  | { kind: 'pinch'; pointerIds: readonly [number, number]; points: Readonly<Record<number, Point>> };
 
 export interface MoodboardCanvasProps {
   projectId: string;
@@ -102,6 +106,11 @@ export function MoodboardCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const gestureRef = useRef<Gesture | null>(null);
   const spaceRef = useRef(false);
+
+  // Every pointer currently down, by id, so a second finger arriving mid-
+  // gesture can be told where the first one already is without the DOM
+  // handing that to us directly. Pruned on pointer up regardless of gesture.
+  const pointerPointsRef = useRef(new Map<number, Point>());
 
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 1 });
   const [selection, setSelection] = useState<readonly string[]>([]);
@@ -340,9 +349,52 @@ export function MoodboardCanvas({
   function startGesture(event: PointerEvent<Element>, gesture: Gesture) {
     event.currentTarget.setPointerCapture(event.pointerId);
     gestureRef.current = gesture;
+    pointerPointsRef.current.set(event.pointerId, screenPointIn(containerRef.current, event));
+  }
+
+  /**
+   * A second pointer arriving while one is already down is a pinch starting,
+   * not a second drag. Whatever the first pointer's gesture was doing is
+   * abandoned — a resize or a tile mid-drag is not left half-applied — in
+   * favour of a two-finger zoom anchored at the pair's midpoint.
+   */
+  function tryStartPinch(event: PointerEvent<Element>): boolean {
+    const gesture = gestureRef.current;
+    if (!gesture || gesture.kind === 'pinch' || gesture.pointerId === event.pointerId) {
+      return false;
+    }
+
+    const first = pointerPointsRef.current.get(gesture.pointerId);
+    if (!first) return false;
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const second = screenPointIn(containerRef.current, event);
+    pointerPointsRef.current.set(event.pointerId, second);
+
+    if (gesture.kind === 'marquee') setMarquee(null);
+    if (gesture.kind === 'move') {
+      const movingIds = new Set(gesture.boxes.keys());
+      setDrafts(
+        Object.fromEntries(Object.entries(draftsRef.current).filter(([id]) => !movingIds.has(id))),
+      );
+    }
+    if (gesture.kind === 'resize' || gesture.kind === 'rotate') {
+      const rest = { ...draftsRef.current };
+      delete rest[gesture.nodeId];
+      setDrafts(rest);
+    }
+
+    gestureRef.current = {
+      kind: 'pinch',
+      pointerIds: [gesture.pointerId, event.pointerId],
+      points: { [gesture.pointerId]: first, [event.pointerId]: second },
+    };
+    return true;
   }
 
   function onBackgroundPointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (tryStartPinch(event)) return;
+    if (gestureRef.current) return;
     if (event.button !== 0 && event.button !== 1) return;
     const origin = screenPointIn(containerRef.current, event);
 
@@ -361,6 +413,12 @@ export function MoodboardCanvas({
   }
 
   function onTilePointerDown(event: PointerEvent<HTMLDivElement>, nodeId: string) {
+    if (tryStartPinch(event)) {
+      event.stopPropagation();
+      return;
+    }
+    if (gestureRef.current) return;
+
     // Space still means pan, even with the pointer over a tile, so the event is
     // left to reach the background.
     if (event.button !== 0 || spaceRef.current) return;
@@ -403,7 +461,7 @@ export function MoodboardCanvas({
     event: PointerEvent<HTMLButtonElement>,
     handle: ResizeHandle | 'rotate',
   ) {
-    if (event.button !== 0 || !reshapableNode || !reshapable) return;
+    if (gestureRef.current || event.button !== 0 || !reshapableNode || !reshapable) return;
     event.stopPropagation();
 
     const box = boxOf(reshapableNode);
@@ -417,7 +475,35 @@ export function MoodboardCanvas({
 
   function onPointerMove(event: PointerEvent<HTMLDivElement>) {
     const gesture = gestureRef.current;
-    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    if (!gesture) return;
+
+    if (gesture.kind === 'pinch') {
+      if (!gesture.pointerIds.includes(event.pointerId)) return;
+
+      const screen = screenPointIn(containerRef.current, event);
+      const otherId = gesture.pointerIds.find((id) => id !== event.pointerId)!;
+      const other = gesture.points[otherId]!;
+      const was = gesture.points[event.pointerId]!;
+      const wasDistance = Math.hypot(was.x - other.x, was.y - other.y);
+      const nowDistance = Math.hypot(screen.x - other.x, screen.y - other.y);
+
+      pointerPointsRef.current.set(event.pointerId, screen);
+      gestureRef.current = {
+        ...gesture,
+        points: { ...gesture.points, [event.pointerId]: screen },
+      };
+
+      // A pinch that starts with both fingers on the same point has nothing
+      // to compare a spread against yet; wait for it to open up before zooming.
+      if (wasDistance > 0) {
+        setViewport((current) =>
+          zoomViewportAt(current, midpointOf(screen, other), nowDistance / wasDistance),
+        );
+      }
+      return;
+    }
+
+    if (gesture.pointerId !== event.pointerId) return;
 
     const screen = screenPointIn(containerRef.current, event);
     const board = toBoardPoint(screen, viewportRef.current);
@@ -457,8 +543,21 @@ export function MoodboardCanvas({
   }
 
   function onPointerUp(event: PointerEvent<HTMLDivElement>) {
+    pointerPointsRef.current.delete(event.pointerId);
     const gesture = gestureRef.current;
-    if (!gesture || gesture.pointerId !== event.pointerId) return;
+    if (!gesture) return;
+
+    if (gesture.kind === 'pinch') {
+      if (!gesture.pointerIds.includes(event.pointerId)) return;
+      // One finger lifting ends the pinch outright rather than handing off to
+      // a one-pointer gesture for whichever finger is still down — the
+      // remaining touch does nothing until it is lifted and pressed again, so
+      // there is nothing left to jump the viewport or drag a tile by surprise.
+      gestureRef.current = null;
+      return;
+    }
+
+    if (gesture.pointerId !== event.pointerId) return;
     gestureRef.current = null;
 
     if (gesture.kind === 'marquee') {

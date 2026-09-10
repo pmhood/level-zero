@@ -181,6 +181,59 @@ describe('the space pan modifier', () => {
   });
 });
 
+describe('pinch zoom', () => {
+  function transformOf(canvas: HTMLElement): string {
+    return canvas.querySelector<HTMLElement>('[style*="scale"]')?.style.transform ?? '';
+  }
+
+  it('zooms about the midpoint of the two touches', () => {
+    const canvas = renderCanvas([]);
+
+    fireEvent.pointerDown(canvas, { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
+    fireEvent.pointerDown(canvas, { pointerId: 2, button: 0, clientX: 300, clientY: 100 });
+    // Only the first finger moves; the second holds its touch-down position.
+    fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 0, clientY: 100 });
+
+    expect(transformOf(canvas)).toBe('translate(-75px, -50px) scale(1.5)');
+
+    fireEvent.pointerUp(canvas, { pointerId: 1, clientX: 0, clientY: 100 });
+    fireEvent.pointerUp(canvas, { pointerId: 2, clientX: 300, clientY: 100 });
+  });
+
+  it('zooms rather than dragging a tile the pinch starts on', () => {
+    renderCanvas([node()]);
+    const canvas = screen.getByTestId('moodboard-canvas');
+
+    fireEvent.pointerDown(tile('node_1'), { pointerId: 1, button: 0, clientX: 50, clientY: 50 });
+    fireEvent.pointerDown(canvas, { pointerId: 2, button: 0, clientX: 400, clientY: 50 });
+    fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 100, clientY: 50 });
+    fireEvent.pointerUp(canvas, { pointerId: 1, clientX: 100, clientY: 50 });
+    fireEvent.pointerUp(canvas, { pointerId: 2, clientX: 400, clientY: 50 });
+
+    expect(actions.updateNodes).not.toHaveBeenCalled();
+    expect(tile('node_1').style.left).toBe('0px');
+    expect(tile('node_1').style.top).toBe('0px');
+  });
+
+  it('ends cleanly when one finger lifts, without stranding the gesture or jumping the viewport', () => {
+    const canvas = renderCanvas([]);
+
+    fireEvent.pointerDown(canvas, { pointerId: 1, button: 0, clientX: 100, clientY: 100 });
+    fireEvent.pointerDown(canvas, { pointerId: 2, button: 0, clientX: 300, clientY: 100 });
+    fireEvent.pointerMove(canvas, { pointerId: 1, clientX: 0, clientY: 100 });
+    expect(transformOf(canvas)).toBe('translate(-75px, -50px) scale(1.5)');
+
+    fireEvent.pointerUp(canvas, { pointerId: 1, clientX: 0, clientY: 100 });
+    // The still-down finger moving on its own must not resume the zoom.
+    fireEvent.pointerMove(canvas, { pointerId: 2, clientX: 500, clientY: 100 });
+
+    expect(transformOf(canvas)).toBe('translate(-75px, -50px) scale(1.5)');
+    expect(() =>
+      fireEvent.pointerUp(canvas, { pointerId: 2, clientX: 500, clientY: 100 }),
+    ).not.toThrow();
+  });
+});
+
 describe('selecting', () => {
   it('selects the tile that was pressed', () => {
     renderCanvas([node({ id: 'node_1' }), node({ id: 'node_2', x: 400 })]);
