@@ -8,6 +8,11 @@ import {
   type Job,
   type MoodboardConnector,
   type MoodboardNode,
+  type Playtest,
+  type PlaytestFeedback,
+  type PlaytestMetric,
+  type PlaytestObservation,
+  type PlaytestSession,
   type Project,
   type PrototypeVersion,
   type SearchDocument,
@@ -29,6 +34,18 @@ import {
   type NewMoodboardConnectorRow,
   type NewMoodboardNodeRow,
 } from '../schema/moodboards';
+import {
+  type NewPlaytestFeedbackRow,
+  type NewPlaytestMetricRow,
+  type NewPlaytestObservationRow,
+  type NewPlaytestRow,
+  type NewPlaytestSessionRow,
+  type PlaytestFeedbackRow,
+  type PlaytestMetricRow,
+  type PlaytestObservationRow,
+  type PlaytestRow,
+  type PlaytestSessionRow,
+} from '../schema/playtests';
 import { type NewProjectRow, type ProjectRow } from '../schema/projects';
 import { type NewSearchDocumentRow, type SearchDocumentRow } from '../schema/search-documents';
 import {
@@ -491,6 +508,162 @@ export function toSearchDocumentRow(document: SearchDocument): NewSearchDocument
     sourceVersionId: document.sourceVersionId,
     sourceUpdatedAt: document.sourceUpdatedAt,
     indexedAt: document.indexedAt,
+  };
+}
+
+export function toPlaytest(row: PlaytestRow): Playtest {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    prototypeVersionId: row.prototypeVersionId,
+    name: row.name,
+    goal: row.goal,
+    status: row.status,
+    summary: row.summary,
+    tags: row.tags,
+    createdBy: row.createdBy,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export function toPlaytestRow(playtest: Playtest): NewPlaytestRow {
+  return {
+    id: playtest.id,
+    projectId: playtest.projectId,
+    prototypeVersionId: playtest.prototypeVersionId,
+    name: playtest.name,
+    goal: playtest.goal,
+    status: playtest.status,
+    summary: playtest.summary,
+    tags: playtest.tags,
+    createdBy: playtest.createdBy,
+    createdAt: playtest.createdAt,
+    updatedAt: playtest.updatedAt,
+  };
+}
+
+export function toPlaytestSession(row: PlaytestSessionRow): PlaytestSession {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    playtestId: row.playtestId,
+    sessionNumber: row.sessionNumber,
+    participant: row.participant,
+    notes: row.notes,
+    startedAt: row.startedAt,
+    endedAt: row.endedAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export function toPlaytestSessionRow(session: PlaytestSession): NewPlaytestSessionRow {
+  return {
+    id: session.id,
+    projectId: session.projectId,
+    playtestId: session.playtestId,
+    sessionNumber: session.sessionNumber,
+    participant: session.participant,
+    notes: session.notes,
+    startedAt: session.startedAt,
+    endedAt: session.endedAt,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+  };
+}
+
+export function toPlaytestObservation(row: PlaytestObservationRow): PlaytestObservation {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    playtestId: row.playtestId,
+    sessionId: row.sessionId,
+    entityId: row.entityId,
+    atSeconds: row.atSeconds,
+    body: row.body,
+    tags: row.tags,
+    observedBy: row.observedBy,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export function toPlaytestObservationRow(
+  observation: PlaytestObservation,
+): NewPlaytestObservationRow {
+  return {
+    id: observation.id,
+    projectId: observation.projectId,
+    playtestId: observation.playtestId,
+    sessionId: observation.sessionId,
+    entityId: observation.entityId,
+    atSeconds: observation.atSeconds,
+    body: observation.body,
+    tags: observation.tags,
+    observedBy: observation.observedBy,
+    createdAt: observation.createdAt,
+    updatedAt: observation.updatedAt,
+  };
+}
+
+export function toPlaytestFeedback(row: PlaytestFeedbackRow): PlaytestFeedback {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    playtestId: row.playtestId,
+    sessionId: row.sessionId,
+    body: row.body,
+    sentiment: row.sentiment,
+    tags: row.tags,
+    author: row.author,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export function toPlaytestFeedbackRow(feedback: PlaytestFeedback): NewPlaytestFeedbackRow {
+  return {
+    id: feedback.id,
+    projectId: feedback.projectId,
+    playtestId: feedback.playtestId,
+    sessionId: feedback.sessionId,
+    body: feedback.body,
+    sentiment: feedback.sentiment,
+    tags: feedback.tags,
+    author: feedback.author,
+    createdAt: feedback.createdAt,
+    updatedAt: feedback.updatedAt,
+  };
+}
+
+export function toPlaytestMetric(row: PlaytestMetricRow): PlaytestMetric {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    playtestId: row.playtestId,
+    sessionId: row.sessionId,
+    metricKey: row.metricKey,
+    label: row.label,
+    value: row.value,
+    unit: row.unit,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export function toPlaytestMetricRow(metric: PlaytestMetric): NewPlaytestMetricRow {
+  return {
+    id: metric.id,
+    projectId: metric.projectId,
+    playtestId: metric.playtestId,
+    sessionId: metric.sessionId,
+    metricKey: metric.metricKey,
+    label: metric.label,
+    value: metric.value,
+    unit: metric.unit,
+    createdAt: metric.createdAt,
+    updatedAt: metric.updatedAt,
   };
 }
 

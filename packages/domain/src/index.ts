@@ -273,6 +273,70 @@ export {
 } from './prototype/prototype-service';
 
 export {
+  MAX_PLAYTEST_CREATED_BY_LENGTH,
+  MAX_PLAYTEST_GOAL_LENGTH,
+  MAX_PLAYTEST_NAME_LENGTH,
+  MAX_PLAYTEST_SUMMARY_LENGTH,
+  PLAYTEST_STATUSES,
+  applyPlaytestUpdate,
+  createPlaytest,
+  type CreatePlaytestInput,
+  type Playtest,
+  type PlaytestFactoryDeps,
+  type PlaytestStatus,
+  type UpdatePlaytestInput,
+} from './playtest/playtest';
+export {
+  MAX_PLAYTEST_SESSION_NOTES_LENGTH,
+  MAX_PLAYTEST_SESSION_PARTICIPANT_LENGTH,
+  createPlaytestSession,
+  type CreatePlaytestSessionInput,
+  type PlaytestSession,
+  type PlaytestSessionFactoryDeps,
+} from './playtest/playtest-session';
+export {
+  MAX_PLAYTEST_OBSERVATION_BODY_LENGTH,
+  MAX_PLAYTEST_OBSERVATION_OBSERVED_BY_LENGTH,
+  createPlaytestObservation,
+  type CreatePlaytestObservationInput,
+  type PlaytestObservation,
+  type PlaytestObservationFactoryDeps,
+} from './playtest/playtest-observation';
+export {
+  MAX_PLAYTEST_FEEDBACK_AUTHOR_LENGTH,
+  MAX_PLAYTEST_FEEDBACK_BODY_LENGTH,
+  PLAYTEST_SENTIMENTS,
+  createPlaytestFeedback,
+  type CreatePlaytestFeedbackInput,
+  type PlaytestFeedback,
+  type PlaytestFeedbackFactoryDeps,
+  type PlaytestSentiment,
+} from './playtest/playtest-feedback';
+export {
+  MAX_PLAYTEST_METRIC_LABEL_LENGTH,
+  MAX_PLAYTEST_METRIC_UNIT_LENGTH,
+  createPlaytestMetric,
+  resolvePlaytestMetricKey,
+  type CreatePlaytestMetricInput,
+  type PlaytestMetric,
+  type PlaytestMetricFactoryDeps,
+} from './playtest/playtest-metric';
+export {
+  type PlaytestListFilter,
+  type PlaytestPage,
+  type PlaytestRepository,
+} from './playtest/playtest-repository';
+export {
+  PlaytestService,
+  type NewPlaytestInput,
+  type PlaytestServiceDeps,
+  type RecordPlaytestFeedbackInput,
+  type RecordPlaytestMetricInput,
+  type RecordPlaytestObservationInput,
+  type RecordPlaytestSessionInput,
+} from './playtest/playtest-service';
+
+export {
   DEFAULT_MOODBOARD_NODE_SIZE,
   MOODBOARD_NODE_TYPES,
   createMoodboardNode,
