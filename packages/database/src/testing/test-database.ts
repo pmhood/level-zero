@@ -30,7 +30,7 @@ export async function connectTestDatabase(): Promise<DatabaseClient> {
   const adminConnectionString = process.env.DATABASE_URL;
   if (!adminConnectionString) {
     throw new Error(
-      'DATABASE_URL is not set. Integration tests need Postgres: run `pnpm infra:up` and `pnpm db:migrate`.',
+      'DATABASE_URL is not set. Integration tests need Postgres: run `pnpm infra:up`.',
     );
   }
 
