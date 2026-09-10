@@ -45,7 +45,7 @@ beforeEach(async () => {
   assets = new AssetService(assetRepo, projectRepo, new InMemoryObjectStorageProvider(), deps);
   relationships = new EntityRelationshipService(relationshipRepo, entityRepo, deps);
   moodboards = new MoodboardService(
-    new InMemoryMoodboardRepository(),
+    new InMemoryMoodboardRepository(relationshipRepo),
     entities,
     assetRepo,
     relationships,

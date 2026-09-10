@@ -111,7 +111,9 @@ export const moodboardNodes = pgTable(
  * A connector is an annotation, not a claim about the project: it lives here,
  * beside the layout, and never in `entity_relationships`. `relationship_id` is
  * null until someone explicitly promotes the line into a real edge, and is
- * `ON DELETE SET NULL` so unlinking that edge leaves the line untouched.
+ * `ON DELETE SET NULL` so unlinking that edge leaves the line untouched. It is
+ * also unique — Postgres allows any number of nulls — so an edge can never end
+ * up claimed by two lines.
  *
  * Both endpoints are referenced by `(id, project_id)`, so a connector joining
  * two projects cannot be written at all, and both cascade: erasing a node
@@ -152,6 +154,9 @@ export const moodboardConnectors = pgTable(
       foreignColumns: [moodboardNodes.id, moodboardNodes.projectId],
       name: 'moodboard_connectors_to_fk',
     }).onDelete('cascade'),
+    // At most one line owns a promoted edge: a duplicate promotion fails here
+    // rather than quietly adding a second connector to the same relationship.
+    unique('moodboard_connectors_relationship_id_key').on(table.relationshipId),
     check('moodboard_connectors_no_self_link', sql`${table.fromNodeId} <> ${table.toNodeId}`),
     index('moodboard_connectors_project_idx').on(table.projectId),
     index('moodboard_connectors_board_idx').on(table.boardId),

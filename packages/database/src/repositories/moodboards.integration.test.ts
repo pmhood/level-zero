@@ -1,6 +1,7 @@
 import {
   ActivityService,
   AssetService,
+  ConflictError,
   EntityRelationshipService,
   EntityService,
   MoodboardService,
@@ -273,7 +274,71 @@ describe('promoting a connector', () => {
     expect(stored?.id).toBe(connector.id);
     expect(stored?.relationshipId).toBeNull();
   });
+
+  it('rolls the new edge back when the connector cannot be updated', async () => {
+    const { tam, reef, from, to } = await twoEntityNodes();
+    const promoted = await moodboards.connect(project.id, board.id, {
+      fromNodeId: from.id,
+      toNodeId: to.id,
+    });
+    const other = await moodboards.connect(project.id, board.id, {
+      fromNodeId: to.id,
+      toNodeId: from.id,
+    });
+    const { relationship } = await moodboards.promoteConnector(
+      project.id,
+      board.id,
+      promoted.id,
+      'references',
+    );
+
+    // A second line claiming the edge the first already owns. Its own edge is
+    // written first and the uniqueness constraint refuses the claim after, so
+    // this only leaves the graph clean if the pair is one transaction.
+    const doomed = await relationships.draftLink(project.id, {
+      sourceEntityId: reef.id,
+      targetEntityId: tam.id,
+      relation: 'appears_in',
+    });
+
+    await expect(
+      boardRepo.promoteConnector(
+        { ...other, relationshipId: relationship.id, updatedAt: new Date() },
+        doomed,
+      ),
+    ).rejects.toThrow(ConflictError);
+
+    expect(await relationshipCount()).toBe(1);
+    const lines = (await moodboards.open(project.id, board.id)).connectors;
+    expect(lines.find((line) => line.id === other.id)?.relationshipId).toBeNull();
+  });
+
+  it('writes one edge when two promotions of the same line race', async () => {
+    const { tam, from, to } = await twoEntityNodes();
+    const connector = await moodboards.connect(project.id, board.id, {
+      fromNodeId: from.id,
+      toNodeId: to.id,
+    });
+
+    // Two different relations, so `entity_relationships`' unique edge is no
+    // help: only the connector's own lock stops the second one being written.
+    const outcomes = await Promise.allSettled([
+      moodboards.promoteConnector(project.id, board.id, connector.id, 'references'),
+      moodboards.promoteConnector(project.id, board.id, connector.id, 'appears_in'),
+    ]);
+
+    expect(outcomes.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1);
+    expect(await relationshipCount()).toBe(1);
+    expect((await relationships.neighborhood(project.id, tam.id, {})).outgoing).toHaveLength(1);
+  });
 });
+
+async function relationshipCount(): Promise<number> {
+  const result = await client.db.execute<{ total: number }>(
+    sql`select count(*)::int as total from entity_relationships`,
+  );
+  return Number(result.rows[0]?.total);
+}
 
 async function grouped(): Promise<{ group: MoodboardNode; note: MoodboardNode }> {
   const group = await moodboards.addNode(project.id, board.id, { type: 'group' });

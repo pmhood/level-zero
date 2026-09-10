@@ -1,5 +1,7 @@
 import {
+  ConflictError,
   NotFoundError,
+  type EntityRelationship,
   type MoodboardConnector,
   type MoodboardNode,
   type MoodboardRepository,
@@ -7,13 +9,16 @@ import {
 import { and, asc, eq } from 'drizzle-orm';
 
 import { type Database } from '../postgres/client';
+import { entityRelationships } from '../schema/entity-relationships';
 import { moodboardConnectors, moodboardNodes } from '../schema/moodboards';
 import {
+  toEntityRelationshipRow,
   toMoodboardConnector,
   toMoodboardConnectorRow,
   toMoodboardNode,
   toMoodboardNodeRow,
 } from './mappers';
+import { UNIQUE_VIOLATION, hasPostgresCode } from './postgres-errors';
 
 /**
  * Postgres adapter for the domain's `MoodboardRepository` port.
@@ -22,6 +27,9 @@ import {
  * deleting a placement is one `DELETE` against this table. The group and
  * connector clean-up a delete implies is the schema's own `ON DELETE SET NULL`
  * and `ON DELETE CASCADE`, not a second statement that could be forgotten.
+ *
+ * `promoteConnector` is the one method that writes outside these two tables,
+ * because the edge it publishes has to land with the connector or not at all.
  */
 export class DrizzleMoodboardRepository implements MoodboardRepository {
   constructor(private readonly db: Database) {}
@@ -155,6 +163,69 @@ export class DrizzleMoodboardRepository implements MoodboardRepository {
 
     if (!row) throw new NotFoundError('Moodboard connector', connector.id);
     return toMoodboardConnector(row);
+  }
+
+  /**
+   * Publishes the connector into the project graph: the edge and the
+   * back-pointer to it, in one transaction.
+   *
+   * The connector row is locked before either write, so two promotions of the
+   * same line queue up and the loser sees the winner's `relationship_id` and
+   * throws instead of writing a second edge. A failure anywhere in here rolls
+   * the edge back with it, leaving the board exactly as it was.
+   */
+  async promoteConnector(
+    connector: MoodboardConnector,
+    relationship: EntityRelationship,
+  ): Promise<MoodboardConnector> {
+    try {
+      return await this.db.transaction(async (tx) => {
+        const [locked] = await tx
+          .select({ relationshipId: moodboardConnectors.relationshipId })
+          .from(moodboardConnectors)
+          .where(
+            and(
+              eq(moodboardConnectors.id, connector.id),
+              eq(moodboardConnectors.projectId, connector.projectId),
+            ),
+          )
+          .for('update')
+          .limit(1);
+
+        if (!locked) throw new NotFoundError('Moodboard connector', connector.id);
+        if (locked.relationshipId) {
+          throw new ConflictError('That connector has already been promoted', {
+            connectorId: connector.id,
+            relationshipId: locked.relationshipId,
+          });
+        }
+
+        await tx.insert(entityRelationships).values(toEntityRelationshipRow(relationship));
+
+        const [row] = await tx
+          .update(moodboardConnectors)
+          .set({ relationshipId: connector.relationshipId, updatedAt: connector.updatedAt })
+          .where(
+            and(
+              eq(moodboardConnectors.id, connector.id),
+              eq(moodboardConnectors.projectId, connector.projectId),
+            ),
+          )
+          .returning();
+
+        if (!row) throw new NotFoundError('Moodboard connector', connector.id);
+        return toMoodboardConnector(row);
+      });
+    } catch (error) {
+      // Another writer took either the edge or the relationship id first. The
+      // transaction rolled back with it, so the board is exactly as it was.
+      if (hasPostgresCode(error, UNIQUE_VIOLATION)) {
+        throw new ConflictError('That promotion raced another write and was rolled back', {
+          connectorId: connector.id,
+        });
+      }
+      throw error;
+    }
   }
 
   async deleteConnector(projectId: string, connectorId: string): Promise<void> {

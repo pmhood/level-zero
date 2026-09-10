@@ -68,7 +68,7 @@ import {
   type VersionListFilter,
   type VersionPage,
 } from '../version/entity-version-repository';
-import { NotFoundError } from '../shared/errors';
+import { ConflictError, NotFoundError } from '../shared/errors';
 
 /** Newest first, with the id as a stable tiebreaker. */
 function byNewest<T extends { createdAt: Date; id: string }>(a: T, b: T): number {
@@ -577,12 +577,17 @@ export class InMemoryPrototypeVersionRepository implements PrototypeVersionRepos
  * Mirrors what the Postgres schema enforces on delete: removing a node clears
  * the group from anything inside it and drops the connectors touching it, and
  * nothing here ever reads or writes an asset or entity.
+ *
+ * Promoting a connector writes an edge as well, so this repository is handed
+ * the relationship store the service under test was given — the Postgres pair
+ * share one database, and here they share one map.
  */
 export class InMemoryMoodboardRepository implements MoodboardRepository {
   private readonly nodes = new Map<string, MoodboardNode>();
   private readonly connectors = new Map<string, MoodboardConnector>();
 
   constructor(
+    private readonly relationships: EntityRelationshipRepository,
     seedNodes: readonly MoodboardNode[] = [],
     seedConnectors: readonly MoodboardConnector[] = [],
   ) {
@@ -659,6 +664,27 @@ export class InMemoryMoodboardRepository implements MoodboardRepository {
     if (!existing || existing.projectId !== connector.projectId) {
       throw new NotFoundError('Moodboard connector', connector.id);
     }
+    this.connectors.set(connector.id, structuredClone(connector));
+    return structuredClone(connector);
+  }
+
+  /** Single-threaded, so the transaction the adapter needs is two writes. */
+  async promoteConnector(
+    connector: MoodboardConnector,
+    relationship: EntityRelationship,
+  ): Promise<MoodboardConnector> {
+    const existing = this.connectors.get(connector.id);
+    if (!existing || existing.projectId !== connector.projectId) {
+      throw new NotFoundError('Moodboard connector', connector.id);
+    }
+    if (existing.relationshipId) {
+      throw new ConflictError('That connector has already been promoted', {
+        connectorId: connector.id,
+        relationshipId: existing.relationshipId,
+      });
+    }
+
+    await this.relationships.insert(relationship);
     this.connectors.set(connector.id, structuredClone(connector));
     return structuredClone(connector);
   }
