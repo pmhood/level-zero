@@ -1,15 +1,18 @@
 import {
+  ASSET_REFERENCE_ASSET_ID_KEY,
   NotFoundError,
   type Entity,
   type EntityListFilter,
   type EntityPage,
   type EntityRepository,
+  type FindOrCreateAssetReferenceResult,
 } from '@level-zero/domain';
 import { and, count, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm';
 
 import { type Database } from '../postgres/client';
 import { entities } from '../schema/entities';
 import { escapeLikePattern, toEntity, toEntityRow } from './mappers';
+import { hasPostgresCode, UNIQUE_VIOLATION } from './postgres-errors';
 
 /**
  * Postgres adapter for the domain's `EntityRepository` port.
@@ -63,6 +66,36 @@ export class DrizzleEntityRepository implements EntityRepository {
 
     if (!row) throw new NotFoundError('Entity', entity.id);
     return toEntity(row);
+  }
+
+  async findOrCreateAssetReference(
+    entity: Entity,
+    assetId: string,
+  ): Promise<FindOrCreateAssetReferenceResult> {
+    try {
+      const [row] = await this.db.insert(entities).values(toEntityRow(entity)).returning();
+      if (!row) throw new Error('Insert returned no entity row');
+      return { entity: toEntity(row), created: true };
+    } catch (error) {
+      if (!hasPostgresCode(error, UNIQUE_VIOLATION)) throw error;
+
+      // Another request won the race for `entities_asset_reference_asset_id_key`:
+      // the constraint that just fired is what guarantees this row exists to find.
+      const [existing] = await this.db
+        .select()
+        .from(entities)
+        .where(
+          and(
+            eq(entities.projectId, entity.projectId),
+            eq(entities.type, 'asset_reference'),
+            sql`${entities.data} ->> ${ASSET_REFERENCE_ASSET_ID_KEY} = ${assetId}`,
+          ),
+        )
+        .limit(1);
+
+      if (!existing) throw error;
+      return { entity: toEntity(existing), created: false };
+    }
   }
 }
 

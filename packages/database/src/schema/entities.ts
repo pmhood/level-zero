@@ -8,6 +8,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
@@ -65,6 +66,15 @@ export const entities = pgTable(
     // (entity_id, project_id), which is what makes a cross-project edge
     // impossible to write rather than merely discouraged.
     unique('entities_id_project_id_key').on(table.id, table.projectId),
+    // One `asset_reference` entity per asset per project — active or
+    // archived. This is what makes `findOrCreateAssetReference` atomic under
+    // concurrent callers rather than a check-then-insert: a losing insert
+    // fails here and the caller looks up the winner instead of duplicating
+    // it. The JSON key must match `ASSET_REFERENCE_ASSET_ID_KEY` in
+    // packages/domain/src/asset/asset-reference.ts.
+    uniqueIndex('entities_asset_reference_asset_id_key')
+      .on(table.projectId, sql`(${table.data}->>'assetId')`)
+      .where(sql`${table.type} = 'asset_reference'`),
   ],
 );
 

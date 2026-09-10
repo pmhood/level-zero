@@ -20,6 +20,7 @@ vi.mock('@/lib/api', () => ({
   listEntities: vi.fn(),
   listAssets: vi.fn(),
   createEntity: vi.fn(),
+  findOrCreateAssetReference: vi.fn(),
   getEntityNeighborhood: vi.fn(),
   createRelationship: vi.fn(),
   deleteRelationship: vi.fn(),
@@ -221,7 +222,7 @@ describe('Character visuals', () => {
     vi.mocked(api.listGenerations).mockResolvedValue({ items: [finished], total: 1 });
     vi.mocked(api.getGeneration).mockResolvedValue(finished);
     vi.mocked(api.getAsset).mockResolvedValue(result);
-    vi.mocked(api.createEntity).mockResolvedValue(reference('ast_new'));
+    vi.mocked(api.findOrCreateAssetReference).mockResolvedValue(reference('ast_new'));
     vi.mocked(api.createRelationship).mockResolvedValue(edge(reference('ast_new')).relationship);
 
     renderVisuals();
@@ -229,11 +230,9 @@ describe('Character visuals', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Link to Kael Voss' }));
 
     await waitFor(() =>
-      expect(api.createEntity).toHaveBeenCalledWith('prj_1', {
-        type: 'asset_reference',
+      expect(api.findOrCreateAssetReference).toHaveBeenCalledWith('prj_1', {
+        assetId: 'ast_new',
         name: 'generated.svg',
-        status: 'active',
-        data: { assetId: 'ast_new' },
       }),
     );
     expect(api.createRelationship).toHaveBeenCalledWith('prj_1', 'ent_kael', {
@@ -319,7 +318,7 @@ describe('Character visuals', () => {
   it('reuses the asset reference an asset already has instead of making a second', async () => {
     const existing = reference('ast_portrait', { id: 'ent_existing' });
     vi.mocked(api.listAssets).mockResolvedValue({ items: [asset()], total: 1 });
-    vi.mocked(api.listEntities).mockResolvedValue({ items: [existing], total: 1 });
+    vi.mocked(api.findOrCreateAssetReference).mockResolvedValue(existing);
     vi.mocked(api.createRelationship).mockResolvedValue(edge(existing).relationship);
 
     renderVisuals();
@@ -331,7 +330,6 @@ describe('Character visuals', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Link image' }));
 
     await waitFor(() => expect(api.createRelationship).toHaveBeenCalledOnce());
-    expect(api.createEntity).not.toHaveBeenCalled();
     expect(vi.mocked(api.createRelationship).mock.calls[0]![2]).toEqual({
       targetEntityId: 'ent_existing',
       relation: 'references',
@@ -340,7 +338,7 @@ describe('Character visuals', () => {
 
   it('creates an asset reference for an asset nothing points at yet', async () => {
     vi.mocked(api.listAssets).mockResolvedValue({ items: [asset()], total: 1 });
-    vi.mocked(api.createEntity).mockResolvedValue(reference('ast_portrait'));
+    vi.mocked(api.findOrCreateAssetReference).mockResolvedValue(reference('ast_portrait'));
     vi.mocked(api.createRelationship).mockResolvedValue(
       edge(reference('ast_portrait')).relationship,
     );
@@ -353,10 +351,10 @@ describe('Character visuals', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Link image' }));
 
-    await waitFor(() => expect(api.createEntity).toHaveBeenCalledOnce());
-    expect(vi.mocked(api.createEntity).mock.calls[0]![1]).toMatchObject({
-      type: 'asset_reference',
-      data: { assetId: 'ast_portrait' },
+    await waitFor(() => expect(api.findOrCreateAssetReference).toHaveBeenCalledOnce());
+    expect(api.findOrCreateAssetReference).toHaveBeenCalledWith('prj_1', {
+      assetId: 'ast_portrait',
+      name: 'kael-portrait.png',
     });
   });
 

@@ -1,5 +1,6 @@
 import {
   ActivityService,
+  assetReferenceData,
   EntityService,
   NotFoundError,
   ProjectService,
@@ -268,6 +269,74 @@ describe('filtering in SQL', () => {
     expect(second.items).toHaveLength(1);
     expect(first.total).toBe(3);
     expect(new Set([...first.items, ...second.items].map((entity) => entity.id)).size).toBe(3);
+  });
+});
+
+describe('DrizzleEntityRepository.findOrCreateAssetReference', () => {
+  function candidate(project: Project, assetId: string, name = 'portrait.png'): Entity {
+    return createEntity(
+      { projectId: project.id, type: 'asset_reference', name, status: 'active', data: assetReferenceData(assetId) },
+      deps,
+    );
+  }
+
+  it('inserts the first reference for an asset', async () => {
+    const project = await seedProject('Deep Fathom');
+
+    const result = await entityRepo.findOrCreateAssetReference(candidate(project, 'asset-1'), 'asset-1');
+
+    expect(result.created).toBe(true);
+    expect(result.entity).toMatchObject({ type: 'asset_reference', data: { assetId: 'asset-1' } });
+  });
+
+  it('returns the existing reference instead of inserting a duplicate', async () => {
+    const project = await seedProject('Deep Fathom');
+    const first = await entityRepo.findOrCreateAssetReference(candidate(project, 'asset-1'), 'asset-1');
+
+    const second = await entityRepo.findOrCreateAssetReference(candidate(project, 'asset-1'), 'asset-1');
+
+    expect(second.created).toBe(false);
+    expect(second.entity.id).toBe(first.entity.id);
+  });
+
+  it('never resolves a reference belonging to another project', async () => {
+    const [a, b] = [await seedProject('A'), await seedProject('B')];
+    const inA = await entityRepo.findOrCreateAssetReference(candidate(a, 'shared-asset'), 'shared-asset');
+
+    const inB = await entityRepo.findOrCreateAssetReference(candidate(b, 'shared-asset'), 'shared-asset');
+
+    expect(inB.created).toBe(true);
+    expect(inB.entity.id).not.toBe(inA.entity.id);
+    expect(inB.entity.projectId).toBe(b.id);
+  });
+
+  it('finds an archived reference rather than creating a second one', async () => {
+    const project = await seedProject('Deep Fathom');
+    const first = await entityRepo.findOrCreateAssetReference(candidate(project, 'asset-1'), 'asset-1');
+    await entities.archive(project.id, first.entity.id);
+
+    const second = await entityRepo.findOrCreateAssetReference(candidate(project, 'asset-1'), 'asset-1');
+
+    expect(second.created).toBe(false);
+    expect(second.entity.id).toBe(first.entity.id);
+  });
+
+  it('lets two callers race to attach the same asset and produces one reference', async () => {
+    const project = await seedProject('Deep Fathom');
+
+    const [first, second] = await Promise.all([
+      entityRepo.findOrCreateAssetReference(candidate(project, 'asset-1'), 'asset-1'),
+      entityRepo.findOrCreateAssetReference(candidate(project, 'asset-1'), 'asset-1'),
+    ]);
+
+    expect(first.entity.id).toBe(second.entity.id);
+    expect([first.created, second.created].sort()).toEqual([false, true]);
+
+    const page = await entities.listByProject(project.id, {
+      types: ['asset_reference'],
+      includeArchived: true,
+    });
+    expect(page.items.filter((item) => item.data.assetId === 'asset-1')).toHaveLength(1);
   });
 });
 

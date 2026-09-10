@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "entities_asset_reference_asset_id_key" ON "entities" USING btree ("project_id",("data"->>'assetId')) WHERE "entities"."type" = 'asset_reference';
