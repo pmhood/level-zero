@@ -159,6 +159,27 @@ export class MoodboardService {
   }
 
   /**
+   * Takes multiple nodes off the board in one request.
+   *
+   * Removes all placements and their connectors atomically, so a failure
+   * removes nothing. The assets or entities they pointed at are untouched.
+   */
+  async removeNodes(
+    projectId: string,
+    boardId: string,
+    nodeIds: readonly string[],
+  ): Promise<void> {
+    await this.requireEditableBoard(projectId, boardId);
+    if (nodeIds.length === 0) return;
+
+    for (const nodeId of nodeIds) {
+      await this.requireNode(projectId, boardId, nodeId);
+    }
+
+    await this.boards.deleteNodes(projectId, nodeIds);
+  }
+
+  /**
    * Copies placements, not the things they point at.
    *
    * A duplicated asset node is a second placement of the *same* asset row. A

@@ -591,6 +591,15 @@ export function removeMoodboardNode(
   });
 }
 
+/** Removes multiple placements in one request. The assets or entities they pointed at are untouched. */
+export function removeMoodboardNodes(
+  projectId: string,
+  boardId: string,
+  nodeIds: readonly string[],
+): Promise<void> {
+  return post(`/api/projects/${projectId}/moodboards/${boardId}/nodes/remove`, { nodeIds });
+}
+
 export function connectMoodboardNodes(
   projectId: string,
   boardId: string,
