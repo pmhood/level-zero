@@ -125,6 +125,55 @@ describe('drawing the board', () => {
 
     expect(tile('node_1').style.transform).toBe(`rotate(${Math.PI / 4}rad)`);
   });
+
+  it('keeps the selection frame above every tile on a crowded board', () => {
+    // Tiles are stacked by z-order in the same stacking context as the frame,
+    // so a board with more tiles than the frame's z-index would bury it — and
+    // whichever tile landed on top would take the presses meant for its handles.
+    const crowd = Array.from({ length: 60 }, (_, index) =>
+      node({ id: `node_${index}`, zOrder: index }),
+    );
+    renderCanvas(crowd);
+    drag(tile('node_0'), { x: 0, y: 0 }, { x: 0, y: 0 });
+
+    const frame = Number(screen.getByTestId('moodboard-selection').style.zIndex);
+    const highest = Math.max(...crowd.map((given) => Number(tile(given.id).style.zIndex)));
+
+    expect(highest).toBe(60);
+    expect(frame).toBeGreaterThan(highest);
+  });
+});
+
+describe('the space pan modifier', () => {
+  it('takes Space when nothing is focused, and pans instead of moving a tile', () => {
+    const canvas = renderCanvas([node()]);
+
+    expect(fireEvent.keyDown(canvas, { code: 'Space' })).toBe(false);
+    drag(tile('node_1'), { x: 0, y: 0 }, { x: 50, y: 20 });
+
+    expect(actions.updateNodes).not.toHaveBeenCalled();
+    expect(canvas.querySelector<HTMLElement>('[style*="scale"]')?.style.transform).toContain(
+      'translate(50px, 20px)',
+    );
+  });
+
+  it('leaves Space to a focused button, which is how a button is pressed', () => {
+    renderCanvas([node()]);
+    drag(tile('node_1'), { x: 0, y: 0 }, { x: 0, y: 0 });
+    const button = screen.getByRole('button', { name: 'Front' });
+
+    expect(fireEvent.keyDown(button, { code: 'Space' })).toBe(true);
+  });
+
+  it('lets go of the modifier even when the key is released elsewhere', () => {
+    const canvas = renderCanvas([node()]);
+    fireEvent.keyDown(canvas, { code: 'Space' });
+
+    fireEvent.keyUp(document.body, { code: 'Space' });
+    drag(tile('node_1'), { x: 0, y: 0 }, { x: 50, y: 20 });
+
+    expect(patches()).toEqual([expect.objectContaining({ id: 'node_1', x: 50, y: 20 })]);
+  });
 });
 
 describe('selecting', () => {

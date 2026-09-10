@@ -235,21 +235,31 @@ export function MoodboardCanvas({
     return () => container.removeEventListener('wheel', onWheel);
   }, []);
 
-  // Space is the pan modifier, so it is held rather than pressed — and it is
-  // still an ordinary space in the inspector's text fields.
+  // Space is the pan modifier, so it is held rather than pressed. Taking it
+  // globally is what makes it available wherever the pointer is, so it is given
+  // up wherever it already means something: a space in the inspector's text
+  // fields, and pressing whichever control has the keyboard's attention.
   useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (event.code !== 'Space' || isTyping(event.target)) return;
-      if (event.type === 'keydown') event.preventDefault();
-      spaceRef.current = event.type === 'keydown';
-      setSpaceHeld(spaceRef.current);
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.code !== 'Space' || spaceBelongsTo(event.target)) return;
+      event.preventDefault();
+      spaceRef.current = true;
+      setSpaceHeld(true);
     }
 
-    window.addEventListener('keydown', onKey);
-    window.addEventListener('keyup', onKey);
+    // Never guarded: a key released somewhere else is still released, and a pan
+    // modifier that stayed stuck down would take the board with it.
+    function onKeyUp(event: KeyboardEvent) {
+      if (event.code !== 'Space') return;
+      spaceRef.current = false;
+      setSpaceHeld(false);
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
     return () => {
-      window.removeEventListener('keydown', onKey);
-      window.removeEventListener('keyup', onKey);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
     };
   }, []);
 
@@ -484,6 +494,7 @@ export function MoodboardCanvas({
             <MoodboardSelection
               box={selectionBox}
               zoom={viewport.zoom}
+              zIndex={tiles.length + 1}
               reshapable={reshapable}
               onHandlePointerDown={onHandlePointerDown}
             />
@@ -617,7 +628,16 @@ function screenPointIn(
   return { x: event.clientX - (rect?.left ?? 0), y: event.clientY - (rect?.top ?? 0) };
 }
 
-function isTyping(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+/**
+ * What Space already means something to.
+ *
+ * A button is activated by Space, so swallowing the key for the whole window
+ * would quietly take that away from anyone driving the board's own toolbar from
+ * the keyboard — and a text field would stop being able to type a space.
+ */
+const SPACE_ACTIVATES =
+  'input, textarea, select, button, a[href], [role="button"], [contenteditable="true"]';
+
+function spaceBelongsTo(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(SPACE_ACTIVATES) !== null;
 }

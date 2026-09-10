@@ -8,9 +8,17 @@ import type {
   RelationType,
 } from '@level-zero/domain';
 import { Button, Field, Input, Inspector, Select, Textarea } from '@level-zero/ui';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { MOODBOARD_NODE_LABEL } from './moodboard';
+
+/**
+ * How long the writer pauses before an edit goes out.
+ *
+ * Shorter than the GDD editor's, because these are one-line fields whose result
+ * is drawn on the board a moment later rather than paragraphs of prose.
+ */
+const CONTENT_SAVE_DELAY_MS = 600;
 
 /**
  * The relations a board connector can stand for.
@@ -113,7 +121,11 @@ function NodeDetails({
         </Field>
       )}
 
-      <NodeContentForm node={node} onEdit={onEdit} />
+      {/* Keyed, so selecting another node builds a new form from that node's
+          content instead of carrying the last one's draft — and unmounting the
+          old form is what sends whatever it was still holding, to the node it
+          was actually typed into. */}
+      <NodeContentForm key={node.id} node={node} onEdit={onEdit} />
 
       <Field label="Placement">
         <p className="text-xs text-muted-foreground">
@@ -133,21 +145,16 @@ function NodeContentForm({
   node: MoodboardNode;
   onEdit: (nodeId: string, data: Record<string, unknown>) => void;
 }) {
-  const [draft, setDraft] = useState(() => ({
+  const [draft, setDraft] = useState<ContentDraft>(() => ({
     text: typeof node.data.text === 'string' ? node.data.text : '',
     url: typeof node.data.url === 'string' ? node.data.url : '',
     colors: Array.isArray(node.data.colors) ? node.data.colors.join(', ') : '',
   }));
+  const schedule = useDebouncedEdit((data) => onEdit(node.id, data));
 
-  function save(next: typeof draft) {
+  function save(next: ContentDraft) {
     setDraft(next);
-    if (node.type === 'palette') {
-      onEdit(node.id, { colors: splitColors(next.colors) });
-    } else if (node.type === 'link') {
-      onEdit(node.id, { url: next.url, text: next.text });
-    } else {
-      onEdit(node.id, { text: next.text });
-    }
+    schedule(editedData(node.type, next));
   }
 
   if (node.type === 'text' || node.type === 'note') {
@@ -200,6 +207,58 @@ function NodeContentForm({
   }
 
   return null;
+}
+
+interface ContentDraft {
+  text: string;
+  url: string;
+  colors: string;
+}
+
+/** The `data` an edit to this kind of node means, and nothing it does not. */
+function editedData(type: MoodboardNode['type'], draft: ContentDraft): Record<string, unknown> {
+  if (type === 'palette') return { colors: splitColors(draft.colors) };
+  if (type === 'link') return { url: draft.url, text: draft.text };
+  return { text: draft.text };
+}
+
+/**
+ * Sends an edit once the writer pauses, rather than once per keystroke.
+ *
+ * The same shape as the GDD editor's autosave (`useEditorAutosave`): the field
+ * stays local so typing is never interrupted, one request goes out per pause,
+ * and whatever is still waiting is sent when the form goes away. Without it a
+ * sticky note is a `PATCH` per character, each one replacing the node's whole
+ * `data`.
+ */
+function useDebouncedEdit(
+  send: (data: Record<string, unknown>) => void,
+): (data: Record<string, unknown>) => void {
+  const sendRef = useRef(send);
+  sendRef.current = send;
+  const pendingRef = useRef<Record<string, unknown> | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flush = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
+
+    const data = pendingRef.current;
+    pendingRef.current = null;
+    if (data) sendRef.current(data);
+  }, []);
+
+  // Unmounting mid-pause must not silently drop the last edit.
+  useEffect(() => flush, [flush]);
+
+  return useCallback(
+    (data: Record<string, unknown>) => {
+      pendingRef.current = data;
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(flush, CONTENT_SAVE_DELAY_MS);
+    },
+    [flush],
+  );
 }
 
 function ConnectorList({

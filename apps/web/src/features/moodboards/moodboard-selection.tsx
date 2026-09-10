@@ -34,6 +34,13 @@ export interface MoodboardSelectionProps {
   box: Box;
   zoom: number;
   /**
+   * Above every tile on the board. Tiles are stacked by their own z-order in
+   * this same stacking context, so a fixed value would be overtaken by a board
+   * with more tiles than the value, and the tile that overtook it would cover
+   * the frame and swallow the presses meant for its handles.
+   */
+  zIndex: number;
+  /**
    * Whether the frame offers resize and rotate handles. It does for one
    * unlocked node; a group or a multiple selection can be dragged as a whole
    * but not reshaped, since there is no one node the handles would belong to.
@@ -55,6 +62,7 @@ export interface MoodboardSelectionProps {
 export function MoodboardSelection({
   box,
   zoom,
+  zIndex,
   reshapable,
   onHandlePointerDown,
 }: MoodboardSelectionProps) {
@@ -63,8 +71,10 @@ export function MoodboardSelection({
 
   return (
     <div
-      className="pointer-events-none absolute z-50"
+      data-testid="moodboard-selection"
+      className="pointer-events-none absolute"
       style={{
+        zIndex,
         left: box.x,
         top: box.y,
         width: box.width,

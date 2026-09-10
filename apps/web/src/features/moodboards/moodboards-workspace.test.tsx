@@ -53,6 +53,9 @@ vi.mock('./moodboard-canvas', () => ({
       <button type="button" onClick={() => onSelectionChange([nodes[0]!.id])}>
         Select first
       </button>
+      <button type="button" onClick={() => onSelectionChange([nodes[1]!.id])}>
+        Select second
+      </button>
       <button type="button" onClick={() => actions.removeNodes([nodes[0]!.id])}>
         Remove first
       </button>
@@ -314,6 +317,72 @@ describe('placing and removing', () => {
     expect(await screen.findByText('Shows asset')).toBeTruthy();
     expect(screen.getAllByText('reef.png')).toHaveLength(2);
     expect(screen.getByText(/any number of boards/)).toBeTruthy();
+  });
+});
+
+function textField(element: HTMLElement): string {
+  if (!(element instanceof HTMLTextAreaElement)) throw new Error('Not a text field');
+  return element.value;
+}
+
+describe('editing what a node says', () => {
+  const FIRST = node({ id: 'node_a', type: 'note', assetId: null, data: { text: 'Colder' } });
+  const SECOND = node({ id: 'node_b', type: 'note', assetId: null, data: { text: 'Warmer' } });
+
+  async function openBoardWithNotes() {
+    vi.mocked(api.getMoodboard).mockResolvedValue(board({ nodes: [FIRST, SECOND] }));
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: 'Wreck interiors' }));
+    await screen.findByTestId('canvas');
+  }
+
+  it('shows the node that is selected now, not the one selected before it', async () => {
+    await openBoardWithNotes();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select first' }));
+    expect(textField(await screen.findByLabelText('Text'))).toBe('Colder');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select second' }));
+
+    expect(textField(screen.getByLabelText('Text'))).toBe('Warmer');
+  });
+
+  it("never writes one note's text onto another", async () => {
+    await openBoardWithNotes();
+    fireEvent.click(screen.getByRole('button', { name: 'Select first' }));
+    fireEvent.change(await screen.findByLabelText('Text'), { target: { value: 'Colder still' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select second' }));
+    fireEvent.change(screen.getByLabelText('Text'), { target: { value: 'Warmer still' } });
+
+    await waitFor(() =>
+      expect(api.updateMoodboardNodes).toHaveBeenCalledWith('prj_1', 'board_1', [
+        { id: 'node_b', data: { text: 'Warmer still' } },
+      ]),
+    );
+    // The first note's edit went to the first note, and nowhere else.
+    expect(api.updateMoodboardNodes).toHaveBeenCalledWith('prj_1', 'board_1', [
+      { id: 'node_a', data: { text: 'Colder still' } },
+    ]);
+    expect(api.updateMoodboardNodes).toHaveBeenCalledTimes(2);
+  });
+
+  it('sends one request per pause rather than one per keystroke', async () => {
+    await openBoardWithNotes();
+    fireEvent.click(screen.getByRole('button', { name: 'Select first' }));
+    const field = await screen.findByLabelText('Text');
+
+    for (const value of ['C', 'Co', 'Col']) {
+      fireEvent.change(field, { target: { value } });
+    }
+    expect(api.updateMoodboardNodes).not.toHaveBeenCalled();
+
+    await waitFor(() => expect(api.updateMoodboardNodes).toHaveBeenCalledTimes(1), {
+      timeout: 2000,
+    });
+    expect(api.updateMoodboardNodes).toHaveBeenCalledWith('prj_1', 'board_1', [
+      { id: 'node_a', data: { text: 'Col' } },
+    ]);
   });
 });
 
