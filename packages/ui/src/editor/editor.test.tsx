@@ -214,6 +214,18 @@ describe('RichTextEditor', () => {
 
     await waitFor(() => expect(screen.getByText('Core loop')).toBeDefined());
   });
+
+  it('shows the writing alone when nobody can type on it', async () => {
+    const content = {
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Dive deeper.' }] }],
+    };
+
+    render(<RichTextEditor content={content} editable={false} label="Version 2" />);
+
+    await waitFor(() => expect(screen.getByText('Dive deeper.')).toBeDefined());
+    expect(screen.queryByRole('button', { name: 'Bold' })).toBeNull();
+  });
 });
 
 describe('useEditorAutosave', () => {

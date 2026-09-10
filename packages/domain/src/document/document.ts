@@ -108,21 +108,53 @@ export function documentContent(source: Pick<Entity, 'data'>): DocumentContent {
  * plain text; rendering is still the editor's job.
  */
 export function documentPlainText(content: DocumentContent): string {
+  return flatten(content.content);
+}
+
+/** One top-level block of a body: its node type, and the words it shows. */
+export interface DocumentBlock {
+  /** `paragraph`, `heading`, `bulletList`, or whatever a feature added. */
+  type: string;
+  text: string;
+}
+
+/**
+ * The body as the blocks a writer sees, each flattened to its prose.
+ *
+ * The paragraph is the unit somebody recognises coming back to a document, so
+ * it is the unit two versions are compared on. Serializing the stored JSON and
+ * comparing the strings would report every attribute the editor touched and
+ * none of the writing, which is the opposite of what a writer needs.
+ */
+export function documentBlocks(content: DocumentContent): DocumentBlock[] {
+  const nodes = Array.isArray(content.content) ? content.content : [];
+  const blocks: DocumentBlock[] = [];
+
+  for (const node of nodes) {
+    if (typeof node !== 'object' || node === null) continue;
+    const { type } = node as { type?: unknown };
+    blocks.push({ type: typeof type === 'string' ? type : 'block', text: flatten(node) });
+  }
+  return blocks;
+}
+
+/** Every `text` node under `node`, in reading order, as one run of prose. */
+function flatten(node: unknown): string {
   const parts: string[] = [];
 
-  const walk = (node: unknown): void => {
-    if (Array.isArray(node)) {
-      for (const child of node) walk(child);
+  const walk = (candidate: unknown): void => {
+    if (Array.isArray(candidate)) {
+      for (const child of candidate) walk(child);
       return;
     }
-    if (typeof node !== 'object' || node === null) return;
+    if (typeof candidate !== 'object' || candidate === null) return;
 
-    const { text, content: children } = node as { text?: unknown; content?: unknown };
+    const { text, content: children } = candidate as { text?: unknown; content?: unknown };
     if (typeof text === 'string' && text.length > 0) parts.push(text);
     if (children !== undefined) walk(children);
   };
 
-  walk(content.content);
+  walk(node);
   return parts.join(' ').replace(/\s+/g, ' ').trim();
 }
 

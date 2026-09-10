@@ -6,6 +6,7 @@ import { useState, type FormEvent } from 'react';
 
 import { TagInput } from '@/components/tag-input';
 import { entityTypeLabel } from '@/features/entities/entity-presentation';
+import { EntityVersionCompare } from '@/features/entities/entity-version-compare';
 import { apiErrorMessage } from '@/lib/api';
 
 import { WorldLore } from './world-lore';
@@ -21,7 +22,7 @@ import {
 } from './world';
 import { useUpdateWorldEntity } from './use-world';
 
-type DetailTab = 'canon' | 'lore';
+type DetailTab = 'canon' | 'lore' | 'compare';
 
 interface WorldDraft {
   name: string;
@@ -118,6 +119,7 @@ export function WorldDetail({
           items={[
             { value: 'canon', label: 'Canon' },
             { value: 'lore', label: 'Lore' },
+            { value: 'compare', label: 'Compare' },
           ]}
         />
       </div>
@@ -128,7 +130,11 @@ export function WorldDetail({
         </p>
       )}
 
-      {tab === 'lore' ? (
+      {tab === 'compare' ? (
+        <div className="px-5 py-4">
+          <EntityVersionCompare projectId={projectId} entity={entity} />
+        </div>
+      ) : tab === 'lore' ? (
         <div className="px-5 py-4">
           <WorldLore projectId={projectId} entity={entity} onOpenReference={onOpenReference} />
         </div>

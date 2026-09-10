@@ -5,6 +5,7 @@ import { StatusBadge, Tabs, Tag } from '@level-zero/ui';
 import { useState } from 'react';
 
 import { entityStatusBadge, entityTypeLabel } from '@/features/entities/entity-presentation';
+import { EntityVersionCompare } from '@/features/entities/entity-version-compare';
 
 import { CHARACTER_BACKGROUND_FIELD, CHARACTER_NOTES_FIELD, readCharacter } from './character';
 import { CharacterProfileForm, type ProfileSection } from './character-profile-form';
@@ -12,7 +13,7 @@ import { CharacterProse } from './character-prose';
 import { CharacterRelationships } from './character-relationships';
 import { CharacterVisuals } from './character-visuals';
 
-type DetailTab = ProfileSection | 'visuals' | 'background' | 'relationships' | 'notes';
+type DetailTab = ProfileSection | 'visuals' | 'background' | 'relationships' | 'notes' | 'compare';
 
 const TABS: { value: DetailTab; label: string }[] = [
   { value: 'overview', label: 'Overview' },
@@ -21,6 +22,7 @@ const TABS: { value: DetailTab; label: string }[] = [
   { value: 'inventory', label: 'Inventory' },
   { value: 'relationships', label: 'Relationships' },
   { value: 'notes', label: 'Notes' },
+  { value: 'compare', label: 'Compare' },
 ];
 
 function isProfileSection(tab: DetailTab): tab is ProfileSection {
@@ -97,6 +99,8 @@ export function CharacterDetail({
         {tab === 'relationships' && (
           <CharacterRelationships projectId={projectId} character={character} />
         )}
+
+        {tab === 'compare' && <EntityVersionCompare projectId={projectId} entity={character} />}
 
         {tab === 'notes' && (
           <CharacterProse

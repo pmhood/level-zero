@@ -5,6 +5,7 @@ import { Button, Field, Input, Select, StatusBadge, Tabs, Tag, Textarea } from '
 import { useState, type FormEvent } from 'react';
 
 import { TagInput } from '@/components/tag-input';
+import { EntityVersionCompare } from '@/features/entities/entity-version-compare';
 import { entityTypeLabel } from '@/features/entities/entity-presentation';
 import { apiErrorMessage } from '@/lib/api';
 
@@ -23,7 +24,7 @@ import {
 } from './mechanic';
 import { useUpdateMechanic } from './use-mechanics';
 
-type DetailTab = 'design' | 'rules' | 'tuning' | 'rationale';
+type DetailTab = 'design' | 'rules' | 'tuning' | 'rationale' | 'compare';
 
 interface MechanicDraft {
   name: string;
@@ -136,6 +137,7 @@ export function MechanicDetail({ projectId, mechanic }: { projectId: string; mec
             { value: 'rules', label: 'Rules & I/O' },
             { value: 'tuning', label: 'Tuning' },
             { value: 'rationale', label: 'Rationale' },
+            { value: 'compare', label: 'Compare' },
           ]}
         />
       </div>
@@ -146,7 +148,11 @@ export function MechanicDetail({ projectId, mechanic }: { projectId: string; mec
         </p>
       )}
 
-      {tab === 'rationale' ? (
+      {tab === 'compare' ? (
+        <div className="px-5 py-4">
+          <EntityVersionCompare projectId={projectId} entity={mechanic} />
+        </div>
+      ) : tab === 'rationale' ? (
         <div className="px-5 py-4">
           <MechanicRationale projectId={projectId} mechanic={mechanic} />
         </div>
