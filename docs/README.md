@@ -16,7 +16,11 @@ This package is intended to be copied into the `pmhood/level-zero` repository.
 
 Engineering evaluations written in this repository, rather than imported design material.
 
+- `canonical-entity-routes.md` — HTTP routing and navigation model for entities (issue #86)
+- `consistency-findings.md` — storage model for project consistency findings (issue #88)
 - `moodboard-canvas-library.md` — freely licensed alternatives to tldraw for the Moodboard canvas (issue #59)
+- `playtest-record-model.md` — database design for playtests and playtest records (issue #85)
+- `promotion-registry.md` — promotion registry shape and semantics (issue #87)
 
 ### `docs/mockups/`
 
