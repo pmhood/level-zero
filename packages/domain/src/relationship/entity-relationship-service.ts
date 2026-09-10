@@ -52,6 +52,17 @@ export class EntityRelationshipService {
    * project fails as "not found" before an edge can be written.
    */
   async link(projectId: string, input: LinkInput): Promise<EntityRelationship> {
+    return this.relationships.insert(await this.draftLink(projectId, input));
+  }
+
+  /**
+   * Runs `link`'s checks and returns the edge they passed, unwritten.
+   *
+   * Split out for `MoodboardService.promoteConnector`, which has to write the
+   * edge in the same transaction as the connector pointing at it and so cannot
+   * let this service do the insert.
+   */
+  async draftLink(projectId: string, input: LinkInput): Promise<EntityRelationship> {
     const relationship = createEntityRelationship({ ...input, projectId }, this.deps);
 
     await this.requireEntity(projectId, relationship.sourceEntityId);
@@ -70,7 +81,7 @@ export class EntityRelationshipService {
       });
     }
 
-    return this.relationships.insert(relationship);
+    return relationship;
   }
 
   /** Creates several edges at once, used by the lineage workflows. */

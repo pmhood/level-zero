@@ -1,0 +1,1 @@
+ALTER TABLE "moodboard_connectors" ADD CONSTRAINT "moodboard_connectors_relationship_id_key" UNIQUE("relationship_id");

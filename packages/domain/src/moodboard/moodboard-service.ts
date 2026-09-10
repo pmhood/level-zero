@@ -266,18 +266,20 @@ export class MoodboardService {
     const source = await this.requireEntityEndpoint(projectId, boardId, connector.fromNodeId);
     const target = await this.requireEntityEndpoint(projectId, boardId, connector.toNodeId);
 
-    const relationship = await this.relationships.link(projectId, {
+    const relationship = await this.relationships.draftLink(projectId, {
       sourceEntityId: source,
       targetEntityId: target,
       relation,
       metadata: { boardId, connectorId: connector.id },
     });
 
-    const promoted = await this.boards.saveConnector({
-      ...connector,
-      relationshipId: relationship.id,
-      updatedAt: this.deps.clock.now(),
-    });
+    // One write, because the edge and the connector recording it are one fact:
+    // the check above rules out a second promotion, but only a transaction
+    // rules out a half-finished first one.
+    const promoted = await this.boards.promoteConnector(
+      { ...connector, relationshipId: relationship.id, updatedAt: this.deps.clock.now() },
+      relationship,
+    );
 
     return { connector: promoted, relationship };
   }
