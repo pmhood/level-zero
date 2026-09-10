@@ -1,0 +1,23 @@
+-- Pre-deploy requirement (issue #97): this migration FAILS on a database that
+-- already holds duplicate `asset_reference` entities for the same asset —
+-- exactly the state the bug being fixed here has been producing for any
+-- project past 200 references. Postgres cannot build a unique index over
+-- existing duplicates, so `CREATE UNIQUE INDEX` below errors out with
+-- something like:
+--   error: could not create unique index "entities_asset_reference_asset_id_key"
+--   detail: Key (project_id, (data ->> 'assetId'::text))=(...) is duplicated.
+--
+-- Before applying this migration to any database that has run the old
+-- `findOrCreateAssetReference`, run:
+--
+--   SELECT project_id, data->>'assetId'
+--   FROM entities
+--   WHERE type = 'asset_reference'
+--   GROUP BY 1, 2
+--   HAVING count(*) > 1;
+--
+-- If that returns rows, do NOT delete or merge them here or as part of this
+-- migration — issue #97 explicitly forbids repairing duplicates as a side
+-- effect of the fix. File a separate data-repair issue, resolve it, and only
+-- then apply this migration.
+CREATE UNIQUE INDEX "entities_asset_reference_asset_id_key" ON "entities" USING btree ("project_id",("data"->>'assetId')) WHERE "entities"."type" = 'asset_reference';

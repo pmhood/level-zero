@@ -212,6 +212,23 @@ export function updateEntity(
   return patch(`/api/projects/${projectId}/entities/${entityId}`, patchInput);
 }
 
+export interface FindOrCreateAssetReferenceInput {
+  assetId: string;
+  name: string;
+}
+
+/**
+ * Resolves the `asset_reference` entity for an asset, reusing an existing
+ * one (active or archived) rather than creating a duplicate. Resolved
+ * server-side in one request — see `EntityService.findOrCreateAssetReference`.
+ */
+export function findOrCreateAssetReference(
+  projectId: string,
+  input: FindOrCreateAssetReferenceInput,
+): Promise<Entity> {
+  return post(`/api/projects/${projectId}/entities/asset-references/find-or-create`, input);
+}
+
 export function archiveEntity(projectId: string, entityId: string): Promise<Entity> {
   return post(`/api/projects/${projectId}/entities/${entityId}/archive`);
 }

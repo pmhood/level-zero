@@ -69,6 +69,7 @@ export {
   type EntityListFilter,
   type EntityPage,
   type EntityRepository,
+  type FindOrCreateAssetReferenceResult,
 } from './entity/entity-repository';
 export { EntityService, type EntityServiceDeps } from './entity/entity-service';
 

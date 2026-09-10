@@ -20,6 +20,12 @@ export interface EntityPage {
   total: number;
 }
 
+export interface FindOrCreateAssetReferenceResult {
+  entity: Entity;
+  /** False when `entity` was already there and `entity` passed in was discarded. */
+  created: boolean;
+}
+
 /**
  * Storage port for entities.
  *
@@ -31,4 +37,18 @@ export interface EntityRepository {
   findById(projectId: string, entityId: string): Promise<Entity | null>;
   listByProject(projectId: string, filter: EntityListFilter): Promise<EntityPage>;
   save(entity: Entity): Promise<Entity>;
+
+  /**
+   * Inserts `entity` — an `asset_reference` for `assetId` — unless the
+   * project already has one pointing at that asset (active or archived), in
+   * which case the existing entity is returned instead of a duplicate.
+   *
+   * Atomic under concurrent callers: backed by a database constraint rather
+   * than a check-then-insert, so two requests racing to attach the same
+   * asset can never both win the insert.
+   */
+  findOrCreateAssetReference(
+    entity: Entity,
+    assetId: string,
+  ): Promise<FindOrCreateAssetReferenceResult>;
 }

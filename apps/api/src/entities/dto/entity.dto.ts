@@ -68,6 +68,14 @@ export class UpdateEntityDto {
   data?: Record<string, unknown>;
 }
 
+export class FindOrCreateAssetReferenceDto {
+  @IsString()
+  assetId!: string;
+
+  @IsString()
+  name!: string;
+}
+
 export class ListEntitiesQueryDto {
   @IsOptional()
   @Transform(({ value }) => toStringArray(value))

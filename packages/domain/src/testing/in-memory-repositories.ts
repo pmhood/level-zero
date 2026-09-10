@@ -10,6 +10,7 @@ import {
   type AssetPage,
   type AssetRepository,
 } from '../asset/asset-repository';
+import { referencedAssetId } from '../asset/asset-reference';
 import {
   type GetUrlOptions,
   type ObjectStorageProvider,
@@ -20,6 +21,7 @@ import {
   type EntityListFilter,
   type EntityPage,
   type EntityRepository,
+  type FindOrCreateAssetReferenceResult,
 } from '../entity/entity-repository';
 import { type Generation } from '../generation/generation';
 import {
@@ -200,6 +202,19 @@ export class InMemoryEntityRepository implements EntityRepository {
     }
     this.rows.set(entity.id, structuredClone(entity));
     return structuredClone(entity);
+  }
+
+  async findOrCreateAssetReference(
+    entity: Entity,
+    assetId: string,
+  ): Promise<FindOrCreateAssetReferenceResult> {
+    const existing = [...this.rows.values()].find(
+      (row) => row.projectId === entity.projectId && referencedAssetId(row) === assetId,
+    );
+    if (existing) return { entity: structuredClone(existing), created: false };
+
+    this.rows.set(entity.id, structuredClone(entity));
+    return { entity: structuredClone(entity), created: true };
   }
 }
 

@@ -235,3 +235,83 @@ describe('filtering', () => {
     );
   });
 });
+
+describe('finding or creating an asset reference', () => {
+  it('creates one asset_reference entity the first time an asset is attached', async () => {
+    const reference = await entityService.findOrCreateAssetReference(projectA.id, 'asset-1', {
+      name: 'portrait.png',
+    });
+
+    expect(reference).toMatchObject({
+      type: 'asset_reference',
+      name: 'portrait.png',
+      data: { assetId: 'asset-1' },
+    });
+
+    const feed = await activityRepo.listByProject(projectA.id, {});
+    expect(feed.items[0]).toMatchObject({ type: 'entity_created', subjectId: reference.id });
+  });
+
+  it('reuses the existing reference on a second attach, past the old 200-item scan limit', async () => {
+    // Past what the removed REFERENCE_SEARCH_LIMIT scanned: proves the fix is
+    // a real lookup, not a page that happens to still cover this case.
+    for (let index = 0; index < 205; index += 1) {
+      await entityService.create(projectA.id, { type: 'asset_reference', name: `filler-${index}` });
+    }
+
+    const first = await entityService.findOrCreateAssetReference(projectA.id, 'asset-1', {
+      name: 'portrait.png',
+    });
+    const second = await entityService.findOrCreateAssetReference(projectA.id, 'asset-1', {
+      name: 'portrait.png',
+    });
+
+    expect(second.id).toBe(first.id);
+
+    const page = await entityService.listByProject(projectA.id, {
+      types: ['asset_reference'],
+      includeArchived: true,
+    });
+    expect(page.items.filter((item) => item.data.assetId === 'asset-1')).toHaveLength(1);
+  });
+
+  it('reuses an archived reference rather than creating a second one', async () => {
+    const first = await entityService.findOrCreateAssetReference(projectA.id, 'asset-1', {
+      name: 'portrait.png',
+    });
+    await entityService.archive(projectA.id, first.id);
+
+    const second = await entityService.findOrCreateAssetReference(projectA.id, 'asset-1', {
+      name: 'portrait.png',
+    });
+
+    expect(second.id).toBe(first.id);
+    expect(second.status).toBe('archived');
+  });
+
+  it('never resolves a reference belonging to another project', async () => {
+    const inA = await entityService.findOrCreateAssetReference(projectA.id, 'shared-asset-id', {
+      name: 'portrait.png',
+    });
+    const inB = await entityService.findOrCreateAssetReference(projectB.id, 'shared-asset-id', {
+      name: 'portrait.png',
+    });
+
+    expect(inB.id).not.toBe(inA.id);
+    expect(inB.projectId).toBe(projectB.id);
+  });
+
+  it('rejects attaching an asset in a project that does not exist', async () => {
+    await expect(
+      entityService.findOrCreateAssetReference('missing-project', 'asset-1', { name: 'x' }),
+    ).rejects.toThrow(NotFoundError);
+  });
+
+  it('rejects attaching an asset in an archived project', async () => {
+    await projectService.archive(projectB.id);
+
+    await expect(
+      entityService.findOrCreateAssetReference(projectB.id, 'asset-1', { name: 'x' }),
+    ).rejects.toThrow(ConflictError);
+  });
+});

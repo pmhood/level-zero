@@ -200,6 +200,62 @@ describe('entities endpoints', () => {
   });
 });
 
+describe('finding or creating an asset reference', () => {
+  it('creates the reference the first time an asset is attached', async () => {
+    const response = await http()
+      .post(`/api/projects/${project.id}/entities/asset-references/find-or-create`)
+      .send({ assetId: 'asset-1', name: 'portrait.png' })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      type: 'asset_reference',
+      name: 'portrait.png',
+      data: { assetId: 'asset-1' },
+    });
+  });
+
+  it('reuses the existing reference on a second attach', async () => {
+    const first = await http()
+      .post(`/api/projects/${project.id}/entities/asset-references/find-or-create`)
+      .send({ assetId: 'asset-1', name: 'portrait.png' })
+      .expect(201);
+
+    const second = await http()
+      .post(`/api/projects/${project.id}/entities/asset-references/find-or-create`)
+      .send({ assetId: 'asset-1', name: 'portrait.png' })
+      .expect(201);
+
+    expect(second.body.id).toBe(first.body.id);
+
+    const listed = await http()
+      .get(`/api/projects/${project.id}/entities?type=asset_reference`)
+      .expect(200);
+    expect(listed.body.total).toBe(1);
+  });
+
+  it('never resolves a reference belonging to another project', async () => {
+    const inProject = await http()
+      .post(`/api/projects/${project.id}/entities/asset-references/find-or-create`)
+      .send({ assetId: 'shared-asset', name: 'portrait.png' })
+      .expect(201);
+
+    const inOther = await http()
+      .post(`/api/projects/${otherProject.id}/entities/asset-references/find-or-create`)
+      .send({ assetId: 'shared-asset', name: 'portrait.png' })
+      .expect(201);
+
+    expect(inOther.body.id).not.toBe(inProject.body.id);
+    expect(inOther.body.projectId).toBe(otherProject.id);
+  });
+
+  it('returns 404 when the project does not exist', async () => {
+    await http()
+      .post('/api/projects/missing/entities/asset-references/find-or-create')
+      .send({ assetId: 'asset-1', name: 'portrait.png' })
+      .expect(404);
+  });
+});
+
 describe('entity listing query parameters', () => {
   beforeEach(async () => {
     for (const body of [

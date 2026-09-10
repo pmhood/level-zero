@@ -1,7 +1,12 @@
 import { EntityService, type Entity, type EntityPage } from '@level-zero/domain';
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 
-import { CreateEntityDto, ListEntitiesQueryDto, UpdateEntityDto } from './dto/entity.dto';
+import {
+  CreateEntityDto,
+  FindOrCreateAssetReferenceDto,
+  ListEntitiesQueryDto,
+  UpdateEntityDto,
+} from './dto/entity.dto';
 
 /**
  * Entities are addressed under their project, so scoping is part of the URL
@@ -17,6 +22,20 @@ export class EntitiesController {
   @Post()
   create(@Param('projectId') projectId: string, @Body() body: CreateEntityDto): Promise<Entity> {
     return this.entities.create(projectId, body);
+  }
+
+  /**
+   * The `asset_reference` entity for `body.assetId`, reused if one already
+   * exists (active or archived) rather than duplicated. Resolved server-side
+   * as one atomic lookup-or-insert — see `EntityService.findOrCreateAssetReference`
+   * — so it stays correct no matter how many references a project has.
+   */
+  @Post('asset-references/find-or-create')
+  findOrCreateAssetReference(
+    @Param('projectId') projectId: string,
+    @Body() body: FindOrCreateAssetReferenceDto,
+  ): Promise<Entity> {
+    return this.entities.findOrCreateAssetReference(projectId, body.assetId, { name: body.name });
   }
 
   @Get()
