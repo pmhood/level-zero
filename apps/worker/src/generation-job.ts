@@ -4,6 +4,7 @@ import {
   type AiArtifact,
   type AiCapability,
   type AiProviderRegistry,
+  type AiReferenceImage,
   type AiResult,
 } from '@level-zero/ai';
 import { type JobDelivery } from '@level-zero/database';
@@ -121,6 +122,7 @@ async function runGeneration(deps: GenerationJobDeps, job: Job): Promise<void> {
     prompt: generation.prompt,
     parameters: generation.parameters,
     context,
+    references: await loadReferences(deps, generation),
   });
 
   // `execute` may have fallen through to a later candidate; correct the
@@ -150,6 +152,38 @@ async function runGeneration(deps: GenerationJobDeps, job: Job): Promise<void> {
     completed: GENERATION_JOB_STEPS.length,
     step: null,
   });
+}
+
+/**
+ * Reads the bytes of the images the request works from.
+ *
+ * The generation record names its input assets; an editing or variation model
+ * needs the pixels behind them, which no stored context snapshot can carry.
+ * Only images are read: a reference is something a picture is made from, and
+ * streaming an unrelated build artifact into memory to hand a model would be a
+ * cost with no purpose.
+ */
+async function loadReferences(
+  deps: GenerationJobDeps,
+  generation: Generation,
+): Promise<AiReferenceImage[]> {
+  const references: AiReferenceImage[] = [];
+
+  for (const assetId of generation.inputAssetIds) {
+    // Metadata first, so a non-image is skipped without reading its bytes.
+    const asset = await deps.assets.getById(generation.projectId, assetId);
+    if (asset.kind !== 'image') continue;
+
+    const { content } = await deps.assets.download(generation.projectId, assetId);
+    references.push({
+      assetId: asset.id,
+      filename: asset.filename,
+      mimeType: asset.mimeType,
+      content,
+    });
+  }
+
+  return references;
 }
 
 /**

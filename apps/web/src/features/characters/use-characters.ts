@@ -1,16 +1,10 @@
 'use client';
 
-import {
-  assetReferenceData,
-  referencedAssetId,
-  type Asset,
-  type CreateEntityInput,
-  type Entity,
-  type UpdateEntityInput,
-} from '@level-zero/domain';
+import type { Asset, CreateEntityInput, Entity, UpdateEntityInput } from '@level-zero/domain';
 import type { JSONContent } from '@level-zero/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { findOrCreateAssetReference } from '@/features/entities/asset-reference';
 import * as api from '@/lib/api';
 
 import { CHARACTER_ENTITY_TYPE, lifecycleStatuses, type CharacterLifecycle } from './character';
@@ -204,29 +198,16 @@ export function useUnlinkCharacter(projectId: string) {
 /**
  * Points a character at an existing asset.
  *
- * An `asset_reference` entity already naming that asset is reused rather than
- * duplicated: one entity per file is what lets the same portrait appear in
- * Character Studio, a moodboard and the GDD without three copies of it.
+ * The `asset_reference` entity is shared with every other surface that shows
+ * the same file — see `findOrCreateAssetReference` — so linking a portrait here
+ * never duplicates it.
  */
 export function useAttachVisual(projectId: string) {
   const invalidate = useCharacterInvalidation(projectId);
 
   return useMutation({
     mutationFn: async ({ character, asset }: { character: Entity; asset: Asset }) => {
-      const references = await api.listEntities(projectId, {
-        type: ['asset_reference'],
-        includeArchived: true,
-        limit: 200,
-      });
-      const existing = references.items.find((item) => referencedAssetId(item) === asset.id);
-      const reference =
-        existing ??
-        (await api.createEntity(projectId, {
-          type: 'asset_reference',
-          name: asset.filename,
-          status: 'active',
-          data: assetReferenceData(asset.id),
-        }));
+      const reference = await findOrCreateAssetReference(projectId, asset);
 
       return api.createRelationship(projectId, character.id, {
         targetEntityId: reference.id,

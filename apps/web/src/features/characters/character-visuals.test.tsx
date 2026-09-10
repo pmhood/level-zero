@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import type { Asset, Entity, EntityNeighborhood, NeighborEdge } from '@level-zero/domain';
+import type {
+  Asset,
+  Entity,
+  EntityNeighborhood,
+  Generation,
+  NeighborEdge,
+} from '@level-zero/domain';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,6 +24,14 @@ vi.mock('@/lib/api', () => ({
   createRelationship: vi.fn(),
   deleteRelationship: vi.fn(),
   listGenerationsForAsset: vi.fn(),
+  listGenerations: vi.fn(),
+  createGeneration: vi.fn(),
+  getGeneration: vi.fn(),
+  getGenerationProvenance: vi.fn(),
+  cancelGeneration: vi.fn(),
+  getAsset: vi.fn(),
+  listJobs: vi.fn(),
+  jobStreamUrl: (projectId: string) => `/jobs/${projectId}/stream`,
 }));
 
 const api = await import('@/lib/api');
@@ -91,6 +105,33 @@ function asset(overrides: Partial<Asset> = {}): Asset {
   };
 }
 
+function queuedGeneration(overrides: Partial<Generation> = {}): Generation {
+  return {
+    id: 'gen_1',
+    projectId: 'prj_1',
+    capability: 'image.generate',
+    provider: null,
+    model: null,
+    prompt: 'a portrait',
+    parameters: {},
+    status: 'queued',
+    inputEntityIds: [],
+    inputAssetIds: [],
+    contextEntityIds: [],
+    resolvedContext: null,
+    outputAssetIds: [],
+    parentGenerationId: null,
+    seed: null,
+    providerRequestId: null,
+    failure: null,
+    createdAt: new Date(),
+    startedAt: null,
+    completedAt: null,
+    createdBy: null,
+    ...overrides,
+  };
+}
+
 function neighborhood(outgoing: NeighborEdge[]): EntityNeighborhood {
   return { entity: character(), outgoing, incoming: [] };
 }
@@ -114,6 +155,8 @@ describe('Character visuals', () => {
     vi.mocked(api.listAssets).mockResolvedValue({ items: [], total: 0 });
     vi.mocked(api.listEntities).mockResolvedValue({ items: [], total: 0 });
     vi.mocked(api.listGenerationsForAsset).mockResolvedValue({ items: [], total: 0 });
+    vi.mocked(api.listGenerations).mockResolvedValue({ items: [], total: 0 });
+    vi.mocked(api.listJobs).mockResolvedValue({ items: [], total: 0 });
   });
 
   afterEach(cleanup);
@@ -141,13 +184,69 @@ describe('Character visuals', () => {
     await screen.findByText('No visuals yet');
   });
 
-  it('leaves room for the generative actions without pretending they run', async () => {
+  it('runs a studio preset through the shared generation surface', async () => {
+    vi.mocked(api.createGeneration).mockResolvedValue(
+      queuedGeneration({ capability: 'image.generate' }),
+    );
     renderVisuals();
     await screen.findByText('No visuals yet');
 
-    const generate = screen.getByRole('button', { name: 'Generate Portrait' });
-    expect(generate).toHaveProperty('disabled', true);
-    expect(screen.getByRole('button', { name: '3D Concept' })).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Portrait' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+
+    await waitFor(() =>
+      expect(api.createGeneration).toHaveBeenCalledWith('prj_1', {
+        capability: 'image.generate',
+        prompt: 'Character portrait: head and shoulders, neutral key light, concept-art finish.',
+        // The character goes in as context, so the model reads who it is drawing.
+        context: { selectedEntityIds: ['ent_kael'] },
+      }),
+    );
+  });
+
+  it('asks for a source image before it will run a variation preset', async () => {
+    renderVisuals();
+    await screen.findByText('No visuals yet');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Outfit Variants' }));
+
+    expect(screen.getByRole('button', { name: 'Variations' })).toHaveProperty('disabled', true);
+    expect(screen.getByText(/no images yet/)).toBeTruthy();
+    expect(api.createGeneration).not.toHaveBeenCalled();
+  });
+
+  it('links a generated result through a shared asset reference, never a copy', async () => {
+    const finished = queuedGeneration({ status: 'complete', outputAssetIds: ['ast_new'] });
+    const result = asset({ id: 'ast_new', filename: 'generated.svg' });
+    vi.mocked(api.listGenerations).mockResolvedValue({ items: [finished], total: 1 });
+    vi.mocked(api.getGeneration).mockResolvedValue(finished);
+    vi.mocked(api.getAsset).mockResolvedValue(result);
+    vi.mocked(api.createEntity).mockResolvedValue(reference('ast_new'));
+    vi.mocked(api.createRelationship).mockResolvedValue(edge(reference('ast_new')).relationship);
+
+    renderVisuals();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Link to Kael Voss' }));
+
+    await waitFor(() =>
+      expect(api.createEntity).toHaveBeenCalledWith('prj_1', {
+        type: 'asset_reference',
+        name: 'generated.svg',
+        status: 'active',
+        data: { assetId: 'ast_new' },
+      }),
+    );
+    expect(api.createRelationship).toHaveBeenCalledWith('prj_1', 'ent_kael', {
+      targetEntityId: 'ent_ref',
+      relation: 'references',
+    });
+  });
+
+  it('offers no generator for an archived character', async () => {
+    renderVisuals(character({ status: 'archived' }));
+    await screen.findByText('No visuals yet');
+
+    expect(screen.queryByRole('button', { name: 'Generate Portrait' })).toBeNull();
   });
 
   it('offers a comparison only once there are two pictures to compare', async () => {

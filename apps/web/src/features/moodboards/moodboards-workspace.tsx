@@ -1,9 +1,10 @@
 'use client';
 
-import type { MoodboardNodeType, RelationType } from '@level-zero/domain';
+import type { Entity, MoodboardNodeType, RelationType } from '@level-zero/domain';
 import { EmptyState, WorkspacePage } from '@level-zero/ui';
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 
+import { GenerationPanel } from '@/features/generation/generation-panel';
 import { apiErrorMessage } from '@/lib/api';
 
 import { MoodboardCanvas } from './moodboard-canvas';
@@ -104,6 +105,17 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
       ? (nodes.find((node) => node.id === selectedNodeIds[0]) ?? null)
       : null;
 
+  // The entities on the selected nodes become the generator's context, so
+  // asking for "more like this" carries what the board is actually about.
+  const selectedEntities = useMemo(
+    () =>
+      nodes
+        .filter((node) => selectedNodeIds.includes(node.id) && node.entityId)
+        .map((node) => entities.get(node.entityId as string))
+        .filter((entity): entity is Entity => entity !== undefined),
+    [nodes, selectedNodeIds, entities],
+  );
+
   function openBoard(nextBoardId: string) {
     setOpenBoardId(nextBoardId);
     setSelectedNodeIds([]);
@@ -125,6 +137,17 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
             promote.mutate({ connectorId, relation })
           }
           onDisconnect={(connectorId) => disconnect.mutate(connectorId)}
+          generator={
+            openBoardId && (
+              <GenerationPanel
+                projectId={projectId}
+                contextEntities={selectedEntities}
+                referenceAssets={library.assets.data?.items ?? []}
+                onUseResult={(asset) => place('asset', { assetId: asset.id })}
+                useResultLabel="Add to board"
+              />
+            )
+          }
         />
       }
     >

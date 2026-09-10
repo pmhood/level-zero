@@ -3,6 +3,22 @@ import { type AssetKind } from '@level-zero/domain';
 import { type AiCapability } from './capabilities';
 import { type ResolvedContext } from './context';
 
+/**
+ * A reference image the request is built on: the asset being edited, or the
+ * plates a new image should take after.
+ *
+ * `ResolvedContext` already *names* the reference assets, because that is what
+ * gets stored on the generation record as provenance. This carries the bytes,
+ * which is what an image model actually needs and what a JSON snapshot can
+ * never hold — so the two are separate rather than one field doing both jobs.
+ */
+export interface AiReferenceImage {
+  assetId: string;
+  filename: string;
+  mimeType: string;
+  content: Buffer;
+}
+
 export interface AiRequest {
   capability: AiCapability;
   prompt: string;
@@ -10,6 +26,8 @@ export interface AiRequest {
   parameters?: Record<string, unknown>;
   /** The project material behind the request, assembled by `ContextResolver`. */
   context?: ResolvedContext;
+  /** Bytes of the images the request works from, in the order they were named. */
+  references?: readonly AiReferenceImage[];
 }
 
 /**

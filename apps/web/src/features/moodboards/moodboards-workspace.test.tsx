@@ -4,6 +4,7 @@ import type {
   AssetPage,
   Entity,
   EntityPage,
+  Generation,
   Moodboard,
   MoodboardConnector,
   MoodboardNode,
@@ -30,6 +31,15 @@ vi.mock('@/lib/api', () => ({
   connectMoodboardNodes: vi.fn(),
   deleteMoodboardConnector: vi.fn(),
   promoteMoodboardConnector: vi.fn(),
+  assetContentUrl: (projectId: string, assetId: string) => `/assets/${projectId}/${assetId}`,
+  listGenerations: vi.fn(),
+  createGeneration: vi.fn(),
+  getGeneration: vi.fn(),
+  getGenerationProvenance: vi.fn(),
+  cancelGeneration: vi.fn(),
+  getAsset: vi.fn(),
+  listJobs: vi.fn(),
+  jobStreamUrl: (projectId: string) => `/jobs/${projectId}/stream`,
 }));
 
 /**
@@ -163,6 +173,8 @@ beforeEach(() => {
   vi.mocked(api.updateMoodboardNodes).mockResolvedValue([]);
   vi.mocked(api.duplicateMoodboardNodes).mockResolvedValue([node({ id: 'node_copy' })]);
   vi.mocked(api.removeMoodboardNode).mockResolvedValue(undefined);
+  vi.mocked(api.listGenerations).mockResolvedValue({ items: [], total: 0 });
+  vi.mocked(api.listJobs).mockResolvedValue({ items: [], total: 0 });
   vi.mocked(api.promoteMoodboardConnector).mockResolvedValue({
     connector: connector({ relationshipId: 'rel_1' }),
     relationship: {
@@ -309,13 +321,55 @@ describe('placing and removing', () => {
     expect(api.addMoodboardNode).not.toHaveBeenCalled();
   });
 
+  it('adds a generated result to the board as a placement, not a copy', async () => {
+    const finished = {
+      id: 'gen_1',
+      projectId: 'prj_1',
+      capability: 'image.generate',
+      provider: 'local-image',
+      model: 'local-plate-1',
+      prompt: 'a trench',
+      parameters: {},
+      status: 'complete',
+      inputEntityIds: [],
+      inputAssetIds: [],
+      contextEntityIds: [],
+      resolvedContext: null,
+      outputAssetIds: ['ast_new'],
+      parentGenerationId: null,
+      seed: null,
+      providerRequestId: null,
+      failure: null,
+      createdAt: new Date(),
+      startedAt: null,
+      completedAt: null,
+      createdBy: null,
+    } satisfies Generation;
+    vi.mocked(api.listGenerations).mockResolvedValue({ items: [finished], total: 1 });
+    vi.mocked(api.getGeneration).mockResolvedValue(finished);
+    vi.mocked(api.getAsset).mockResolvedValue({ ...REEF, id: 'ast_new', filename: 'result.svg' });
+    await openBoard();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Add to board' }));
+
+    await waitFor(() =>
+      expect(api.addMoodboardNode).toHaveBeenCalledWith(
+        'prj_1',
+        'board_1',
+        expect.objectContaining({ type: 'asset', assetId: 'ast_new' }),
+      ),
+    );
+  });
+
   it('says what a selected node points at, and that removing it is safe', async () => {
     await openBoard();
 
     fireEvent.click(screen.getByRole('button', { name: 'Select first' }));
 
-    expect(await screen.findByText('Shows asset')).toBeTruthy();
-    expect(screen.getAllByText('reef.png')).toHaveLength(2);
+    // Scoped to the field: the same filename also appears in the rail's library
+    // and in the generator's reference list, and neither is what this asserts.
+    const shows = await screen.findByText('Shows asset');
+    expect(shows.parentElement?.textContent).toContain('reef.png');
     expect(screen.getByText(/any number of boards/)).toBeTruthy();
   });
 });

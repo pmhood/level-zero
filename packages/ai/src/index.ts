@@ -21,6 +21,7 @@ export {
   BaseAiProvider,
   type AiArtifact,
   type AiProvider,
+  type AiReferenceImage,
   type AiRequest,
   type AiResult,
 } from './provider';

@@ -4,9 +4,9 @@ import type { Asset, Entity } from '@level-zero/domain';
 import { Button, EmptyState, Field, LinkIcon, Panel, Select, Tag } from '@level-zero/ui';
 import { useState } from 'react';
 
+import { GenerationPanel, type GenerationPreset } from '@/features/generation/generation-panel';
 import { apiErrorMessage, assetContentUrl } from '@/lib/api';
 
-import { SparklesIcon } from './character-icons';
 import { resolveVisuals, unlinkedAssets, type CharacterVisual } from './character-visual';
 import {
   useAttachVisual,
@@ -19,19 +19,42 @@ import { VisualCompare } from './visual-compare';
 /**
  * The generative visual actions this studio is shaped around (spec section 31).
  *
- * They are listed, and deliberately not wired: the reusable generation surface
- * — prompt, provider, progress, provenance and promoting a result to a
- * canonical asset — is issue #47's, and a second one built here would be the
- * parallel implementation that issue exists to prevent.
+ * Each is a prompt and a mode for the shared generation surface, not a flow of
+ * its own: an expression sheet and an outfit variant are both a variation of an
+ * existing portrait, and the studio's contribution is knowing what to ask for.
  */
-const VISUAL_ACTIONS = [
-  'Generate Portrait',
-  'Expression Sheet',
-  'Outfit Variants',
-  'Turnaround',
-  'Pose Sheet',
-  '3D Concept',
-] as const;
+const VISUAL_PRESETS: readonly GenerationPreset[] = [
+  {
+    label: 'Generate Portrait',
+    mode: 'generate',
+    prompt: 'Character portrait: head and shoulders, neutral key light, concept-art finish.',
+  },
+  {
+    label: 'Expression Sheet',
+    mode: 'variation',
+    prompt: 'Expression sheet: the same face across neutral, angry, afraid and amused.',
+  },
+  {
+    label: 'Outfit Variants',
+    mode: 'variation',
+    prompt: 'Outfit variants: three alternative costumes for the same character.',
+  },
+  {
+    label: 'Turnaround',
+    mode: 'variation',
+    prompt: 'Turnaround: front, three-quarter, side and back views of the same character.',
+  },
+  {
+    label: 'Pose Sheet',
+    mode: 'variation',
+    prompt: 'Pose sheet: four action poses that read at silhouette scale.',
+  },
+  {
+    label: '3D Concept',
+    mode: 'generate',
+    prompt: '3D concept: orthographic views with material callouts, ready to sculpt from.',
+  },
+];
 
 /**
  * The character's pictures.
@@ -50,6 +73,7 @@ export function CharacterVisuals({
   const links = useCharacterLinks(projectId, character.id);
   const images = useProjectImages(projectId);
   const unlink = useUnlinkCharacter(projectId);
+  const attach = useAttachVisual(projectId);
   const [comparing, setComparing] = useState(false);
 
   if (links.isPending || images.isPending) {
@@ -94,7 +118,22 @@ export function CharacterVisuals({
 
   return (
     <div className="flex flex-col gap-5">
-      <VisualActions />
+      {!archived && (
+        <GenerationPanel
+          projectId={projectId}
+          contextEntities={[character]}
+          referenceAssets={assets}
+          presets={VISUAL_PRESETS}
+          onUseResult={(asset) => attach.mutate({ character, asset })}
+          useResultLabel={`Link to ${character.name}`}
+        />
+      )}
+
+      {attach.isError && (
+        <p className="text-xs text-error">
+          {apiErrorMessage(attach.error, 'Could not link that image.')}
+        </p>
+      )}
 
       {comparable.length >= 2 && (
         <div>
@@ -107,7 +146,7 @@ export function CharacterVisuals({
       {visuals.length === 0 ? (
         <EmptyState
           title="No visuals yet"
-          description="Link an image the project already holds, or generate one once the asset workspace lands."
+          description="Generate one above, or link an image the project already holds."
         />
       ) : (
         <ul className="grid grid-cols-2 gap-3 lg:grid-cols-3">
@@ -148,25 +187,6 @@ export function CharacterVisuals({
         />
       )}
     </div>
-  );
-}
-
-/** Purple, and disabled: AI actions read as AI, and none of these run yet. */
-function VisualActions() {
-  return (
-    <Field
-      label="Generate"
-      hint="Visual generation arrives with the asset generation workspace. Until then, link an image the project already holds."
-    >
-      <div className="flex flex-wrap gap-2">
-        {VISUAL_ACTIONS.map((action) => (
-          <Button key={action} type="button" variant="ai" size="sm" disabled>
-            <SparklesIcon className="size-4" />
-            {action}
-          </Button>
-        ))}
-      </div>
-    </Field>
   );
 }
 
