@@ -6,7 +6,7 @@ import {
   type MoodboardNode,
   type MoodboardRepository,
 } from '@level-zero/domain';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 
 import { type Database } from '../postgres/client';
 import { entityRelationships } from '../schema/entity-relationships';
@@ -52,6 +52,20 @@ export class DrizzleMoodboardRepository implements MoodboardRepository {
       .limit(1);
 
     return row ? toMoodboardNode(row) : null;
+  }
+
+  /** Same lookup as `findNode`, batched: one query for however many ids are given. */
+  async findNodes(projectId: string, nodeIds: readonly string[]): Promise<MoodboardNode[]> {
+    if (nodeIds.length === 0) return [];
+
+    const rows = await this.db
+      .select()
+      .from(moodboardNodes)
+      .where(
+        and(eq(moodboardNodes.projectId, projectId), inArray(moodboardNodes.id, [...nodeIds])),
+      );
+
+    return rows.map(toMoodboardNode);
   }
 
   /** One statement, so duplicating a group and its members is one round trip. */

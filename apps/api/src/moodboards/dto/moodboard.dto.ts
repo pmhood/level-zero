@@ -6,6 +6,7 @@ import {
 } from '@level-zero/domain';
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayNotEmpty,
   IsArray,
   IsBoolean,
@@ -15,8 +16,55 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  registerDecorator,
   ValidateNested,
+  type ValidationArguments,
+  type ValidationOptions,
 } from 'class-validator';
+
+/**
+ * At most this many patches in one `PATCH /nodes` request. A multi-select
+ * drag is one gesture on one board, not an unbounded batch job; 200 matches
+ * the cap the rest of the API already puts on a batch of anything (see the
+ * `limit` fields on the `List*QueryDto`s).
+ */
+export const MAX_MOODBOARD_NODE_PATCHES = 200;
+
+/**
+ * Bytes a node's `data` may serialize to. It holds a tile's own content — a
+ * caption, a palette, a URL — not an arbitrary payload; 8000 matches the
+ * bound the API already puts on a comparable chunk of user content (see
+ * `MAX_SUGGESTION_SELECTION_LENGTH` in the documents DTOs).
+ */
+export const MAX_MOODBOARD_NODE_DATA_BYTES = 8000;
+
+/** Rejects a value whose JSON serialisation exceeds `maxBytes`. */
+function MaxJsonSize(maxBytes: number, options?: ValidationOptions): PropertyDecorator {
+  return (target, propertyKey) => {
+    registerDecorator({
+      name: 'maxJsonSize',
+      target: target.constructor,
+      propertyName: propertyKey.toString(),
+      options,
+      constraints: [maxBytes],
+      validator: {
+        validate(value: unknown, args?: ValidationArguments) {
+          if (value === undefined || value === null) return true;
+          const [limit] = (args?.constraints ?? []) as [number];
+          try {
+            return Buffer.byteLength(JSON.stringify(value), 'utf8') <= limit;
+          } catch {
+            return false;
+          }
+        },
+        defaultMessage(args?: ValidationArguments) {
+          const [limit] = (args?.constraints ?? []) as [number];
+          return `${args?.property} must serialize to at most ${limit} bytes`;
+        },
+      },
+    });
+  };
+}
 
 /** Where a node sits. Shared by placement and by every later layout change. */
 export class MoodboardNodeLayoutDto {
@@ -57,6 +105,7 @@ export class MoodboardNodeLayoutDto {
   /** Node-kind content: the text, the palette's colours, the link's URL. */
   @IsOptional()
   @IsObject()
+  @MaxJsonSize(MAX_MOODBOARD_NODE_DATA_BYTES)
   data?: Record<string, unknown>;
 }
 
@@ -88,6 +137,7 @@ export class MoodboardNodePatchDto extends MoodboardNodeLayoutDto {
 
 export class UpdateMoodboardNodesDto {
   @IsArray()
+  @ArrayMaxSize(MAX_MOODBOARD_NODE_PATCHES)
   @ValidateNested({ each: true })
   @Type(() => MoodboardNodePatchDto)
   nodes!: MoodboardNodePatchDto[];

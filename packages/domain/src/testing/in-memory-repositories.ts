@@ -610,6 +610,13 @@ export class InMemoryMoodboardRepository implements MoodboardRepository {
     return structuredClone(node);
   }
 
+  async findNodes(projectId: string, nodeIds: readonly string[]): Promise<MoodboardNode[]> {
+    const ids = new Set(nodeIds);
+    return [...this.nodes.values()]
+      .filter((node) => ids.has(node.id) && node.projectId === projectId)
+      .map((node) => structuredClone(node));
+  }
+
   async insertNodes(nodes: readonly MoodboardNode[]): Promise<MoodboardNode[]> {
     for (const node of nodes) this.nodes.set(node.id, structuredClone(node));
     return nodes.map((node) => structuredClone(node));

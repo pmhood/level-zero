@@ -18,6 +18,8 @@ import { type MoodboardNode } from './moodboard-node';
 export interface MoodboardRepository {
   listNodes(projectId: string, boardId: string): Promise<MoodboardNode[]>;
   findNode(projectId: string, nodeId: string): Promise<MoodboardNode | null>;
+  /** Same lookup as `findNode`, batched: one query for however many ids are given. */
+  findNodes(projectId: string, nodeIds: readonly string[]): Promise<MoodboardNode[]>;
   insertNodes(nodes: readonly MoodboardNode[]): Promise<MoodboardNode[]>;
   saveNodes(nodes: readonly MoodboardNode[]): Promise<MoodboardNode[]>;
   /** Also clears the group from any node inside it, and drops its connectors. */

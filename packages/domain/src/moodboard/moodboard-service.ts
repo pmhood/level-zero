@@ -130,15 +130,38 @@ export class MoodboardService {
     await this.requireEditableBoard(projectId, boardId);
     if (patches.length === 0) return [];
 
+    // One query for the whole selection, not one per patch — a multi-select
+    // drag of N tiles must not cost N round trips before it even starts
+    // saving.
+    const nodes = await this.requireNodes(
+      projectId,
+      boardId,
+      dedupe(patches.map((patch) => patch.id)),
+    );
+
+    // A patch can point a node at a group it isn't already touching. Those
+    // group nodes are looked up too, but still in one extra query for the
+    // whole batch rather than one per patch.
+    const groupIds = dedupe(
+      patches
+        .map((patch) => (patch.groupId !== undefined ? patch.groupId : nodes.get(patch.id)?.groupId))
+        .filter((groupId): groupId is string => !!groupId && !nodes.has(groupId)),
+    );
+    if (groupIds.length > 0) {
+      for (const [id, group] of await this.requireNodes(projectId, boardId, groupIds)) {
+        nodes.set(id, group);
+      }
+    }
+
     const updated: MoodboardNode[] = [];
     for (const { id, ...patch } of patches) {
-      const node = await this.requireNode(projectId, boardId, id);
+      const node = nodes.get(id)!;
       const next = updateMoodboardNode(node, patch, this.deps);
 
       if (node.locked && next.locked && movesOnCanvas(node, next)) {
         throw new ConflictError('Unlock the node before moving it', { nodeId: node.id });
       }
-      await this.requireGroup(projectId, boardId, next.groupId, next.id, next.type);
+      this.requireGroupNode(next.groupId, next.id, next.type, nodes);
       updated.push(next);
     }
 
@@ -314,6 +337,30 @@ export class MoodboardService {
     return node;
   }
 
+  /**
+   * Loads several nodes by id in one query, keyed by id.
+   *
+   * Throws the same `NotFoundError` as `requireNode` for any id that is
+   * missing or belongs to a different board, so a batched caller sees exactly
+   * the errors it would have seen fetching one at a time.
+   */
+  private async requireNodes(
+    projectId: string,
+    boardId: string,
+    nodeIds: readonly string[],
+  ): Promise<Map<string, MoodboardNode>> {
+    const found =
+      nodeIds.length === 0 ? [] : await this.boards.findNodes(projectId, nodeIds);
+    const byId = new Map(
+      found.filter((node) => node.boardId === boardId).map((node) => [node.id, node] as const),
+    );
+
+    for (const nodeId of nodeIds) {
+      if (!byId.has(nodeId)) throw new NotFoundError('Moodboard node', nodeId);
+    }
+    return byId;
+  }
+
   private async requireConnector(
     projectId: string,
     boardId: string,
@@ -364,6 +411,27 @@ export class MoodboardService {
     }
   }
 
+  /** Same rule as `requireGroup`, checked against an already-fetched batch. */
+  private requireGroupNode(
+    groupId: string | null,
+    nodeId: string,
+    nodeType: MoodboardNode['type'],
+    nodes: ReadonlyMap<string, MoodboardNode>,
+  ): void {
+    if (!groupId) return;
+    if (nodeType === 'group') {
+      throw new ValidationError('Groups cannot be nested inside other groups', { nodeId });
+    }
+
+    const group = nodes.get(groupId);
+    if (group?.type !== 'group') {
+      throw new ValidationError('A node can only be grouped under a group node', {
+        groupId,
+        type: group?.type,
+      });
+    }
+  }
+
   private async requireEntityEndpoint(
     projectId: string,
     boardId: string,
@@ -378,6 +446,11 @@ export class MoodboardService {
     }
     return node.entityId;
   }
+}
+
+/** Distinct values, in first-seen order. */
+function dedupe<T>(values: readonly T[]): T[] {
+  return [...new Set(values)];
 }
 
 /** Whether a change would move, resize or turn the node where it sits. */
