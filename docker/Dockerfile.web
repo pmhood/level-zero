@@ -1,0 +1,72 @@
+# The Next.js client.
+#
+# Unlike the API and worker images there is no prod-deps stage: `output:
+# 'standalone'` traces the modules the server actually reaches and emits them,
+# already flattened, under .next/standalone. That trace is rooted at the
+# workspace root (outputFileTracingRoot in apps/web/next.config.ts), so the
+# emitted tree mirrors the monorepo and `server.js` lands at apps/web/server.js.
+#
+# `@level-zero/ui` is consumed as source and transpiled into the build, so it
+# does not appear at runtime at all.
+FROM node:24-slim AS base
+ENV PNPM_HOME=/pnpm \
+    PATH=/pnpm:$PATH \
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable
+WORKDIR /app
+
+# ---------------------------------------------------------------------------
+FROM base AS build
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc turbo.json tsconfig.base.json ./
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+COPY apps/worker/package.json apps/worker/
+COPY packages/ai/package.json packages/ai/
+COPY packages/config/package.json packages/config/
+COPY packages/database/package.json packages/database/
+COPY packages/domain/package.json packages/domain/
+COPY packages/storage/package.json packages/storage/
+COPY packages/ui/package.json packages/ui/
+
+RUN pnpm install --frozen-lockfile
+COPY . .
+
+# **This is baked in, not read at runtime.** NEXT_PUBLIC_* values are inlined
+# into the browser bundle by `next build`, so the published image is specific to
+# the origin it was built for. Changing where Level Zero is served from means
+# rebuilding this image, not editing a Deployment.
+#
+# The deployment puts the web app and the API on one host, so the default is
+# that origin with no path: apps/web/src/lib/api.ts appends the `/api` prefix
+# itself.
+ARG NEXT_PUBLIC_API_URL=https://level-zero.fakerainbow.com
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
+# Opt into the standalone trace for this build only. The flag is read in
+# next.config.ts rather than hard-coded there so `pnpm dev` and `pnpm start`
+# keep their ordinary output.
+ENV NEXT_OUTPUT=standalone
+RUN pnpm turbo run build --filter=@level-zero/web
+
+# ---------------------------------------------------------------------------
+FROM base AS runtime
+
+ENV NODE_ENV=production \
+    PORT=3000 \
+    HOSTNAME=0.0.0.0
+
+# The traced tree, rooted at the workspace root — this is what puts server.js at
+# apps/web/server.js and its dependencies at /app/node_modules.
+COPY --from=build /app/apps/web/.next/standalone ./
+# Static assets are deliberately excluded from the trace (nothing imports them),
+# so they are copied separately or every page 404s its own CSS and JS.
+COPY --from=build /app/apps/web/.next/static apps/web/.next/static
+
+USER node
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+CMD ["node", "apps/web/server.js"]

@@ -1,0 +1,37 @@
+# Everything the image builds from is source + manifests. Anything derived is
+# rebuilt inside the image, and anything local would either bloat the context
+# or leak a developer's machine into a published layer.
+node_modules
+**/node_modules
+.git
+.github
+.turbo
+**/.turbo
+dist
+**/dist
+.next
+**/.next
+out
+**/out
+*.tsbuildinfo
+**/*.tsbuildinfo
+coverage
+**/coverage
+
+# Local asset bytes written by @level-zero/storage.
+.data
+
+# Never bake an env file into an image — the platform supplies the environment.
+.env
+.env.*
+!.env.example
+
+.claude
+.playwright-mcp
+.vscode
+.idea
+.DS_Store
+docs
+assets
+infra
+*.log

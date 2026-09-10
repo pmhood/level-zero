@@ -5,5 +5,10 @@
     "outDir": "dist"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts", "src/scripts/**", "src/testing/**"]
+  // `src/scripts` is compiled: the migration runner has to be executable from
+  // an image that carries no dev dependencies, so `tsx src/scripts/migrate.ts`
+  // (what `pnpm db:migrate` runs locally) is not available there. The compiled
+  // entrypoint is `dist/scripts/migrate.js`, and it resolves the migrations
+  // folder relative to itself, so the two stay together.
+  "exclude": ["src/**/*.test.ts", "src/testing/**"]
 }

@@ -85,6 +85,9 @@ setup is visible immediately.
 | `pnpm infra:down`  | Stops them, keeping data                                        |
 | `pnpm infra:reset` | Stops them and deletes the volumes                              |
 
+Deployment images are built and pushed by `scripts/publish-images.sh` — see
+[Deployment](#deployment).
+
 For tasks with `dependsOn` rules (like `test` and `typecheck`), scope to one workspace with
 `pnpm turbo run <task> --filter=@level-zero/api`. Direct `pnpm --filter` bypasses Turbo's build
 prerequisites. See the Commands section in `CLAUDE.md` for detailed guidance.
@@ -667,3 +670,53 @@ bypasses the services:
 `.github/workflows/ci.yml` runs on every push and pull request against real Postgres
 and Redis services: install (frozen lockfile) → format check → build → lint →
 typecheck → migrations → tests.
+
+**CI is currently disabled, not broken.** It was blocked at the GitHub account
+level and the workflow was manually disabled on 2026-09-09 to stop every push
+collecting a red X. Until it is re-enabled with `gh workflow enable CI`, run
+`pnpm typecheck && pnpm lint && pnpm test` locally — nothing else is checking.
+
+## Deployment
+
+Level Zero runs on a k3s cluster, deployed from
+[pmhood/k8s-gitops](https://github.com/pmhood/k8s-gitops) under
+`applications/level-zero/` — three images plus a CloudNativePG cluster, a Redis
+for the job queue, and a shared NFS volume for asset bytes. That directory's
+README covers the cluster side; this section covers the half that lives here.
+
+`docker/Dockerfile.{api,web,worker}` build the three deployable images.
+`.github/workflows/publish.yml` would publish them on every green build, but it
+is gated on the CI workflow above and so does not run today. **Publishing is
+therefore a manual step:**
+
+```bash
+echo "$GITHUB_PAT" | docker login ghcr.io -u pmhood --password-stdin  # write:packages
+scripts/publish-images.sh --rollout          # all three, then release
+scripts/publish-images.sh api                # or just one, push only
+scripts/publish-images.sh --dry-run          # build locally, push nothing
+```
+
+Each image is pushed as `:latest` and as `:<commit sha>`, and the script prints
+the digest of what it pushed. It always builds `linux/amd64`: on an Apple
+Silicon machine a native build produces an image the cluster cannot run, and the
+symptom is a pod in `CrashLoopBackOff` with `exec format error`.
+
+Three things about this are easy to get wrong.
+
+**A publish is not a release.** The Deployments track `:latest` with
+`imagePullPolicy: Always`, so nothing moves until the pods restart. `--rollout`
+does that; without it the script prints the commands.
+
+**Migrations do not run on boot.** The API and the worker both open the database
+at startup, so either would race the other — instead the migration runs as an
+Argo CD _Sync hook_. A manual publish changes no git, so no sync happens, and a
+plain `kubectl rollout restart` starts new code against an old schema. That is
+what `argocd app sync level-zero` in the `--rollout` path is for: it re-runs the
+hook even with nothing diffed, and the script refuses to restart anything if the
+migration fails.
+
+**The web image is origin-specific.** Next inlines `NEXT_PUBLIC_*` into the
+browser bundle at build time, so `https://level-zero.fakerainbow.com` is
+compiled into `level-zero-web`. Serving Level Zero from another hostname means
+rebuilding with `NEXT_PUBLIC_API_URL=...`, not editing a manifest — which is why
+the Deployment sets no such variable.
