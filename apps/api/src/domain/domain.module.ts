@@ -7,6 +7,7 @@ import {
   DrizzleGenerationRepository,
   DrizzleJobRepository,
   DrizzleMoodboardRepository,
+  DrizzlePlaytestRepository,
   DrizzleProjectRepository,
   DrizzlePrototypeVersionRepository,
   DrizzleSearchDocumentRepository,
@@ -23,6 +24,7 @@ import {
   JobService,
   LineageService,
   MoodboardService,
+  PlaytestService,
   ProjectService,
   PrototypeService,
   SearchIndexService,
@@ -42,6 +44,7 @@ import {
   type JobRepository,
   type MoodboardRepository,
   type ObjectStorageProvider,
+  type PlaytestRepository,
   type ProjectRepository,
   type PrototypeVersionRepository,
   type SearchDocumentRepository,
@@ -63,6 +66,7 @@ export const VERSION_REPOSITORY = Symbol('VERSION_REPOSITORY');
 export const ASSET_REPOSITORY = Symbol('ASSET_REPOSITORY');
 export const GENERATION_REPOSITORY = Symbol('GENERATION_REPOSITORY');
 export const PROTOTYPE_VERSION_REPOSITORY = Symbol('PROTOTYPE_VERSION_REPOSITORY');
+export const PLAYTEST_REPOSITORY = Symbol('PLAYTEST_REPOSITORY');
 export const JOB_REPOSITORY = Symbol('JOB_REPOSITORY');
 export const MOODBOARD_REPOSITORY = Symbol('MOODBOARD_REPOSITORY');
 export const SEARCH_DOCUMENT_REPOSITORY = Symbol('SEARCH_DOCUMENT_REPOSITORY');
@@ -271,6 +275,22 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
         new PrototypeService(prototypeVersions, entities, versions, assets, activity, deps),
     },
     {
+      provide: PLAYTEST_REPOSITORY,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: DatabaseClient): PlaytestRepository =>
+        new DrizzlePlaytestRepository(client.db),
+    },
+    {
+      provide: PlaytestService,
+      inject: [PLAYTEST_REPOSITORY, PROTOTYPE_VERSION_REPOSITORY, EntityService, DOMAIN_DEPS],
+      useFactory: (
+        playtests: PlaytestRepository,
+        prototypeVersions: PrototypeVersionRepository,
+        entities: EntityService,
+        deps: EntityServiceDeps,
+      ): PlaytestService => new PlaytestService(playtests, prototypeVersions, entities, deps),
+    },
+    {
       provide: MOODBOARD_REPOSITORY,
       inject: [DATABASE_CLIENT],
       useFactory: (client: DatabaseClient): MoodboardRepository =>
@@ -357,6 +377,7 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     AssetService,
     GenerationService,
     PrototypeService,
+    PlaytestService,
     MoodboardService,
     JobService,
     ActivityService,
@@ -369,6 +390,7 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     ASSET_REPOSITORY,
     GENERATION_REPOSITORY,
     PROTOTYPE_VERSION_REPOSITORY,
+    PLAYTEST_REPOSITORY,
     MOODBOARD_REPOSITORY,
     JOB_REPOSITORY,
     ACTIVITY_REPOSITORY,
