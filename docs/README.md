@@ -12,6 +12,12 @@ This package is intended to be copied into the `pmhood/level-zero` repository.
 - `frontend-design-system-and-implementation-spec.md` — implementation-facing React/Tailwind/component specification
 - `page-by-page-ux-spec.md` — UX behavior for Home, Overview, Idea Lab, Moodboards, World, Characters, Mechanics, GDD, Prototype, Assets, Build, and Playtesting
 
+### `docs/decisions/`
+
+Engineering evaluations written in this repository, rather than imported design material.
+
+- `moodboard-canvas-library.md` — freely licensed alternatives to tldraw for the Moodboard canvas (issue #59)
+
 ### `docs/mockups/`
 
 High-fidelity Workbench/Level Zero product explorations:
