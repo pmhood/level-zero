@@ -150,8 +150,8 @@ Five independent reasons, each sufficient on its own:
    see §6, where treating that rule as the general one breaks a legitimate flow.
 5. **Both ends already exist and are already canon.** Nothing is being made more canonical. The
    board annotation is being *published* into the graph. That is a different verb, and the code
-   already says so: the controller comment calls it "the one action that reaches the project
-   graph".
+   already says so: a comment in `MoodboardService` calls it "the one action that reaches the
+   project graph".
 
 The name collision is real and mildly unfortunate, and it is user-facing (`Promote` button in the
 moodboard inspector). Renaming it is a separate, optional change — see §9. It is not this
@@ -489,7 +489,9 @@ from an issue description or a README summary alone.
   on a duplicate `(source, target, relation)`; `unlink` throws for any lineage relation.
 - The "written by nothing" column of §2.6 is
   `grep -rn "'derived_from'\|'inspired_by'\|'replaces'"` across `packages` and `apps`, excluding
-  tests and `relation-type.ts` itself: zero hits.
+  tests and `relation-type.ts` itself. Hits exist in `apps/web/src/features/entities/entity-presentation.ts`
+  (the `RELATION_LABELS` map at lines 38, 40, 47), but they are label definitions, not writes of
+  edges.
 
 **The flows #69 lists**
 
