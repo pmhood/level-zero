@@ -111,6 +111,17 @@ describe('moodboard layout storage', () => {
 
     expect(await boardRepo.listNodes(otherProject.id, board.id)).toEqual([]);
   });
+
+  it('reads several nodes by id in one query', async () => {
+    const first = await moodboards.addNode(project.id, board.id, { type: 'note' });
+    const second = await moodboards.addNode(project.id, board.id, { type: 'text' });
+    const missing = '00000000-0000-0000-0000-000000000000';
+
+    const found = await boardRepo.findNodes(project.id, [first.id, second.id, missing]);
+
+    expect(found.map((node) => node.id).sort()).toEqual([first.id, second.id].sort());
+    expect(await boardRepo.findNodes(otherProject.id, [first.id, second.id])).toEqual([]);
+  });
 });
 
 describe('reference integrity in the database', () => {

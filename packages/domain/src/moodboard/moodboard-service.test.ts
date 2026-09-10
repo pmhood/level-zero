@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ActivityService } from '../activity/activity-service';
 import { type Asset } from '../asset/asset';
@@ -28,6 +28,7 @@ let entityRepo: InMemoryEntityRepository;
 let assets: AssetService;
 let assetRepo: InMemoryAssetRepository;
 let relationships: EntityRelationshipService;
+let boardRepo: InMemoryMoodboardRepository;
 let moodboards: MoodboardService;
 let project: Project;
 let otherProject: Project;
@@ -44,13 +45,8 @@ beforeEach(async () => {
   entities = new EntityService(entityRepo, projectRepo, activity, deps);
   assets = new AssetService(assetRepo, projectRepo, new InMemoryObjectStorageProvider(), deps);
   relationships = new EntityRelationshipService(relationshipRepo, entityRepo, deps);
-  moodboards = new MoodboardService(
-    new InMemoryMoodboardRepository(relationshipRepo),
-    entities,
-    assetRepo,
-    relationships,
-    deps,
-  );
+  boardRepo = new InMemoryMoodboardRepository(relationshipRepo);
+  moodboards = new MoodboardService(boardRepo, entities, assetRepo, relationships, deps);
 
   project = await projectRepo.insert(
     createProject({ name: 'Deep Fathom' }, { clock, ids: sequentialIdGenerator('project-a') }),
@@ -231,6 +227,43 @@ describe('reference integrity', () => {
 });
 
 describe('transforming nodes', () => {
+  it('reads a whole selection in one batched query, not one per patch', async () => {
+    const nodes = await Promise.all(
+      Array.from({ length: 5 }, (_, index) =>
+        moodboards.addNode(project.id, board.id, { type: 'note', x: index, y: index }),
+      ),
+    );
+    const findNode = vi.spyOn(boardRepo, 'findNode');
+    const findNodes = vi.spyOn(boardRepo, 'findNodes');
+
+    await moodboards.updateNodes(
+      project.id,
+      board.id,
+      nodes.map((node) => ({ id: node.id, x: node.x + 1 })),
+    );
+
+    expect(findNodes).toHaveBeenCalledTimes(1);
+    expect(findNode).not.toHaveBeenCalled();
+  });
+
+  it('reads any newly referenced groups in one more batched query, still not one per patch', async () => {
+    const group = await moodboards.addNode(project.id, board.id, { type: 'group' });
+    const notes = await Promise.all(
+      Array.from({ length: 4 }, () => moodboards.addNode(project.id, board.id, { type: 'note' })),
+    );
+    const findNode = vi.spyOn(boardRepo, 'findNode');
+    const findNodes = vi.spyOn(boardRepo, 'findNodes');
+
+    await moodboards.updateNodes(
+      project.id,
+      board.id,
+      notes.map((note) => ({ id: note.id, groupId: group.id })),
+    );
+
+    expect(findNodes).toHaveBeenCalledTimes(2);
+    expect(findNode).not.toHaveBeenCalled();
+  });
+
   it('moves a whole selection in one request', async () => {
     const first = await moodboards.addNode(project.id, board.id, { type: 'note', x: 0, y: 0 });
     const second = await moodboards.addNode(project.id, board.id, { type: 'text', x: 10, y: 10 });
@@ -294,6 +327,18 @@ describe('grouping', () => {
     const [ungrouped] = await moodboards.updateNodes(project.id, board.id, [
       { id: note.id, groupId: null },
     ]);
+    expect(ungrouped?.groupId).toBeNull();
+  });
+
+  it('treats a whitespace-only groupId as ungrouping, not as a group to look up', async () => {
+    const group = await moodboards.addNode(project.id, board.id, { type: 'group' });
+    const note = await moodboards.addNode(project.id, board.id, { type: 'note' });
+    await moodboards.updateNodes(project.id, board.id, [{ id: note.id, groupId: group.id }]);
+
+    const [ungrouped] = await moodboards.updateNodes(project.id, board.id, [
+      { id: note.id, groupId: '   ' },
+    ]);
+
     expect(ungrouped?.groupId).toBeNull();
   });
 

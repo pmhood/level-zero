@@ -28,6 +28,10 @@ import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { DomainExceptionFilter } from '../common/domain-exception.filter';
+import {
+  MAX_MOODBOARD_NODE_DATA_BYTES,
+  MAX_MOODBOARD_NODE_PATCHES,
+} from './dto/moodboard.dto';
 import { MoodboardsController } from './moodboards.controller';
 
 const clock = fixedClock('2026-03-01T09:00:00.000Z');
@@ -175,6 +179,35 @@ describe('placing and moving nodes', () => {
       .patch(boardPath('/nodes'))
       .send({ nodes: [{ id: node.id, x: 10 }] })
       .expect(409);
+  });
+
+  it('rejects more patches than one request may carry', async () => {
+    const nodes = Array.from({ length: MAX_MOODBOARD_NODE_PATCHES + 1 }, (_, index) => ({
+      id: `node-${index}`,
+      x: index,
+    }));
+
+    const response = await request(app.getHttpServer())
+      .patch(boardPath('/nodes'))
+      .send({ nodes })
+      .expect(400);
+
+    expect(JSON.stringify(response.body)).toContain('nodes');
+  });
+
+  it('rejects a patch whose data is too large', async () => {
+    const node = await place({ type: 'note' });
+
+    const response = await request(app.getHttpServer())
+      .patch(boardPath('/nodes'))
+      .send({
+        nodes: [
+          { id: node.id, data: { text: 'x'.repeat(MAX_MOODBOARD_NODE_DATA_BYTES + 1) } },
+        ],
+      })
+      .expect(400);
+
+    expect(JSON.stringify(response.body)).toContain('data');
   });
 });
 

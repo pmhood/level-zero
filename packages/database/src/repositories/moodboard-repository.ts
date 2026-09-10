@@ -54,6 +54,20 @@ export class DrizzleMoodboardRepository implements MoodboardRepository {
     return row ? toMoodboardNode(row) : null;
   }
 
+  /** Same lookup as `findNode`, batched: one query for however many ids are given. */
+  async findNodes(projectId: string, nodeIds: readonly string[]): Promise<MoodboardNode[]> {
+    if (nodeIds.length === 0) return [];
+
+    const rows = await this.db
+      .select()
+      .from(moodboardNodes)
+      .where(
+        and(eq(moodboardNodes.projectId, projectId), inArray(moodboardNodes.id, [...nodeIds])),
+      );
+
+    return rows.map(toMoodboardNode);
+  }
+
   /** One statement, so duplicating a group and its members is one round trip. */
   async insertNodes(nodes: readonly MoodboardNode[]): Promise<MoodboardNode[]> {
     if (nodes.length === 0) return [];
