@@ -161,7 +161,7 @@ Project ──owns──> Entity (type, name, description, status, tags, data, c
 
 Entity types: `idea`, `design_pillar`, `character`, `location`, `faction`,
 `region`, `lore`, `event`, `hazard`, `culture`, `technology`, `mechanic`,
-`system`, `asset_reference`, `scene`, `document`, `prototype`, `build`.
+`system`, `asset_reference`, `scene`, `moodboard`, `document`, `prototype`, `build`.
 
 Relations: `contains`, `references`, `inspired_by`, `generated_from`,
 `derived_from`, `promoted_to`, `depends_on`, `implements`, `appears_in`,

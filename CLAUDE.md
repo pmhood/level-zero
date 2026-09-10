@@ -131,7 +131,7 @@ no `tailwind.config.js`), NestJS, Drizzle, Vitest, pnpm workspaces + Turborepo.
 renders its styles is usually this line, not the component.
 
 Design system spec §1 names the intended additions — Radix, shadcn/ui, Lucide, Framer Motion,
-TanStack Table, React Flow, tldraw, TipTap, Monaco, Recharts, cmdk — and says not to introduce
+TanStack Table, React Flow, TipTap, Monaco, Recharts, cmdk — and says not to introduce
 other UI frameworks without a clear need.
 
 **All rich text goes through `RichTextEditor` (`packages/ui/src/editor`).** GDDs, notes, lore,

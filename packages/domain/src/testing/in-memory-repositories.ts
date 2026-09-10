@@ -31,6 +31,9 @@ import { type Job } from '../job/job';
 import { type JobEvents, type JobSubscription } from '../job/job-events';
 import { type JobQueue } from '../job/job-queue';
 import { type JobListFilter, type JobPage, type JobRepository } from '../job/job-repository';
+import { type MoodboardConnector } from '../moodboard/moodboard-connector';
+import { type MoodboardNode } from '../moodboard/moodboard-node';
+import { type MoodboardRepository } from '../moodboard/moodboard-repository';
 import { type Project } from '../project/project';
 import { type PrototypeVersion } from '../prototype/prototype-version';
 import {
@@ -565,6 +568,105 @@ export class InMemoryPrototypeVersionRepository implements PrototypeVersionRepos
     return [...this.rows.values()].filter(
       (version) => version.projectId === projectId && version.prototypeId === prototypeId,
     );
+  }
+}
+
+/**
+ * In-memory `MoodboardRepository` for tests.
+ *
+ * Mirrors what the Postgres schema enforces on delete: removing a node clears
+ * the group from anything inside it and drops the connectors touching it, and
+ * nothing here ever reads or writes an asset or entity.
+ */
+export class InMemoryMoodboardRepository implements MoodboardRepository {
+  private readonly nodes = new Map<string, MoodboardNode>();
+  private readonly connectors = new Map<string, MoodboardConnector>();
+
+  constructor(
+    seedNodes: readonly MoodboardNode[] = [],
+    seedConnectors: readonly MoodboardConnector[] = [],
+  ) {
+    for (const node of seedNodes) this.nodes.set(node.id, structuredClone(node));
+    for (const connector of seedConnectors) {
+      this.connectors.set(connector.id, structuredClone(connector));
+    }
+  }
+
+  async listNodes(projectId: string, boardId: string): Promise<MoodboardNode[]> {
+    return [...this.nodes.values()]
+      .filter((node) => node.projectId === projectId && node.boardId === boardId)
+      .sort((a, b) => a.zOrder - b.zOrder || a.createdAt.getTime() - b.createdAt.getTime())
+      .map((node) => structuredClone(node));
+  }
+
+  async findNode(projectId: string, nodeId: string): Promise<MoodboardNode | null> {
+    const node = this.nodes.get(nodeId);
+    if (!node || node.projectId !== projectId) return null;
+    return structuredClone(node);
+  }
+
+  async insertNodes(nodes: readonly MoodboardNode[]): Promise<MoodboardNode[]> {
+    for (const node of nodes) this.nodes.set(node.id, structuredClone(node));
+    return nodes.map((node) => structuredClone(node));
+  }
+
+  async saveNodes(nodes: readonly MoodboardNode[]): Promise<MoodboardNode[]> {
+    for (const node of nodes) {
+      const existing = this.nodes.get(node.id);
+      if (!existing || existing.projectId !== node.projectId) {
+        throw new NotFoundError('Moodboard node', node.id);
+      }
+      this.nodes.set(node.id, structuredClone(node));
+    }
+    return nodes.map((node) => structuredClone(node));
+  }
+
+  async deleteNode(projectId: string, nodeId: string): Promise<void> {
+    const node = this.nodes.get(nodeId);
+    if (!node || node.projectId !== projectId) return;
+
+    this.nodes.delete(nodeId);
+    for (const other of this.nodes.values()) {
+      if (other.groupId === nodeId) other.groupId = null;
+    }
+    for (const connector of [...this.connectors.values()]) {
+      if (connector.fromNodeId === nodeId || connector.toNodeId === nodeId) {
+        this.connectors.delete(connector.id);
+      }
+    }
+  }
+
+  async listConnectors(projectId: string, boardId: string): Promise<MoodboardConnector[]> {
+    return [...this.connectors.values()]
+      .filter((connector) => connector.projectId === projectId && connector.boardId === boardId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .map((connector) => structuredClone(connector));
+  }
+
+  async findConnector(projectId: string, connectorId: string): Promise<MoodboardConnector | null> {
+    const connector = this.connectors.get(connectorId);
+    if (!connector || connector.projectId !== projectId) return null;
+    return structuredClone(connector);
+  }
+
+  async insertConnector(connector: MoodboardConnector): Promise<MoodboardConnector> {
+    this.connectors.set(connector.id, structuredClone(connector));
+    return structuredClone(connector);
+  }
+
+  async saveConnector(connector: MoodboardConnector): Promise<MoodboardConnector> {
+    const existing = this.connectors.get(connector.id);
+    if (!existing || existing.projectId !== connector.projectId) {
+      throw new NotFoundError('Moodboard connector', connector.id);
+    }
+    this.connectors.set(connector.id, structuredClone(connector));
+    return structuredClone(connector);
+  }
+
+  async deleteConnector(projectId: string, connectorId: string): Promise<void> {
+    const connector = this.connectors.get(connectorId);
+    if (!connector || connector.projectId !== projectId) return;
+    this.connectors.delete(connectorId);
   }
 }
 

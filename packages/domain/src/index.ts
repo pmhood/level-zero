@@ -273,6 +273,37 @@ export {
 } from './prototype/prototype-service';
 
 export {
+  DEFAULT_MOODBOARD_NODE_SIZE,
+  MOODBOARD_NODE_TYPES,
+  createMoodboardNode,
+  updateMoodboardNode,
+  type CreateMoodboardNodeInput,
+  type MoodboardNode,
+  type MoodboardNodeFactoryDeps,
+  type MoodboardNodeLayout,
+  type MoodboardNodeType,
+  type UpdateMoodboardNodeInput,
+} from './moodboard/moodboard-node';
+export {
+  MAX_MOODBOARD_CONNECTOR_LABEL_LENGTH,
+  createMoodboardConnector,
+  type CreateMoodboardConnectorInput,
+  type MoodboardConnector,
+  type MoodboardConnectorFactoryDeps,
+} from './moodboard/moodboard-connector';
+export { type MoodboardRepository } from './moodboard/moodboard-repository';
+export {
+  DUPLICATE_MOODBOARD_NODE_OFFSET,
+  MoodboardService,
+  type AddMoodboardNodeInput,
+  type ConnectMoodboardNodesInput,
+  type Moodboard,
+  type MoodboardConnectorPromotion,
+  type MoodboardNodePatch,
+  type MoodboardServiceDeps,
+} from './moodboard/moodboard-service';
+
+export {
   ACTIVE_JOB_STATUSES,
   DEFAULT_JOB_FAILURE_CODE,
   DEFAULT_JOB_MAX_ATTEMPTS,

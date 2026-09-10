@@ -1,10 +1,11 @@
 # Moodboard canvas: freely licensed alternatives to tldraw
 
-**Status:** research complete, decision pending. Investigated for issue #59; the Moodboard canvas
-itself was built in #46.
+**Status:** decided in #61 — **the §8 recommendation below was rejected**. Rotation was judged
+non-negotiable, so the Moodboard canvas was rewritten as the plain DOM/SVG implementation of §5.5
+rather than on React Flow. The analysis is kept as written, including the recommendation it
+reached, because the argument that overturned it is §8's own "strongest argument against".
 
-**This document does not change any code.** It exists so that someone can read it and decide.
-Adopting its recommendation is a separate follow-up issue.
+Investigated for issue #59; the Moodboard canvas itself was built in #46.
 
 All licence text, version numbers, bundle sizes and repository activity below were checked on
 **2026-09-09**. Sources are listed in [Appendix A](#appendix-a--how-the-numbers-were-obtained).
