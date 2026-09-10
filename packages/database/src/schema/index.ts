@@ -7,6 +7,7 @@ export * from './entity-versions';
 export * from './generations';
 export * from './jobs';
 export * from './moodboards';
+export * from './playtests';
 export * from './projects';
 export * from './prototype-versions';
 export * from './search-documents';

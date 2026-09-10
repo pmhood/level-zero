@@ -34,6 +34,16 @@ import { type JobListFilter, type JobPage, type JobRepository } from '../job/job
 import { type MoodboardConnector } from '../moodboard/moodboard-connector';
 import { type MoodboardNode } from '../moodboard/moodboard-node';
 import { type MoodboardRepository } from '../moodboard/moodboard-repository';
+import { type Playtest } from '../playtest/playtest';
+import { type PlaytestFeedback } from '../playtest/playtest-feedback';
+import { type PlaytestMetric } from '../playtest/playtest-metric';
+import { type PlaytestObservation } from '../playtest/playtest-observation';
+import {
+  type PlaytestListFilter,
+  type PlaytestPage,
+  type PlaytestRepository,
+} from '../playtest/playtest-repository';
+import { type PlaytestSession } from '../playtest/playtest-session';
 import { type Project } from '../project/project';
 import { type PrototypeVersion } from '../prototype/prototype-version';
 import {
@@ -568,6 +578,128 @@ export class InMemoryPrototypeVersionRepository implements PrototypeVersionRepos
     return [...this.rows.values()].filter(
       (version) => version.projectId === projectId && version.prototypeId === prototypeId,
     );
+  }
+}
+
+/**
+ * In-memory `PlaytestRepository` for tests.
+ *
+ * Bundles all five concepts the way the Postgres adapter does, without
+ * enforcing any of the database's own guarantees (the composite foreign
+ * keys, the unique constraints) — those are proven against real Postgres in
+ * `packages/database`'s integration suite, not here.
+ */
+export class InMemoryPlaytestRepository implements PlaytestRepository {
+  private readonly playtests = new Map<string, Playtest>();
+  private readonly sessions = new Map<string, PlaytestSession>();
+  private readonly observations = new Map<string, PlaytestObservation>();
+  private readonly feedback = new Map<string, PlaytestFeedback>();
+  private readonly metrics = new Map<string, PlaytestMetric>();
+
+  async insert(playtest: Playtest): Promise<Playtest> {
+    this.playtests.set(playtest.id, structuredClone(playtest));
+    return structuredClone(playtest);
+  }
+
+  async findById(projectId: string, playtestId: string): Promise<Playtest | null> {
+    const playtest = this.playtests.get(playtestId);
+    if (!playtest || playtest.projectId !== projectId) return null;
+    return structuredClone(playtest);
+  }
+
+  async listByProject(projectId: string, filter: PlaytestListFilter): Promise<PlaytestPage> {
+    let matches = [...this.playtests.values()].filter(
+      (playtest) => playtest.projectId === projectId,
+    );
+
+    const tags = filter.tags?.map((tag) => tag.toLowerCase());
+    if (tags?.length) {
+      const wanted = new Set(tags);
+      matches = matches.filter((playtest) =>
+        playtest.tags.some((tag) => wanted.has(tag.toLowerCase())),
+      );
+    }
+    matches = matches.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    const offset = filter.offset ?? 0;
+    const limit = filter.limit ?? matches.length;
+
+    return {
+      items: matches.slice(offset, offset + limit).map((playtest) => structuredClone(playtest)),
+      total: matches.length,
+    };
+  }
+
+  async save(playtest: Playtest): Promise<Playtest> {
+    const existing = this.playtests.get(playtest.id);
+    if (!existing || existing.projectId !== playtest.projectId) {
+      throw new NotFoundError('Playtest', playtest.id);
+    }
+    this.playtests.set(playtest.id, structuredClone(playtest));
+    return structuredClone(playtest);
+  }
+
+  async insertSession(session: PlaytestSession): Promise<PlaytestSession> {
+    this.sessions.set(session.id, structuredClone(session));
+    return structuredClone(session);
+  }
+
+  async findSession(projectId: string, sessionId: string): Promise<PlaytestSession | null> {
+    const session = this.sessions.get(sessionId);
+    if (!session || session.projectId !== projectId) return null;
+    return structuredClone(session);
+  }
+
+  async listSessions(projectId: string, playtestId: string): Promise<PlaytestSession[]> {
+    return [...this.sessions.values()]
+      .filter((session) => session.projectId === projectId && session.playtestId === playtestId)
+      .sort((a, b) => a.sessionNumber - b.sessionNumber)
+      .map((session) => structuredClone(session));
+  }
+
+  async latestSessionNumber(projectId: string, playtestId: string): Promise<number> {
+    return [...this.sessions.values()]
+      .filter((session) => session.projectId === projectId && session.playtestId === playtestId)
+      .reduce((highest, session) => Math.max(highest, session.sessionNumber), 0);
+  }
+
+  async insertObservation(observation: PlaytestObservation): Promise<PlaytestObservation> {
+    this.observations.set(observation.id, structuredClone(observation));
+    return structuredClone(observation);
+  }
+
+  async listObservations(projectId: string, playtestId: string): Promise<PlaytestObservation[]> {
+    return [...this.observations.values()]
+      .filter(
+        (observation) =>
+          observation.projectId === projectId && observation.playtestId === playtestId,
+      )
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .map((observation) => structuredClone(observation));
+  }
+
+  async insertFeedback(feedback: PlaytestFeedback): Promise<PlaytestFeedback> {
+    this.feedback.set(feedback.id, structuredClone(feedback));
+    return structuredClone(feedback);
+  }
+
+  async listFeedback(projectId: string, playtestId: string): Promise<PlaytestFeedback[]> {
+    return [...this.feedback.values()]
+      .filter((feedback) => feedback.projectId === projectId && feedback.playtestId === playtestId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .map((feedback) => structuredClone(feedback));
+  }
+
+  async insertMetric(metric: PlaytestMetric): Promise<PlaytestMetric> {
+    this.metrics.set(metric.id, structuredClone(metric));
+    return structuredClone(metric);
+  }
+
+  async listMetrics(projectId: string, playtestId: string): Promise<PlaytestMetric[]> {
+    return [...this.metrics.values()]
+      .filter((metric) => metric.projectId === projectId && metric.playtestId === playtestId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .map((metric) => structuredClone(metric));
   }
 }
 

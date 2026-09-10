@@ -11,6 +11,7 @@ export {
   InMemoryJobRepository,
   InMemoryMoodboardRepository,
   InMemoryObjectStorageProvider,
+  InMemoryPlaytestRepository,
   InMemoryProjectRepository,
   InMemoryPrototypeVersionRepository,
   InMemorySearchDocumentRepository,
