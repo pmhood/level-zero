@@ -330,6 +330,18 @@ describe('grouping', () => {
     expect(ungrouped?.groupId).toBeNull();
   });
 
+  it('treats a whitespace-only groupId as ungrouping, not as a group to look up', async () => {
+    const group = await moodboards.addNode(project.id, board.id, { type: 'group' });
+    const note = await moodboards.addNode(project.id, board.id, { type: 'note' });
+    await moodboards.updateNodes(project.id, board.id, [{ id: note.id, groupId: group.id }]);
+
+    const [ungrouped] = await moodboards.updateNodes(project.id, board.id, [
+      { id: note.id, groupId: '   ' },
+    ]);
+
+    expect(ungrouped?.groupId).toBeNull();
+  });
+
   it('ungroups the members when the group itself is removed', async () => {
     const group = await moodboards.addNode(project.id, board.id, { type: 'group' });
     const note = await moodboards.addNode(project.id, board.id, { type: 'note' });

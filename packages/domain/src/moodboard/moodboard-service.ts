@@ -139,12 +139,23 @@ export class MoodboardService {
       dedupe(patches.map((patch) => patch.id)),
     );
 
+    // Computed once per patch, ahead of the group lookup below: `next.groupId`
+    // is what `updateMoodboardNode` actually normalises a patch's groupId to
+    // (trimmed, with whitespace-only collapsing to `null`, i.e. "ungroup"), so
+    // it — not the raw patch — is what the group prefetch and the group
+    // validation below must both key off. Keying either one off the raw patch
+    // instead makes them disagree about a whitespace-only groupId.
+    const nexts = patches.map(({ id, ...patch }) => {
+      const node = nodes.get(id)!;
+      return { node, next: updateMoodboardNode(node, patch, this.deps) };
+    });
+
     // A patch can point a node at a group it isn't already touching. Those
     // group nodes are looked up too, but still in one extra query for the
     // whole batch rather than one per patch.
     const groupIds = dedupe(
-      patches
-        .map((patch) => (patch.groupId !== undefined ? patch.groupId : nodes.get(patch.id)?.groupId))
+      nexts
+        .map(({ next }) => next.groupId)
         .filter((groupId): groupId is string => !!groupId && !nodes.has(groupId)),
     );
     if (groupIds.length > 0) {
@@ -154,10 +165,7 @@ export class MoodboardService {
     }
 
     const updated: MoodboardNode[] = [];
-    for (const { id, ...patch } of patches) {
-      const node = nodes.get(id)!;
-      const next = updateMoodboardNode(node, patch, this.deps);
-
+    for (const { node, next } of nexts) {
       if (node.locked && next.locked && movesOnCanvas(node, next)) {
         throw new ConflictError('Unlock the node before moving it', { nodeId: node.id });
       }
