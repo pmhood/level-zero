@@ -1,6 +1,12 @@
 'use client';
 
-import type { Asset, Entity, MoodboardConnector, MoodboardNode } from '@level-zero/domain';
+import type {
+  Asset,
+  Entity,
+  MoodboardConnector,
+  MoodboardNode,
+  MoodboardNodePatch,
+} from '@level-zero/domain';
 import {
   useCallback,
   useEffect,
@@ -38,9 +44,15 @@ import {
 } from './moodboard-geometry';
 import {
   drawnInZOrder,
+  EMPTY_MOODBOARD_HISTORY,
+  invertPatches,
   movedToEnd,
   pendingNodePatches,
+  popRedo,
+  popUndo,
+  pushHistory,
   toSnapshot,
+  type MoodboardHistory,
   type MoodboardNodeSnapshot,
 } from './moodboard';
 
@@ -110,6 +122,14 @@ export function MoodboardCanvas({
   viewportRef.current = viewport;
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
+  const actionsRef = useRef(actions);
+  actionsRef.current = actions;
+
+  // Undo/redo (issue #124): a stack of settled patches and their inverses,
+  // kept in memory only and reset with the component — the canvas is keyed by
+  // board id, so history never survives a board reopen (see the layout effect
+  // below). A ref rather than state because nothing on screen reads it.
+  const historyRef = useRef<MoodboardHistory>(EMPTY_MOODBOARD_HISTORY);
 
   const byId = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const tiles = useMemo(() => drawnInZOrder(nodes), [nodes]);
@@ -241,7 +261,7 @@ export function MoodboardCanvas({
   // fields, and pressing whichever control has the keyboard's attention.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.code !== 'Space' || spaceBelongsTo(event.target)) return;
+      if (event.code !== 'Space' || keyBelongsTo(event.target)) return;
       event.preventDefault();
       spaceRef.current = true;
       setSpaceHeld(true);
@@ -263,13 +283,58 @@ export function MoodboardCanvas({
     };
   }, []);
 
+  // Ctrl+Z / Cmd+Z steps the history back one settled change; the shifted
+  // chord steps it forward again. Defined with `useCallback` so this effect
+  // can subscribe once: both read and write only through refs, so neither
+  // needs re-creating when the board's own state changes.
+  const undo = useCallback(() => {
+    const popped = popUndo(historyRef.current);
+    if (!popped) return;
+    historyRef.current = popped.history;
+    actionsRef.current.updateNodes(popped.entry.inversePatches);
+  }, []);
+
+  const redo = useCallback(() => {
+    const popped = popRedo(historyRef.current);
+    if (!popped) return;
+    historyRef.current = popped.history;
+    actionsRef.current.updateNodes(popped.entry.patches);
+  }, []);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z') return;
+      if (keyBelongsTo(event.target)) return;
+      event.preventDefault();
+      if (event.shiftKey) redo();
+      else undo();
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [undo, redo]);
+
+  /**
+   * Writes patches back and records their inverse, so the gesture that just
+   * settled — or the lock toggle below, which never goes through `commit` — is
+   * one step of history. Pushing a fresh entry always drops the redo stack.
+   */
+  function commitPatches(patches: readonly MoodboardNodePatch[]) {
+    if (patches.length === 0) return;
+    historyRef.current = pushHistory(historyRef.current, {
+      patches,
+      inversePatches: invertPatches(nodesRef.current, patches),
+    });
+    actions.updateNodes(patches);
+  }
+
   /** Writes what the canvas is showing back as a change to the stored nodes. */
   function commit(ordered: readonly MoodboardNode[], applied: Record<string, Box>) {
     const patches = pendingNodePatches(
       nodes,
       ordered.map((node) => snapshotWith(node, applied[node.id])),
     );
-    if (patches.length > 0) actions.updateNodes(patches);
+    commitPatches(patches);
   }
 
   function startGesture(event: PointerEvent<Element>, gesture: Gesture) {
@@ -418,7 +483,7 @@ export function MoodboardCanvas({
   }
 
   function setLocked(locked: boolean) {
-    actions.updateNodes(selectedTileIds.map((id) => ({ id, locked })));
+    commitPatches(selectedTileIds.map((id) => ({ id, locked })));
   }
 
   function reorder(end: 'front' | 'back') {
@@ -629,15 +694,17 @@ function screenPointIn(
 }
 
 /**
- * What Space already means something to.
+ * What a board shortcut — Space, or Ctrl/Cmd+Z for undo/redo — already means
+ * something to.
  *
  * A button is activated by Space, so swallowing the key for the whole window
  * would quietly take that away from anyone driving the board's own toolbar from
- * the keyboard — and a text field would stop being able to type a space.
+ * the keyboard — and a text field would stop being able to type a space, or
+ * use its own undo.
  */
-const SPACE_ACTIVATES =
+const CLAIMS_KEYS =
   'input, textarea, select, button, a[href], [role="button"], [contenteditable="true"]';
 
-function spaceBelongsTo(target: EventTarget | null): boolean {
-  return target instanceof Element && target.closest(SPACE_ACTIVATES) !== null;
+function keyBelongsTo(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(CLAIMS_KEYS) !== null;
 }

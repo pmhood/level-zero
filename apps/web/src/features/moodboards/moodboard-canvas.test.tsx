@@ -102,6 +102,11 @@ function patches(): MoodboardNodePatch[] {
   return vi.mocked(actions.updateNodes).mock.calls.flatMap(([given]) => [...given]);
 }
 
+/** Each separate call to `updateNodes`, patches still grouped by call. */
+function calls(): MoodboardNodePatch[][] {
+  return vi.mocked(actions.updateNodes).mock.calls.map(([given]) => [...given]);
+}
+
 describe('drawing the board', () => {
   it('draws a tile per node, back to front', () => {
     renderCanvas([node({ id: 'front', zOrder: 5 }), node({ id: 'back', zOrder: 1 })]);
@@ -363,6 +368,140 @@ describe('ordering and locking', () => {
 
     rerender([node({ locked: true })]);
     expect(screen.getByRole('button', { name: 'Unlock' })).toBeTruthy();
+  });
+});
+
+describe('undo/redo', () => {
+  function select(nodeId: string) {
+    drag(tile(nodeId), { x: 0, y: 0 }, { x: 0, y: 0 });
+  }
+
+  function undo(target: HTMLElement, meta = false) {
+    fireEvent.keyDown(target, { key: 'z', ctrlKey: !meta, metaKey: meta });
+  }
+
+  function redo(target: HTMLElement, meta = false) {
+    fireEvent.keyDown(target, { key: 'z', ctrlKey: !meta, metaKey: meta, shiftKey: true });
+  }
+
+  it('undoes and redoes a move', () => {
+    const canvas = renderCanvas([node()]);
+    drag(tile('node_1'), { x: 10, y: 10 }, { x: 90, y: 40 });
+
+    undo(canvas);
+    expect(calls()[1]).toEqual([expect.objectContaining({ id: 'node_1', x: 0, y: 0 })]);
+
+    redo(canvas);
+    expect(calls()[2]).toEqual([expect.objectContaining({ id: 'node_1', x: 80, y: 30 })]);
+  });
+
+  it('undoes a resize back to the pre-gesture box', () => {
+    const canvas = renderCanvas([node()]);
+    select('node_1');
+    drag(screen.getByLabelText('Resize bottom right'), { x: 200, y: 200 }, { x: 260, y: 240 });
+
+    undo(canvas);
+    expect(calls()[1]).toEqual([
+      expect.objectContaining({ id: 'node_1', width: 200, height: 200 }),
+    ]);
+  });
+
+  it('undoes a rotation back to the pre-gesture angle', () => {
+    const canvas = renderCanvas([node()]);
+    select('node_1');
+    drag(screen.getByLabelText('Rotate'), { x: 100, y: -28 }, { x: 400, y: 100 });
+
+    undo(canvas);
+    expect(calls()[1]?.[0]?.rotation).toBe(0);
+  });
+
+  it('undoes a front/back z-order change', () => {
+    const canvas = renderCanvas([
+      node({ id: 'node_1', zOrder: 0 }),
+      node({ id: 'node_2', x: 300, zOrder: 1 }),
+    ]);
+    select('node_1');
+    press('Front');
+
+    undo(canvas);
+    expect(calls()[1]).toEqual([
+      expect.objectContaining({ id: 'node_2', zOrder: 1 }),
+      expect.objectContaining({ id: 'node_1', zOrder: 0 }),
+    ]);
+  });
+
+  it('undoes a lock toggle', () => {
+    const canvas = renderCanvas([node()]);
+    select('node_1');
+    press('Lock');
+    expect(calls()[0]).toEqual([{ id: 'node_1', locked: true }]);
+
+    undo(canvas);
+    expect(calls()[1]).toEqual([{ id: 'node_1', locked: false }]);
+  });
+
+  it('undoes a multi-selection move as one step, not one per node', () => {
+    const canvas = renderCanvas([
+      node({ id: 'group_1', type: 'group' }),
+      node({ id: 'node_1', groupId: 'group_1' }),
+      node({ id: 'node_2', groupId: 'group_1', x: 300, zOrder: 1 }),
+    ]);
+    drag(tile('node_1'), { x: 0, y: 0 }, { x: 50, y: 0 });
+    expect(calls()[0]).toHaveLength(2);
+
+    undo(canvas);
+
+    expect(calls()).toHaveLength(2); // one commit, one undo — not one undo per node
+    expect(calls()[1]).toEqual([
+      expect.objectContaining({ id: 'node_1', x: 0 }),
+      expect.objectContaining({ id: 'node_2', x: 300 }),
+    ]);
+  });
+
+  it('works with the macOS Cmd chord as well as Ctrl', () => {
+    const canvas = renderCanvas([node()]);
+    select('node_1');
+    press('Lock');
+
+    undo(canvas, true);
+    expect(calls()[1]).toEqual([{ id: 'node_1', locked: false }]);
+
+    redo(canvas, true);
+    expect(calls()[2]).toEqual([{ id: 'node_1', locked: true }]);
+  });
+
+  it('discards the redo stack once a fresh operation commits', () => {
+    const canvas = renderCanvas([node()]);
+    drag(tile('node_1'), { x: 10, y: 10 }, { x: 90, y: 40 });
+    undo(canvas);
+    drag(tile('node_1'), { x: 10, y: 10 }, { x: 95, y: 45 });
+    expect(calls()).toHaveLength(3);
+
+    redo(canvas);
+
+    expect(calls()).toHaveLength(3); // nothing left to redo
+  });
+
+  it('does nothing when there is nothing to undo or redo', () => {
+    const canvas = renderCanvas([node()]);
+
+    undo(canvas);
+    redo(canvas);
+
+    expect(actions.updateNodes).not.toHaveBeenCalled();
+  });
+
+  it('does not fire while a text field has focus', () => {
+    renderCanvas([node()]);
+    drag(tile('node_1'), { x: 10, y: 10 }, { x: 90, y: 40 });
+
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+
+    // A key event not swallowed here reaches the field to type with, same as
+    // the space-pan modifier already leaves a focused control alone.
+    expect(fireEvent.keyDown(input, { key: 'z', ctrlKey: true })).toBe(true);
+    expect(calls()).toHaveLength(1); // only the drag's own commit
   });
 });
 

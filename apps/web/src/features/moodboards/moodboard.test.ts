@@ -5,10 +5,16 @@ import {
   contentData,
   differsFromNode,
   drawnInZOrder,
+  EMPTY_MOODBOARD_HISTORY,
+  invertPatches,
   movedToEnd,
   pendingNodePatches,
+  popRedo,
+  popUndo,
+  pushHistory,
   toNodePatch,
   toSnapshot,
+  type MoodboardHistoryEntry,
   type MoodboardNodeSnapshot,
 } from './moodboard';
 
@@ -248,6 +254,85 @@ describe('drawnInZOrder', () => {
     ]);
 
     expect(drawn.map((tile) => tile.id)).toEqual(['back', 'front']);
+  });
+});
+
+describe('invertPatches', () => {
+  it('restores only the fields the forward patch touched', () => {
+    const stored = node({ x: 10, y: 20, locked: false });
+
+    const inverse = invertPatches([stored], [{ id: 'node-1', x: 80, locked: true }]);
+
+    expect(inverse).toEqual([{ id: 'node-1', x: 10, locked: false }]);
+  });
+
+  it('inverts a full layout patch back to the pre-gesture box', () => {
+    const stored = node({ x: 10, y: 20, width: 200, height: 200, rotation: 0, zOrder: 0 });
+    const patch = toNodePatch(snapshot({ x: 90, y: 40, rotation: Math.PI / 2 }), 3, new Set());
+
+    expect(invertPatches([stored], [patch])).toEqual([
+      expect.objectContaining({ id: 'node-1', x: 10, y: 20, width: 200, height: 200 }),
+    ]);
+    expect(invertPatches([stored], [patch])[0]?.rotation).toBe(0);
+    expect(invertPatches([stored], [patch])[0]?.zOrder).toBe(0);
+  });
+
+  it('inverts a group patch back to no group', () => {
+    const stored = node({ groupId: null });
+    const patch = toNodePatch(snapshot({ groupId: 'group-1' }), 0, new Set(['group-1']));
+
+    expect(invertPatches([stored], [patch]).map((p) => p.groupId)).toEqual([null]);
+  });
+});
+
+describe('the history stack', () => {
+  function entry(overrides: Partial<MoodboardHistoryEntry> = {}): MoodboardHistoryEntry {
+    return {
+      patches: [{ id: 'node-1', x: 80 }],
+      inversePatches: [{ id: 'node-1', x: 10 }],
+      ...overrides,
+    };
+  }
+
+  it('starts empty', () => {
+    expect(EMPTY_MOODBOARD_HISTORY).toEqual({ undo: [], redo: [] });
+  });
+
+  it('records a pushed entry on the undo stack, on top of what was already there', () => {
+    const history = pushHistory(
+      pushHistory(EMPTY_MOODBOARD_HISTORY, entry()),
+      entry({ patches: [{ id: 'node-2' }] }),
+    );
+
+    expect(history.undo.map((given) => given.patches)).toEqual([
+      [{ id: 'node-1', x: 80 }],
+      [{ id: 'node-2' }],
+    ]);
+  });
+
+  it('a fresh push discards whatever redo stack there was', () => {
+    const undone = popUndo(pushHistory(EMPTY_MOODBOARD_HISTORY, entry()))!;
+    expect(undone.history.redo).toHaveLength(1); // something to redo…
+
+    const afterFreshChange = pushHistory(undone.history, entry({ patches: [{ id: 'node-2' }] }));
+    expect(afterFreshChange.redo).toEqual([]); // …gone once a new change commits
+  });
+
+  it('moves an entry from undo to redo and back, applying the right side', () => {
+    const history = pushHistory(EMPTY_MOODBOARD_HISTORY, entry());
+
+    const undone = popUndo(history);
+    expect(undone?.entry.inversePatches).toEqual([{ id: 'node-1', x: 10 }]);
+    expect(undone?.history).toEqual({ undo: [], redo: [entry()] });
+
+    const redone = popRedo(undone!.history);
+    expect(redone?.entry.patches).toEqual([{ id: 'node-1', x: 80 }]);
+    expect(redone?.history).toEqual({ undo: [entry()], redo: [] });
+  });
+
+  it('does nothing when a stack is empty', () => {
+    expect(popUndo(EMPTY_MOODBOARD_HISTORY)).toBeNull();
+    expect(popRedo(EMPTY_MOODBOARD_HISTORY)).toBeNull();
   });
 });
 

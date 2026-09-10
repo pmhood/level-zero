@@ -165,6 +165,75 @@ export function pendingNodePatches(
   return patches;
 }
 
+/**
+ * The other half of a settled patch: what would undo it.
+ *
+ * Built from the nodes as they stood before the patches were applied, so it
+ * only ever restores fields the forward patch actually touched — an inverse
+ * for `{ id, locked: true }` is `{ id, locked: false }`, never a full node.
+ */
+export function invertPatches(
+  nodes: readonly MoodboardNode[],
+  patches: readonly MoodboardNodePatch[],
+): MoodboardNodePatch[] {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  return patches.map((patch) => invertPatch(byId.get(patch.id)!, patch));
+}
+
+function invertPatch(node: MoodboardNode, patch: MoodboardNodePatch): MoodboardNodePatch {
+  const inverse: MoodboardNodePatch = { id: patch.id };
+  if (patch.x !== undefined) inverse.x = node.x;
+  if (patch.y !== undefined) inverse.y = node.y;
+  if (patch.width !== undefined) inverse.width = node.width;
+  if (patch.height !== undefined) inverse.height = node.height;
+  if (patch.rotation !== undefined) inverse.rotation = node.rotation;
+  if (patch.zOrder !== undefined) inverse.zOrder = node.zOrder;
+  if (patch.locked !== undefined) inverse.locked = node.locked;
+  if (patch.groupId !== undefined) inverse.groupId = node.groupId;
+  if (patch.data !== undefined) inverse.data = node.data;
+  return inverse;
+}
+
+/** One settled change to the board, and what would undo it. */
+export interface MoodboardHistoryEntry {
+  patches: readonly MoodboardNodePatch[];
+  inversePatches: readonly MoodboardNodePatch[];
+}
+
+/** The canvas' undo/redo stacks. Owned in memory only — see issue #124. */
+export interface MoodboardHistory {
+  undo: readonly MoodboardHistoryEntry[];
+  redo: readonly MoodboardHistoryEntry[];
+}
+
+export const EMPTY_MOODBOARD_HISTORY: MoodboardHistory = { undo: [], redo: [] };
+
+/** Records a settled change. A fresh entry always empties the redo stack. */
+export function pushHistory(
+  history: MoodboardHistory,
+  entry: MoodboardHistoryEntry,
+): MoodboardHistory {
+  return { undo: [...history.undo, entry], redo: [] };
+}
+
+/** Steps one entry back, moving it onto the redo stack — or does nothing. */
+export function popUndo(
+  history: MoodboardHistory,
+): { history: MoodboardHistory; entry: MoodboardHistoryEntry } | null {
+  const entry = history.undo.at(-1);
+  if (!entry) return null;
+  return { history: { undo: history.undo.slice(0, -1), redo: [...history.redo, entry] }, entry };
+}
+
+/** Steps one entry forward again, moving it back onto the undo stack. */
+export function popRedo(
+  history: MoodboardHistory,
+): { history: MoodboardHistory; entry: MoodboardHistoryEntry } | null {
+  const entry = history.redo.at(-1);
+  if (!entry) return null;
+  return { history: { undo: [...history.undo, entry], redo: history.redo.slice(0, -1) }, entry };
+}
+
 /** The board's tiles back to front. Group rows are not drawn, so are not here. */
 export function drawnInZOrder(nodes: readonly MoodboardNode[]): MoodboardNode[] {
   return nodes.filter((node) => node.type !== 'group').sort((a, b) => a.zOrder - b.zOrder);
