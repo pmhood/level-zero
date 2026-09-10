@@ -321,6 +321,30 @@ describe('placing and removing', () => {
     expect(api.addMoodboardNode).not.toHaveBeenCalled();
   });
 
+  it('assigns z-order based on the max present, not array length, so creation after deletion does not collide', async () => {
+    const node1 = node({ id: 'node_1', zOrder: 0 });
+    const node2 = node({ id: 'node_2', zOrder: 1 });
+    const node3 = node({ id: 'node_3', zOrder: 2 });
+    vi.mocked(api.getMoodboard).mockResolvedValue(board({ nodes: [node1, node2, node3] }));
+    await openBoard();
+
+    // After removing node_1, nodes.length is 2, but max zOrder is still 2.
+    // The new node should get zOrder 3, not 2 (which would collide with node_3).
+    fireEvent.click(screen.getByRole('button', { name: 'Remove first' }));
+    await waitFor(() =>
+      expect(api.removeMoodboardNode).toHaveBeenCalledWith('prj_1', 'board_1', 'node_1'),
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /reef\.png/ }));
+    await waitFor(() =>
+      expect(api.addMoodboardNode).toHaveBeenCalledWith(
+        'prj_1',
+        'board_1',
+        expect.objectContaining({ zOrder: 3 }),
+      ),
+    );
+  });
+
   it('adds a generated result to the board as a placement, not a copy', async () => {
     const finished = {
       id: 'gen_1',

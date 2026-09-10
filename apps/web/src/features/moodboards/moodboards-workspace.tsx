@@ -10,7 +10,7 @@ import { apiErrorMessage } from '@/lib/api';
 import { MoodboardCanvas } from './moodboard-canvas';
 import { MoodboardInspector } from './moodboard-inspector';
 import { MoodboardRail } from './moodboard-rail';
-import { MOODBOARD_NODE_DEFAULT_SIZE } from './moodboard';
+import { MOODBOARD_NODE_DEFAULT_SIZE, drawnInZOrder } from './moodboard';
 import {
   useAddMoodboardNode,
   useConnectMoodboardNodes,
@@ -74,6 +74,9 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
 
   const place = useCallback(
     (type: MoodboardNodeType, reference: { assetId?: string; entityId?: string } = {}) => {
+      const drawn = drawnInZOrder(nodes);
+      const lastNode = drawn.at(-1);
+      const maxZOrder = lastNode?.zOrder ?? -1;
       const offset = PLACEMENT_ORIGIN + nodes.length * PLACEMENT_STEP;
       addNode.mutate({
         type,
@@ -81,10 +84,10 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
         x: offset,
         y: offset,
         ...MOODBOARD_NODE_DEFAULT_SIZE[type],
-        zOrder: nodes.length,
+        zOrder: maxZOrder + 1,
       });
     },
-    [addNode, nodes.length],
+    [addNode, nodes],
   );
 
   const actions = useMemo<MoodboardCanvasActions>(
