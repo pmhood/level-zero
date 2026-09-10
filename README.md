@@ -711,9 +711,10 @@ does that; without it the script prints the commands.
 at startup, so either would race the other — instead the migration runs as an
 Argo CD _Sync hook_. A manual publish changes no git, so no sync happens, and a
 plain `kubectl rollout restart` starts new code against an old schema. That is
-what `argocd app sync level-zero` in the `--rollout` path is for: it re-runs the
-hook even with nothing diffed, and the script refuses to restart anything if the
-migration fails.
+what `argocd --core app sync level-zero` in the `--rollout` path is for: it
+re-runs the hook even with nothing diffed, and the script refuses to restart
+anything if the migration fails. `--core` drives the Kubernetes API directly, so
+no `argocd login` is needed.
 
 **The web image is origin-specific.** Next inlines `NEXT_PUBLIC_*` into the
 browser bundle at build time, so `https://level-zero.fakerainbow.com` is
