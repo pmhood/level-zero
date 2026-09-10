@@ -230,6 +230,23 @@ export class MoodboardService {
       originals.push(await this.requireNode(projectId, boardId, nodeId));
     }
 
+    // A duplicated group has to bring its members, or "duplicate" a group id
+    // on its own produces an empty group. Members can't themselves be groups
+    // (groups don't nest), so this expansion never needs to recurse.
+    const groupIds = new Set(
+      originals.filter((node) => node.type === 'group').map((node) => node.id),
+    );
+    if (groupIds.size > 0) {
+      const included = new Set(originals.map((node) => node.id));
+      const boardNodes = await this.boards.listNodes(projectId, boardId);
+      for (const node of boardNodes) {
+        if (node.groupId && groupIds.has(node.groupId) && !included.has(node.id)) {
+          originals.push(node);
+          included.add(node.id);
+        }
+      }
+    }
+
     const copies = originals.map((node) =>
       createMoodboardNode(
         { ...node, x: node.x + offset, y: node.y + offset, groupId: null },

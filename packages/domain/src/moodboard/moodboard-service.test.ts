@@ -391,17 +391,58 @@ describe('duplicating', () => {
     expect((await assets.listByProject(project.id, {})).total).toBe(1);
   });
 
-  it('remaps a duplicated group onto its duplicated members', async () => {
+  it('remaps a duplicated group onto its duplicated members, without doubling a member also passed explicitly', async () => {
     const group = await moodboards.addNode(project.id, board.id, { type: 'group' });
     const note = await moodboards.addNode(project.id, board.id, { type: 'note' });
     await moodboards.updateNodes(project.id, board.id, [{ id: note.id, groupId: group.id }]);
 
     const copies = await moodboards.duplicateNodes(project.id, board.id, [group.id, note.id]);
 
+    expect(copies).toHaveLength(2);
     const groupCopy = copies.find((node) => node.type === 'group');
     const noteCopy = copies.find((node) => node.type === 'note');
     expect(noteCopy?.groupId).toBe(groupCopy?.id);
     expect(noteCopy?.groupId).not.toBe(group.id);
+  });
+
+  it('expands a duplicated group to copy its members, even when only the group id is passed', async () => {
+    const group = await moodboards.addNode(project.id, board.id, { type: 'group' });
+    const note = await moodboards.addNode(project.id, board.id, { type: 'note' });
+    const other = await moodboards.addNode(project.id, board.id, { type: 'note' });
+    await moodboards.updateNodes(project.id, board.id, [{ id: note.id, groupId: group.id }]);
+
+    const copies = await moodboards.duplicateNodes(project.id, board.id, [group.id]);
+
+    expect(copies).toHaveLength(2);
+    const groupCopy = copies.find((node) => node.type === 'group');
+    const noteCopy = copies.find((node) => node.type === 'note');
+    expect(groupCopy?.id).not.toBe(group.id);
+    expect(noteCopy?.id).not.toBe(note.id);
+    expect(noteCopy?.groupId).toBe(groupCopy?.id);
+
+    // The original group's membership is untouched, and a node that was
+    // never in the group was never pulled in.
+    const board_ = await moodboards.open(project.id, board.id);
+    expect(board_.nodes.find((n) => n.id === note.id)?.groupId).toBe(group.id);
+    expect(copies.some((copy) => copy.id === other.id)).toBe(false);
+  });
+
+  it('does not duplicate the asset or entity a copied group member references', async () => {
+    const asset = await image();
+    const group = await moodboards.addNode(project.id, board.id, { type: 'group' });
+    const assetNode = await moodboards.addNode(project.id, board.id, {
+      type: 'asset',
+      assetId: asset.id,
+    });
+    await moodboards.updateNodes(project.id, board.id, [
+      { id: assetNode.id, groupId: group.id },
+    ]);
+
+    const copies = await moodboards.duplicateNodes(project.id, board.id, [group.id]);
+
+    const assetCopy = copies.find((node) => node.type === 'asset');
+    expect(assetCopy?.assetId).toBe(asset.id);
+    expect((await assets.listByProject(project.id, {})).total).toBe(1);
   });
 
   it('drops a group membership whose group was not copied', async () => {
