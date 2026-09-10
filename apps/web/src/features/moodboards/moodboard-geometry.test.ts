@@ -8,6 +8,7 @@ import {
   MIN_NODE_SIZE,
   MAX_ZOOM,
   MIN_ZOOM,
+  midpointOf,
   moveBox,
   panViewport,
   rectFromCorners,
@@ -62,6 +63,26 @@ describe('zoomViewportAt', () => {
   it('will not zoom past its limits', () => {
     expect(zoomViewportAt({ x: 0, y: 0, zoom: 1 }, { x: 0, y: 0 }, 1000).zoom).toBe(MAX_ZOOM);
     expect(zoomViewportAt({ x: 0, y: 0, zoom: 1 }, { x: 0, y: 0 }, 0.0001).zoom).toBe(MIN_ZOOM);
+  });
+});
+
+describe('midpointOf', () => {
+  it('is exactly between two points', () => {
+    expect(midpointOf({ x: 100, y: 40 }, { x: 300, y: 120 })).toEqual({ x: 200, y: 80 });
+  });
+});
+
+describe('pinch zoom', () => {
+  it('keeps the midpoint of the two touches over the same board point as they spread', () => {
+    const viewport = { x: 40, y: -15, zoom: 0.8 };
+    const a = { x: 260, y: 200 };
+    const b = { x: 340, y: 240 };
+    const before = toBoardPoint(midpointOf(a, b), viewport);
+
+    const after = toBoardPoint(midpointOf(a, b), zoomViewportAt(viewport, midpointOf(a, b), 1.6));
+
+    expect(after.x).toEqual(closeTo(before.x));
+    expect(after.y).toEqual(closeTo(before.y));
   });
 });
 
