@@ -8,7 +8,7 @@ import type {
   RelationType,
 } from '@level-zero/domain';
 import { Button, Field, Input, Inspector, Select, Textarea } from '@level-zero/ui';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { MOODBOARD_NODE_LABEL } from './moodboard';
 
@@ -42,6 +42,13 @@ export interface MoodboardInspectorProps {
   onEditContent: (nodeId: string, data: Record<string, unknown>) => void;
   onPromoteConnector: (connectorId: string, relation: RelationType) => void;
   onDisconnect: (connectorId: string) => void;
+  /**
+   * The shared visual generation surface, composed by the workspace.
+   *
+   * A slot rather than a panel built here, so this component stays
+   * presentational and there is still only one generator in the product.
+   */
+  generator?: ReactNode;
 }
 
 /**
@@ -61,6 +68,7 @@ export function MoodboardInspector({
   onEditContent,
   onPromoteConnector,
   onDisconnect,
+  generator,
 }: MoodboardInspectorProps) {
   return (
     <Inspector
@@ -75,6 +83,8 @@ export function MoodboardInspector({
             Select something on the board to see what you can do with it.
           </p>
         )}
+
+        {generator}
 
         <ConnectorList
           connectors={connectors}

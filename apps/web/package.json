@@ -13,6 +13,7 @@
     "clean": "rm -rf .next dist .turbo *.tsbuildinfo"
   },
   "dependencies": {
+    "@level-zero/ai": "workspace:*",
     "@level-zero/config": "workspace:*",
     "@level-zero/domain": "workspace:*",
     "@level-zero/ui": "workspace:*",

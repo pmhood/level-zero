@@ -111,6 +111,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@level-zero/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@level-zero/config':
         specifier: workspace:*
         version: link:../../packages/config

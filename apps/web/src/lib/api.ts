@@ -1,4 +1,6 @@
+import type { AiCapability } from '@level-zero/ai';
 import type {
+  Asset,
   AssetKind,
   AssetPage,
   AssetStatus,
@@ -16,7 +18,13 @@ import type {
   EntityStatus,
   EntityType,
   EntityVersion,
+  Generation,
   GenerationPage,
+  GenerationProvenance,
+  GenerationStatus,
+  JobKind,
+  JobPage,
+  JobStatus,
   Moodboard,
   MoodboardConnector,
   MoodboardConnectorPromotion,
@@ -410,9 +418,112 @@ export function listGenerationsForAsset(
   );
 }
 
+export function getAsset(projectId: string, assetId: string): Promise<Asset> {
+  return apiFetch(`/api/projects/${projectId}/assets/${assetId}`);
+}
+
 /** The asset's bytes, streamed by the API — usable directly as an `<img src>`. */
 export function assetContentUrl(projectId: string, assetId: string): string {
   return `${env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/assets/${assetId}/content`;
+}
+
+// --- Generations ----------------------------------------------------------
+
+/** What the user pointed at, for the API's `ContextResolver` to assemble. */
+export interface GenerationContextInput {
+  selectedEntityIds?: string[];
+  mentionedEntityIds?: string[];
+  /** Assets chosen as references: the image being edited, a style plate. */
+  assetIds?: string[];
+  relatedDepth?: number;
+}
+
+export interface CreateGenerationInput {
+  capability: AiCapability;
+  prompt: string;
+  parameters?: Record<string, unknown>;
+  context?: GenerationContextInput;
+  /** The generation this one re-rolls or refines. */
+  parentGenerationId?: string;
+  createdBy?: string;
+}
+
+/**
+ * Records the ask and queues the work; the provider call happens in the worker.
+ *
+ * The returned generation is `queued` and carries no output yet — its id is the
+ * handle for the job, the progress and the results that follow.
+ */
+export function createGeneration(
+  projectId: string,
+  input: CreateGenerationInput,
+): Promise<Generation> {
+  return post(`/api/projects/${projectId}/generations`, input);
+}
+
+export interface ListGenerationsParams {
+  status?: GenerationStatus[];
+  capability?: AiCapability;
+  parentGenerationId?: string;
+  outputAssetId?: string;
+  entityId?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export function listGenerations(
+  projectId: string,
+  params: ListGenerationsParams = {},
+): Promise<GenerationPage> {
+  return apiFetch(`/api/projects/${projectId}/generations${toQueryString(params)}`);
+}
+
+export function getGeneration(projectId: string, generationId: string): Promise<Generation> {
+  return apiFetch(`/api/projects/${projectId}/generations/${generationId}`);
+}
+
+/** The record with its inputs, project context, outputs and parent resolved. */
+export function getGenerationProvenance(
+  projectId: string,
+  generationId: string,
+): Promise<GenerationProvenance> {
+  return apiFetch(`/api/projects/${projectId}/generations/${generationId}/provenance`);
+}
+
+/** Stops the generation and the job running it. Work already inside a provider call finishes. */
+export function cancelGeneration(projectId: string, generationId: string): Promise<Generation> {
+  return post(`/api/projects/${projectId}/generations/${generationId}/cancel`);
+}
+
+// --- Jobs -----------------------------------------------------------------
+
+export interface ListJobsParams {
+  status?: JobStatus[];
+  kind?: JobKind;
+  /** The record the job acts on — a generation id, for `generation` jobs. */
+  targetId?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * Background work and how far it has got.
+ *
+ * The job row is the source of truth for progress, so a browser that reloads
+ * reads this and picks the work up where it left off rather than starting over.
+ */
+export function listJobs(projectId: string, params: ListJobsParams = {}): Promise<JobPage> {
+  return apiFetch(`/api/projects/${projectId}/jobs${toQueryString(params)}`);
+}
+
+/**
+ * Where to subscribe for job changes as they happen (`EventSource`).
+ *
+ * A URL rather than a subscription, because `fetch` is the wrong transport for
+ * this one endpoint and everything else in this module goes through it.
+ */
+export function jobStreamUrl(projectId: string): string {
+  return `${env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/jobs/stream`;
 }
 
 // --- Moodboards -----------------------------------------------------------

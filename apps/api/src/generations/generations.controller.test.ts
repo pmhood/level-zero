@@ -391,6 +391,48 @@ describe('inspecting provenance', () => {
     expect(provenance.body.parent.id).toBe(first);
   });
 
+  it('shows the image a variation was made from, and leaves that image as it was', async () => {
+    const source = await image('portrait.png');
+    const original = await running();
+
+    const created = await http()
+      .post(generationsUrl())
+      .send({
+        capability: 'image.variation',
+        prompt: 'warmer light',
+        context: { assetIds: [source.id] },
+        parentGenerationId: original,
+      })
+      .expect(201);
+    await http()
+      .post(`${generationsUrl()}/${created.body.id}/dispatch`)
+      .send({ provider: 'local-image', model: 'local-plate-1' })
+      .expect(201);
+    const output = await image('variation.png');
+    await http()
+      .post(`${generationsUrl()}/${created.body.id}/complete`)
+      .send({ outputAssetIds: [output.id] })
+      .expect(201);
+
+    const provenance = await http()
+      .get(`${generationsUrl()}/${created.body.id}/provenance`)
+      .expect(200);
+
+    expect(provenance.body.inputAssets.map((asset: Asset) => asset.id)).toEqual([source.id]);
+    expect(provenance.body.outputAssets.map((asset: Asset) => asset.id)).toEqual([output.id]);
+    expect(provenance.body.parent.id).toBe(original);
+
+    // The variation is its own file, and the source is untouched by having been
+    // used: same bytes, same active source row.
+    expect(output.id).not.toBe(source.id);
+    await expect(assetService.getById(project.id, source.id)).resolves.toMatchObject({
+      status: 'active',
+      variant: 'source',
+      sourceAssetId: null,
+      checksum: source.checksum,
+    });
+  });
+
   it('finds the generation behind an output asset', async () => {
     const generationId = await running();
     const output = await image('cathedral.png');

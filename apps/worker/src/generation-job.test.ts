@@ -124,6 +124,8 @@ async function queued(
     prompt?: string;
     parameters?: Record<string, unknown>;
     inputEntityIds?: string[];
+    inputAssetIds?: string[];
+    parentGenerationId?: string;
     resolvedContext?: Record<string, unknown>;
   } = {},
 ): Promise<{ generation: Generation; job: Job }> {
@@ -132,6 +134,8 @@ async function queued(
     prompt: input.prompt ?? 'name three drowned cathedrals',
     parameters: input.parameters,
     inputEntityIds: input.inputEntityIds,
+    inputAssetIds: input.inputAssetIds,
+    parentGenerationId: input.parentGenerationId,
     resolvedContext: input.resolvedContext,
   });
   const job = await jobs.enqueue(project.id, {
@@ -425,5 +429,110 @@ describe('storing what a provider produced', () => {
     const stored = await assets.download(project.id, record.outputAssetIds[0] as string);
     expect(stored.asset).toMatchObject({ kind: 'image', mimeType: 'image/svg+xml' });
     expect(stored.content.toString('utf8')).toContain('<svg');
+  });
+});
+
+describe('reference images', () => {
+  /** Captures the request a provider was handed, references and all. */
+  function recordingProvider(capabilities: readonly AiCapability[]): {
+    provider: BaseAiProvider;
+    seen: () => AiRequest | undefined;
+  } {
+    let seen: AiRequest | undefined;
+    const provider = new (class extends BaseAiProvider {
+      readonly id = 'recording';
+      readonly capabilities = capabilities;
+      readonly defaultModel = 'recording-1';
+      async execute(request: AiRequest): Promise<AiResult> {
+        seen = request;
+        return { capability: request.capability, providerId: this.id, model: this.defaultModel };
+      }
+    })();
+
+    return { provider, seen: () => seen };
+  }
+
+  it('hands the provider the bytes behind the assets the request named', async () => {
+    const { provider, seen } = recordingProvider(['image.variation']);
+    providers.register(provider);
+    const source = await assets.upload(project.id, {
+      kind: 'image',
+      filename: 'kael.png',
+      mimeType: 'image/png',
+      content: Buffer.from('the-source-pixels', 'utf8'),
+    });
+    const { job } = await queued({ capability: 'image.variation', inputAssetIds: [source.id] });
+
+    await handle()(delivery(job));
+
+    expect(seen()?.references).toMatchObject([
+      { assetId: source.id, filename: 'kael.png', mimeType: 'image/png' },
+    ]);
+    expect(seen()?.references?.[0]?.content.toString('utf8')).toBe('the-source-pixels');
+  });
+
+  it('leaves out an input that is not an image', async () => {
+    const { provider, seen } = recordingProvider(['text.generate']);
+    providers.register(provider);
+    const notes = await assets.upload(project.id, {
+      kind: 'export',
+      filename: 'notes.txt',
+      mimeType: 'text/plain',
+      content: Buffer.from('not a picture', 'utf8'),
+    });
+    const { job } = await queued({ inputAssetIds: [notes.id] });
+
+    await handle()(delivery(job));
+
+    expect(seen()?.references).toEqual([]);
+  });
+
+  it('produces a new asset for a variation and leaves the source exactly as it was', async () => {
+    providers.register(new LocalImageProvider());
+    const source = await assets.upload(project.id, {
+      kind: 'image',
+      filename: 'kael.png',
+      mimeType: 'image/png',
+      content: Buffer.from('the-source-pixels', 'utf8'),
+    });
+    const original = await generations.record(project.id, {
+      capability: 'image.generate',
+      prompt: 'a diver in a flooded nave',
+    });
+    const { generation, job } = await queued({
+      capability: 'image.variation',
+      prompt: 'warmer light',
+      inputAssetIds: [source.id],
+      parentGenerationId: original.id,
+    });
+
+    await handle()(delivery(job));
+
+    const record = await generations.getById(project.id, generation.id);
+    expect(record.status).toBe('complete');
+    // Parentage is recorded, and the variation is its own file.
+    expect(record.parentGenerationId).toBe(original.id);
+    expect(record.inputAssetIds).toEqual([source.id]);
+    expect(record.outputAssetIds).toHaveLength(1);
+    expect(record.outputAssetIds).not.toContain(source.id);
+
+    const untouched = await assets.download(project.id, source.id);
+    expect(untouched.content.toString('utf8')).toBe('the-source-pixels');
+    expect(untouched.asset).toMatchObject({ status: 'active', variant: 'source' });
+  });
+
+  it('fails a variation with nothing to work from, and stores no asset for it', async () => {
+    providers.register(new LocalImageProvider());
+    const { generation, job } = await queued({
+      capability: 'image.variation',
+      prompt: 'warmer light',
+    });
+
+    await expect(handle()(delivery(job))).rejects.toThrow(/reference image/);
+
+    const record = await generations.getById(project.id, generation.id);
+    expect(record).toMatchObject({ status: 'failed' });
+    expect(record.failure?.message).toMatch(/reference image/);
+    expect(record.outputAssetIds).toEqual([]);
   });
 });

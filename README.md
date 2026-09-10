@@ -34,6 +34,10 @@ Implemented so far, against the architecture epic
 - [#41](https://github.com/pmhood/level-zero/issues/41) — project-wide search
   and semantic retrieval, so entities, documents, assets and generations are
   findable from one place, by the words in them or by what they mean.
+- [#47](https://github.com/pmhood/level-zero/issues/47) — asset generation,
+  editing and variation as one reusable surface, embedded in Character Studio and
+  Moodboards rather than reinvented per workspace, with results arriving
+  asynchronously as ordinary reusable `Asset`s.
 
 ## Requirements
 
@@ -297,9 +301,14 @@ capability, so a feature never names a vendor and never handles one being down.
   and a generated GDD section is read back exactly like a generated portrait.
 - **Adapters own their vendor.** `AnthropicProvider` is the only file that knows
   what an Anthropic request looks like; `LocalImageProvider` serves
-  `image.generate` with no credentials, the way `LocalObjectStorageProvider`
-  serves object storage. Swapping in a hosted image model is one registration in
-  `apps/worker/src/index.ts` and nothing else.
+  `image.generate`, `image.edit` and `image.variation` with no credentials, the
+  way `LocalObjectStorageProvider` serves object storage. Swapping in a hosted
+  image model is one registration in `apps/worker/src/index.ts` and nothing else.
+- **Reference bytes are separate from reference provenance.** `ResolvedContext`
+  names the assets a request leans on, because that is what is stored on the
+  record; `AiRequest.references` carries their bytes, which is what an editing or
+  variation model needs and what no JSON snapshot can hold. The worker reads them
+  from the generation's `inputAssetIds` through `AssetService`.
 
 Set `ANTHROPIC_API_KEY` to enable the Anthropic adapter; without it the echo
 provider is registered so local development still runs end to end. Both server
