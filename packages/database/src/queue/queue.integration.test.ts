@@ -2,6 +2,7 @@ import { loadDotEnv } from '@level-zero/config';
 import { createJob, systemClock, uuidIdGenerator, type Job } from '@level-zero/domain';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
+import { testRunId } from '../testing/test-run-id';
 import { createJobEvents, type JobEventsClient } from './job-events';
 import { createJobConsumer, createJobQueue, type JobConsumer, type JobDelivery } from './job-queue';
 
@@ -15,9 +16,20 @@ let connectionUrl: string;
 let consumer: JobConsumer | undefined;
 let events: JobEventsClient | undefined;
 
+/**
+ * A checkout-specific BullMQ prefix. Concurrent worktrees run these tests
+ * against one shared Redis (see `pnpm infra:up`'s shared project directory),
+ * and BullMQ's `Worker` delivers to any queue with a matching name and
+ * prefix regardless of which process created it — without this, one
+ * worktree's consumer can steal a delivery meant for another's, which is
+ * exactly how "retries a failed attempt" lost its first attempt under load.
+ */
+let queuePrefix: string;
+
 beforeAll(() => {
   loadDotEnv(__dirname);
   connectionUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
+  queuePrefix = `level-zero-test-${testRunId()}`;
 });
 
 afterEach(async () => {
@@ -56,11 +68,12 @@ function waitFor<T>(register: (accept: (value: T) => void) => void, label: strin
 describe('the job queue', () => {
   it('delivers a queued job to a worker, carrying identity only', async () => {
     const queued = job();
-    const queue = createJobQueue({ connectionUrl });
+    const queue = createJobQueue({ connectionUrl, prefix: queuePrefix });
 
     const delivered = waitFor<JobDelivery>((accept) => {
       consumer = createJobConsumer({
         connectionUrl,
+        prefix: queuePrefix,
         handle: async (delivery) => {
           if (delivery.jobId === queued.id) accept(delivery);
         },
@@ -81,12 +94,13 @@ describe('the job queue', () => {
 
   it('retries a failed attempt until the record runs out of them', async () => {
     const queued = job({ maxAttempts: 2 });
-    const queue = createJobQueue({ connectionUrl });
+    const queue = createJobQueue({ connectionUrl, prefix: queuePrefix });
     const attempts: JobDelivery[] = [];
 
     const exhausted = waitFor<JobDelivery[]>((accept) => {
       consumer = createJobConsumer({
         connectionUrl,
+        prefix: queuePrefix,
         handle: async (delivery) => {
           if (delivery.jobId !== queued.id) return;
           attempts.push(delivery);
@@ -109,7 +123,7 @@ describe('the job queue', () => {
 
   it('drops a job that is cancelled before a worker picks it up', async () => {
     const queued = job();
-    const queue = createJobQueue({ connectionUrl });
+    const queue = createJobQueue({ connectionUrl, prefix: queuePrefix });
 
     await queue.enqueue(queued);
     await queue.remove(queued);
@@ -117,6 +131,7 @@ describe('the job queue', () => {
     const deliveries: string[] = [];
     consumer = createJobConsumer({
       connectionUrl,
+      prefix: queuePrefix,
       handle: async (delivery) => {
         deliveries.push(delivery.jobId);
       },

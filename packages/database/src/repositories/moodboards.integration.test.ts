@@ -38,8 +38,8 @@ let project: Project;
 let otherProject: Project;
 let board: Entity;
 
-beforeAll(() => {
-  client = connectTestDatabase();
+beforeAll(async () => {
+  client = await connectTestDatabase();
   const projectRepo = new DrizzleProjectRepository(client.db);
   const entityRepo = new DrizzleEntityRepository(client.db);
   const assetRepo = new DrizzleAssetRepository(client.db);

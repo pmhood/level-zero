@@ -58,8 +58,8 @@ let assets: AssetService;
 let generations: GenerationService;
 let project: Project;
 
-beforeAll(() => {
-  client = connectTestDatabase();
+beforeAll(async () => {
+  client = await connectTestDatabase();
   const projectRepo = new DrizzleProjectRepository(client.db);
   const entityRepo = new DrizzleEntityRepository(client.db);
   const relationshipRepo = new DrizzleEntityRelationshipRepository(client.db);

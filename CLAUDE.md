@@ -41,8 +41,12 @@ rather than iterating, use `--force` to bypass the cache. The same caveat applie
 whose result depends on the environment rather than on file contents.
 
 **`pnpm test` needs live infrastructure.** The repository adapters are integration-tested against
-real Postgres, so run `pnpm infra:up && pnpm db:migrate` first or those suites fail on connection,
-not on logic. CI does the same against service containers.
+real Postgres, so run `pnpm infra:up` first or those suites fail on connection, not on logic. CI
+does the same against service containers. `pnpm db:migrate` is for the development database only —
+`@level-zero/database`'s integration suite creates and migrates its own per-checkout database and
+BullMQ prefix automatically (`packages/database/src/testing/test-run-id.ts`), so concurrent
+`pnpm test` runs from different worktrees against the one shared Postgres/Redis (see `README.md`)
+don't truncate or steal deliveries from each other.
 
 ## Design documentation — read before any UI work
 

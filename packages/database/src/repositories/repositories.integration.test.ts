@@ -27,8 +27,8 @@ let entityRepo: DrizzleEntityRepository;
 let projects: ProjectService;
 let entities: EntityService;
 
-beforeAll(() => {
-  client = connectTestDatabase();
+beforeAll(async () => {
+  client = await connectTestDatabase();
   projectRepo = new DrizzleProjectRepository(client.db);
   entityRepo = new DrizzleEntityRepository(client.db);
   projects = new ProjectService(projectRepo, deps);

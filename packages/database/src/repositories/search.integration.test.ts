@@ -34,8 +34,8 @@ let search: SearchService;
 let project: Project;
 let otherProject: Project;
 
-beforeAll(() => {
-  client = connectTestDatabase();
+beforeAll(async () => {
+  client = await connectTestDatabase();
   const projectRepo = new DrizzleProjectRepository(client.db);
   const entityRepo = new DrizzleEntityRepository(client.db);
 
