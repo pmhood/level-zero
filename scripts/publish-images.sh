@@ -73,6 +73,29 @@ published_component() {
 }
 
 # ---------------------------------------------------------------------------
+# argocd in --core mode
+# ---------------------------------------------------------------------------
+#
+# --core skips the Argo CD API server and drives the Kubernetes API directly
+# with the local kubeconfig, so no `argocd login` is needed — which matters
+# because nothing else in this workflow requires one, and a release should not
+# depend on a session token someone established months ago.
+#
+# It reads the Application from whatever namespace the kube context points at,
+# so the namespace has to be argocd. Rather than mutate the caller's context
+# (that change would outlive this script and silently retarget their next
+# kubectl), this runs against a throwaway copy of the kubeconfig.
+ARGOCD_KUBECONFIG=""
+argocd_core() {
+  if [ -z "$ARGOCD_KUBECONFIG" ]; then
+    ARGOCD_KUBECONFIG="$(mktemp)"
+    kubectl config view --raw >"$ARGOCD_KUBECONFIG"
+    KUBECONFIG="$ARGOCD_KUBECONFIG" kubectl config set-context --current --namespace=argocd >/dev/null
+  fi
+  KUBECONFIG="$ARGOCD_KUBECONFIG" argocd --core "$@"
+}
+
+# ---------------------------------------------------------------------------
 # Preflight — fail here rather than after a five-minute build
 # ---------------------------------------------------------------------------
 command -v docker >/dev/null || {
@@ -89,10 +112,22 @@ if $ROLLOUT; then
     exit 1
   }
   # Only the API image carries migrations, so only it needs an Argo sync.
-  if published_component api && ! command -v argocd >/dev/null; then
-    echo "error: --rollout of the API needs the argocd CLI to re-run the migration hook." >&2
-    echo "       Install it, or sync the app from the Argo CD UI and then rerun with --rollout web worker." >&2
-    exit 1
+  if published_component api; then
+    command -v argocd >/dev/null || {
+      echo "error: --rollout of the API needs the argocd CLI to re-run the migration hook." >&2
+      echo "       Install it, or sync from the Argo CD UI and rerun with --rollout web worker." >&2
+      exit 1
+    }
+    # Reachability, not just presence. The CLI is used in --core mode (talks to
+    # the Kubernetes API directly, no `argocd login`), so a missing local config
+    # is fine — but a cluster it cannot read is not, and finding that out after
+    # the push means a half-done release.
+    if ! argocd_core app get "$ARGO_APP" >/dev/null 2>&1; then
+      echo "error: argocd --core cannot read application '${ARGO_APP}'." >&2
+      echo "       Check kubectl reaches the cluster and the app exists:" >&2
+      echo "         kubectl get applications.argoproj.io ${ARGO_APP} -n argocd" >&2
+      exit 1
+    fi
   fi
 fi
 
@@ -110,7 +145,7 @@ fi
 # Build
 # ---------------------------------------------------------------------------
 METADIR="$(mktemp -d)"
-trap 'rm -rf "$METADIR"' EXIT
+trap 'rm -rf "$METADIR" "${ARGOCD_KUBECONFIG:-}"' EXIT
 
 for component in $SELECTED; do
   image="${REGISTRY}/level-zero-${component}"
@@ -193,7 +228,7 @@ if ! $ROLLOUT; then
   echo
   echo "To release this to the cluster:"
   if published_component api; then
-    echo "  argocd app sync ${ARGO_APP}          # re-runs the migration hook"
+    echo "  argocd --core app sync ${ARGO_APP}   # re-runs the migration hook"
   fi
   echo "  kubectl rollout restart -n ${NAMESPACE}${restart_targets}"
   echo
@@ -203,8 +238,8 @@ fi
 
 if published_component api; then
   echo
-  echo "==> argocd app sync ${ARGO_APP}"
-  argocd app sync "$ARGO_APP"
+  echo "==> argocd --core app sync ${ARGO_APP}"
+  argocd_core app sync "$ARGO_APP"
   echo "==> waiting for the migration hook"
   # The hook is recreated per sync, so this waits on the current one. A failure
   # here means new code must NOT be rolled out — it would run against a schema
