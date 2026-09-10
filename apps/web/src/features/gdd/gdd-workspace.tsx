@@ -15,6 +15,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { matchEntities, referencedEntityIds } from '@/features/entities/entity-reference';
+import { EntityVersionCompare } from '@/features/entities/entity-version-compare';
 import { EntityReferenceProvider } from '@/features/entities/entity-reference-context';
 import {
   createEntityReferenceExtensions,
@@ -87,6 +88,11 @@ function GddDocumentEditor({
   const snapshotDocument = useSnapshotGddDocument(projectId, documentId);
   const surfaceRef = useRef<HTMLDivElement>(null);
   const [aiEditError, setAiEditError] = useState<string | null>(null);
+  const [versionError, setVersionError] = useState<string | null>(null);
+  // Compare is a mode of the document surface rather than a page of its own:
+  // the writer stays where they were writing, and the outline steps aside so
+  // two versions get the full width.
+  const [comparing, setComparing] = useState(false);
 
   const entitiesQuery = useReferenceableEntities(projectId);
   const entities = useMemo(() => entitiesQuery.data?.items ?? [], [entitiesQuery.data]);
@@ -161,6 +167,20 @@ function GddDocumentEditor({
     headings?.item(index)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  /**
+   * A version is of what the server holds, so whatever is still waiting in
+   * autosave has to land before the snapshot is taken.
+   */
+  async function saveVersion() {
+    try {
+      await autosave.flush();
+      await snapshotDocument.mutateAsync({});
+      setVersionError(null);
+    } catch (error) {
+      setVersionError(apiErrorMessage(error, 'Could not save a version.'));
+    }
+  }
+
   return (
     <EntityReferenceProvider
       entities={entities}
@@ -168,34 +188,68 @@ function GddDocumentEditor({
       onOpen={openReference}
     >
       <div className="flex h-full min-h-0">
-        <DocumentOutline content={content} onSelect={scrollToHeading} />
+        {!comparing && <DocumentOutline content={content} onSelect={scrollToHeading} />}
 
         <div ref={surfaceRef} className="flex min-w-0 flex-1 flex-col overflow-y-auto">
           <WorkspaceHeader
             title="GDD"
             description="The canonical written design. Reference entities instead of restating them."
+            actions={
+              <Button variant="secondary" size="sm" onClick={() => setComparing(!comparing)}>
+                {comparing ? 'Back to writing' : 'Compare versions'}
+              </Button>
+            }
           />
 
-          <div className="w-full max-w-[860px] px-4 pb-16 xl:px-5 2xl:px-6">
-            <RichTextEditor
-              mode="document"
-              label="Game design document"
-              content={content}
-              onChange={handleChange}
-              extensions={referenceExtensions}
-              commands={ENTITY_EMBED_COMMANDS}
-              ai={aiEditing}
-              toolbarActions={<SaveStatusLabel status={autosave.status} error={autosave.error} />}
-            />
-            {aiEditError && (
-              <p role="status" className="mt-2 text-xs text-error">
-                {aiEditError}
-              </p>
+          <div
+            className={
+              comparing
+                ? 'w-full px-4 pb-16 xl:px-5 2xl:px-6'
+                : 'w-full max-w-[860px] px-4 pb-16 xl:px-5 2xl:px-6'
+            }
+          >
+            {comparing ? (
+              <EntityVersionCompare projectId={projectId} entity={designDocument.entity} />
+            ) : (
+              <>
+                <RichTextEditor
+                  mode="document"
+                  label="Game design document"
+                  content={content}
+                  onChange={handleChange}
+                  extensions={referenceExtensions}
+                  commands={ENTITY_EMBED_COMMANDS}
+                  ai={aiEditing}
+                  toolbarActions={
+                    <>
+                      <SaveStatusLabel status={autosave.status} error={autosave.error} />
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={snapshotDocument.isPending}
+                        onClick={() => void saveVersion()}
+                      >
+                        {snapshotDocument.isPending ? 'Saving…' : 'Save a version'}
+                      </Button>
+                    </>
+                  }
+                />
+                {aiEditError && (
+                  <p role="status" className="mt-2 text-xs text-error">
+                    {aiEditError}
+                  </p>
+                )}
+                {versionError && (
+                  <p role="status" className="mt-2 text-xs text-error">
+                    {versionError}
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>
 
-        {openEntity && (
+        {openEntity && !comparing && (
           <EntityReferenceInspector entity={openEntity} onClose={() => setOpenEntityId(null)} />
         )}
       </div>

@@ -16,6 +16,7 @@ import type {
   EntityStatus,
   EntityType,
   EntityVersion,
+  GenerationPage,
   Project,
   ProjectPage,
   ProjectStatus,
@@ -282,6 +283,19 @@ export function restoreEntityVersion(
   return post(`/api/projects/${projectId}/entities/${entityId}/versions/${versionId}/restore`, {});
 }
 
+/** Starts a separate line of work from a version. The original line is untouched. */
+export function branchEntityVersion(
+  projectId: string,
+  entityId: string,
+  versionId: string,
+  input: { branchName: string },
+): Promise<EntityVersion> {
+  return post(
+    `/api/projects/${projectId}/entities/${entityId}/versions/${versionId}/branch`,
+    input,
+  );
+}
+
 // --- Documents -----------------------------------------------------------
 
 export interface ListDocumentsParams {
@@ -375,6 +389,20 @@ export interface ListAssetsParams {
  */
 export function listAssets(projectId: string, params: ListAssetsParams = {}): Promise<AssetPage> {
   return apiFetch(`/api/projects/${projectId}/assets${toQueryString(params)}`);
+}
+
+/**
+ * How an asset came to exist: the generation whose output it is, where there
+ * was one. Provenance is read from the generation, because an asset carries no
+ * link back to the act that made it.
+ */
+export function listGenerationsForAsset(
+  projectId: string,
+  assetId: string,
+): Promise<GenerationPage> {
+  return apiFetch(
+    `/api/projects/${projectId}/generations${toQueryString({ outputAssetId: assetId, limit: 1 })}`,
+  );
 }
 
 /** The asset's bytes, streamed by the API — usable directly as an `<img src>`. */

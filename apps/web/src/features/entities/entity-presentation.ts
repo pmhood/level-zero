@@ -1,4 +1,4 @@
-import type { EntityStatus, EntityType, RelationType } from '@level-zero/domain';
+import type { EntityStatus, EntityType, RelationType, VersionReason } from '@level-zero/domain';
 import type { StatusTone } from '@level-zero/ui';
 
 /**
@@ -69,4 +69,26 @@ export function entityStatusBadge(status: EntityStatus): EntityStatusBadge {
     case 'draft':
       return { tone: 'neutral', label: 'Draft' };
   }
+}
+
+/**
+ * Why a version was kept, in the words a creative user reads.
+ *
+ * Deliberately free of source-control language: the underlying reasons are
+ * `branch` and `promotion`, but nobody working on a character is doing either
+ * of those to a repository.
+ */
+const VERSION_REASON_LABELS: Record<VersionReason, string> = {
+  manual: 'Saved',
+  milestone: 'Milestone',
+  restore: 'Restored',
+  branch: 'New line of work',
+  promotion: 'Promoted',
+  ai_edit: 'AI edit',
+  playtest: 'Playtest',
+  import: 'Imported',
+};
+
+export function versionReasonLabel(reason: VersionReason): string {
+  return VERSION_REASON_LABELS[reason];
 }

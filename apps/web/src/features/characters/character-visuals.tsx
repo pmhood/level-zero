@@ -14,6 +14,7 @@ import {
   useProjectImages,
   useUnlinkCharacter,
 } from './use-characters';
+import { VisualCompare } from './visual-compare';
 
 /**
  * The generative visual actions this studio is shaped around (spec section 31).
@@ -49,6 +50,7 @@ export function CharacterVisuals({
   const links = useCharacterLinks(projectId, character.id);
   const images = useProjectImages(projectId);
   const unlink = useUnlinkCharacter(projectId);
+  const [comparing, setComparing] = useState(false);
 
   if (links.isPending || images.isPending) {
     return <p className="text-sm text-muted-foreground">Loading visuals…</p>;
@@ -75,10 +77,32 @@ export function CharacterVisuals({
   const assets = images.data.items;
   const visuals = resolveVisuals(links.data.outgoing, assets);
   const archived = character.status === 'archived';
+  // A picture whose asset no longer resolves has nothing to put in a pane.
+  const comparable = visuals
+    .map((visual) => visual.asset)
+    .filter((asset): asset is Asset => asset !== null);
+
+  if (comparing && comparable.length >= 2) {
+    return (
+      <VisualCompare
+        projectId={projectId}
+        images={comparable}
+        onClose={() => setComparing(false)}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col gap-5">
       <VisualActions />
+
+      {comparable.length >= 2 && (
+        <div>
+          <Button variant="secondary" size="sm" onClick={() => setComparing(true)}>
+            Compare two images
+          </Button>
+        </div>
+      )}
 
       {visuals.length === 0 ? (
         <EmptyState
