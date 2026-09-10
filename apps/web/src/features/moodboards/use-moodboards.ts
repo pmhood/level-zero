@@ -1,10 +1,11 @@
 'use client';
 
-import type {
-  Moodboard,
-  MoodboardNode,
-  MoodboardNodePatch,
-  RelationType,
+import {
+  ENTITY_TYPES,
+  type Moodboard,
+  type MoodboardNode,
+  type MoodboardNodePatch,
+  type RelationType,
 } from '@level-zero/domain';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -16,6 +17,12 @@ const moodboardKeys = {
     ['projects', projectId, 'moodboards', boardId] as const,
   library: (projectId: string) => ['projects', projectId, 'moodboards', 'library'] as const,
 };
+
+/**
+ * Entity types a board's nodes can point at — everything but boards
+ * themselves, so a moodboard can never be placed on a moodboard.
+ */
+const PLACEABLE_ENTITY_TYPES = ENTITY_TYPES.filter((type) => type !== 'moodboard');
 
 /**
  * The project's boards.
@@ -40,7 +47,15 @@ export function useMoodboard(projectId: string, boardId: string | null) {
   });
 }
 
-/** The assets and entities a board can point at, for the inspector's picker. */
+/**
+ * Every asset and entity a board's nodes might already point at, for the
+ * canvas and inspector to resolve a node's reference against.
+ *
+ * Unfiltered by type and not searched: a node can have been placed before
+ * `moodboard` was excluded from {@link useMoodboardLibrarySearch}, or simply
+ * point past whatever the rail's search box currently narrows to, and it must
+ * still resolve.
+ */
 export function useMoodboardLibrary(projectId: string) {
   const assets = useQuery({
     queryKey: [...moodboardKeys.library(projectId), 'assets'] as const,
@@ -50,6 +65,37 @@ export function useMoodboardLibrary(projectId: string) {
   const entities = useQuery({
     queryKey: [...moodboardKeys.library(projectId), 'entities'] as const,
     queryFn: () => api.listEntities(projectId, { limit: 200 }),
+    enabled: Boolean(projectId),
+  });
+
+  return { assets, entities };
+}
+
+/**
+ * What the rail's "Add to board" picker offers to place next.
+ *
+ * The query reaches the API rather than filtering a fetched page, so a match
+ * outside the first page of assets or entities is still found, and
+ * `moodboard` is excluded from the entity types so a board can't be placed on
+ * itself.
+ */
+export function useMoodboardLibrarySearch(projectId: string, search: string) {
+  const trimmedSearch = search.trim() || undefined;
+
+  const assets = useQuery({
+    queryKey: [...moodboardKeys.library(projectId), 'assets', 'search', trimmedSearch] as const,
+    queryFn: () =>
+      api.listAssets(projectId, { kind: ['image'], search: trimmedSearch, limit: 100 }),
+    enabled: Boolean(projectId),
+  });
+  const entities = useQuery({
+    queryKey: [...moodboardKeys.library(projectId), 'entities', 'search', trimmedSearch] as const,
+    queryFn: () =>
+      api.listEntities(projectId, {
+        type: PLACEABLE_ENTITY_TYPES,
+        search: trimmedSearch,
+        limit: 200,
+      }),
     enabled: Boolean(projectId),
   });
 

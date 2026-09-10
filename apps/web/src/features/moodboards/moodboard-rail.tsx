@@ -24,6 +24,8 @@ export interface MoodboardRailProps {
   creating: boolean;
   assets: readonly Asset[];
   entities: readonly Entity[];
+  librarySearch: string;
+  onLibrarySearchChange: (search: string) => void;
   onPlaceAsset: (assetId: string) => void;
   onPlaceEntity: (entityId: string) => void;
 }
@@ -38,6 +40,8 @@ export function MoodboardRail({
   creating,
   assets,
   entities,
+  librarySearch,
+  onLibrarySearchChange,
   onPlaceAsset,
   onPlaceEntity,
 }: MoodboardRailProps) {
@@ -59,6 +63,8 @@ export function MoodboardRail({
         <Library
           assets={assets}
           entities={entities}
+          search={librarySearch}
+          onSearchChange={onLibrarySearchChange}
           onPlaceAsset={onPlaceAsset}
           onPlaceEntity={onPlaceEntity}
         />
@@ -141,40 +147,43 @@ function BoardPicker({
   );
 }
 
+/**
+ * The search field reaches the API through `onSearchChange` (the workspace
+ * debounces it and refetches) rather than filtering `assets`/`entities`
+ * client-side, so a match outside the first page still turns up.
+ */
 function Library({
   assets,
   entities,
+  search,
+  onSearchChange,
   onPlaceAsset,
   onPlaceEntity,
 }: {
   assets: readonly Asset[];
   entities: readonly Entity[];
+  search: string;
+  onSearchChange: (search: string) => void;
   onPlaceAsset: (assetId: string) => void;
   onPlaceEntity: (entityId: string) => void;
 }) {
-  const [search, setSearch] = useState('');
-  const needle = search.trim().toLowerCase();
-
-  const matchingAssets = assets.filter((asset) => asset.filename.toLowerCase().includes(needle));
-  const matchingEntities = entities.filter((entity) => entity.name.toLowerCase().includes(needle));
-
   return (
     <section aria-label="Add to board" className="flex min-h-0 flex-col gap-2">
       <h2 className="text-xs font-medium text-muted-foreground">Add to board</h2>
       <SearchField
         label="Search images and entities"
         value={search}
-        onChange={(event) => setSearch(event.target.value)}
+        onChange={(event) => onSearchChange(event.target.value)}
         placeholder="Search images and entities"
       />
 
-      {matchingAssets.length === 0 && matchingEntities.length === 0 && (
+      {assets.length === 0 && entities.length === 0 && (
         <p className="text-xs text-faint-foreground">
           Nothing matches. Upload images in Assets, or create entities in World and Characters.
         </p>
       )}
 
-      {matchingAssets.map((asset) => (
+      {assets.map((asset) => (
         <LibraryRow
           key={asset.id}
           label={asset.filename}
@@ -182,7 +191,7 @@ function Library({
           onClick={() => onPlaceAsset(asset.id)}
         />
       ))}
-      {matchingEntities.map((entity) => (
+      {entities.map((entity) => (
         <LibraryRow
           key={entity.id}
           label={entity.name}
