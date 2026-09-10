@@ -16,6 +16,7 @@ import { RedisModule } from './infrastructure/redis.module';
 import { StorageModule } from './infrastructure/storage.module';
 import { JobsModule } from './jobs/jobs.module';
 import { MoodboardsModule } from './moodboards/moodboards.module';
+import { PlaytestsModule } from './playtests/playtests.module';
 import { ProjectsModule } from './projects/projects.module';
 import { PrototypesModule } from './prototypes/prototypes.module';
 import { RelationshipsModule } from './relationships/relationships.module';
@@ -48,6 +49,7 @@ import { VersionsModule } from './versions/versions.module';
     AssetsModule,
     GenerationsModule,
     PrototypesModule,
+    PlaytestsModule,
     MoodboardsModule,
     JobsModule,
     ActivityModule,

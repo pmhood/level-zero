@@ -7,6 +7,8 @@ import { type PlaytestSession } from './playtest-session';
 export interface PlaytestListFilter {
   /** Matches playtests carrying *any* of these tags (case-insensitive). */
   tags?: readonly string[];
+  /** Scopes to playtests of one exact `PrototypeVersion` — there is no `prototypeId` (§5.3). */
+  prototypeVersionId?: string;
   limit?: number;
   offset?: number;
 }

@@ -612,6 +612,12 @@ export class InMemoryPlaytestRepository implements PlaytestRepository {
       (playtest) => playtest.projectId === projectId,
     );
 
+    if (filter.prototypeVersionId) {
+      matches = matches.filter(
+        (playtest) => playtest.prototypeVersionId === filter.prototypeVersionId,
+      );
+    }
+
     const tags = filter.tags?.map((tag) => tag.toLowerCase());
     if (tags?.length) {
       const wanted = new Set(tags);

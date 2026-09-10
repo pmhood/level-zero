@@ -226,6 +226,10 @@ export class DrizzlePlaytestRepository implements PlaytestRepository {
 function buildPlaytestWhere(projectId: string, filter: PlaytestListFilter): SQL {
   const conditions: SQL[] = [eq(playtests.projectId, projectId)];
 
+  if (filter.prototypeVersionId) {
+    conditions.push(eq(playtests.prototypeVersionId, filter.prototypeVersionId));
+  }
+
   const tags = filter.tags?.map((tag) => tag.trim().toLowerCase()).filter((tag) => tag.length > 0);
   if (tags?.length) {
     // Tags keep the casing the user typed, so matching lowercases both sides.
