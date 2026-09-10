@@ -1,0 +1,97 @@
+name: publish
+
+# Publishes the three deployable images to GHCR, where the k3s cluster pulls
+# them from (pmhood/k8s-gitops, applications/level-zero).
+#
+# **This does not run, and publishing is a manual step.** GitHub Actions is
+# blocked at the account level (failed payments) and the CI workflow was
+# disabled on 2026-09-09 for the same reason — see CLAUDE.md. Releases go out
+# through `scripts/publish-images.sh`, which does the same three builds and also
+# handles the two steps this file does not: re-running the migration hook and
+# restarting the Deployments. See the Deployment section of README.md.
+#
+# This file is kept because it is what should happen once billing is sorted —
+# `gh workflow enable CI && gh workflow enable publish` — not because it is the
+# current procedure. Do not enable it on its own: it is gated on CI so that a
+# broken commit cannot become the `:latest` the cluster pulls, and with CI
+# disabled that gate is inert.
+#
+# Note it publishes images only. Even green, it does not roll the cluster: the
+# migration hook and the restart still have to happen, manually or from the
+# script.
+
+on:
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    # workflow_dispatch has no conclusion to check; a workflow_run must have
+    # succeeded.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: level-zero-api
+            dockerfile: docker/Dockerfile.api
+          - image: level-zero-worker
+            dockerfile: docker/Dockerfile.worker
+          - image: level-zero-web
+            dockerfile: docker/Dockerfile.web
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # workflow_run starts from the default branch, not from the commit
+          # that triggered CI — without this the images would be built from
+          # whatever main pointed at when the workflow started.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=long
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          # One architecture on purpose: both k3s nodes are x86_64. Adding
+          # linux/arm64 doubles the build to produce a layer nothing pulls.
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # NEXT_PUBLIC_* is inlined at build time, so the web image is specific
+          # to the origin it is built for. This is the deployed host.
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://level-zero.fakerainbow.com
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}

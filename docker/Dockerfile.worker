@@ -1,0 +1,61 @@
+# The background worker: generation and search-index jobs off the BullMQ queue,
+# plus a health server on WORKER_PORT.
+#
+# Same three-stage shape as Dockerfile.api — see that file for why the
+# dependency install is split from the source copy.
+FROM node:24-slim AS base
+ENV PNPM_HOME=/pnpm \
+    PATH=/pnpm:$PATH \
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable
+WORKDIR /app
+
+# ---------------------------------------------------------------------------
+FROM base AS manifests
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc turbo.json tsconfig.base.json ./
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+COPY apps/worker/package.json apps/worker/
+COPY packages/ai/package.json packages/ai/
+COPY packages/config/package.json packages/config/
+COPY packages/database/package.json packages/database/
+COPY packages/domain/package.json packages/domain/
+COPY packages/storage/package.json packages/storage/
+COPY packages/ui/package.json packages/ui/
+
+# ---------------------------------------------------------------------------
+FROM manifests AS build
+
+RUN pnpm install --frozen-lockfile
+COPY . .
+RUN pnpm turbo run build --filter=@level-zero/worker
+
+# ---------------------------------------------------------------------------
+FROM manifests AS prod-deps
+
+RUN pnpm install --frozen-lockfile --prod --filter "@level-zero/worker..."
+
+# ---------------------------------------------------------------------------
+FROM base AS runtime
+
+ENV NODE_ENV=production \
+    WORKER_PORT=3002
+
+COPY --from=prod-deps /app ./
+COPY --from=build /app/packages/config/dist packages/config/dist
+COPY --from=build /app/packages/domain/dist packages/domain/dist
+COPY --from=build /app/packages/database/dist packages/database/dist
+COPY --from=build /app/packages/storage/dist packages/storage/dist
+COPY --from=build /app/packages/ai/dist packages/ai/dist
+COPY --from=build /app/apps/worker/dist apps/worker/dist
+
+USER node
+EXPOSE 3002
+
+# The worker's health server answers both /health and /health/ready with the
+# same probe report; only the status code differs, so either is usable here.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+CMD ["node", "apps/worker/dist/index.js"]
