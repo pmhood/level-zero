@@ -6,6 +6,7 @@ import { useCallback, useMemo, useState, type ReactNode } from 'react';
 
 import { GenerationPanel } from '@/features/generation/generation-panel';
 import { apiErrorMessage } from '@/lib/api';
+import { useDebouncedValue } from '@/lib/use-debounced-value';
 
 import { MoodboardCanvas } from './moodboard-canvas';
 import { MoodboardInspector } from './moodboard-inspector';
@@ -20,6 +21,7 @@ import {
   useGroupMoodboardNodes,
   useMoodboard,
   useMoodboardLibrary,
+  useMoodboardLibrarySearch,
   useMoodboards,
   usePromoteMoodboardConnector,
   useRemoveMoodboardNodes,
@@ -43,10 +45,13 @@ const PLACEMENT_STEP = 32;
 export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
   const [openBoardId, setOpenBoardId] = useState<string | null>(null);
   const [selectedNodeIds, setSelectedNodeIds] = useState<readonly string[]>([]);
+  const [librarySearch, setLibrarySearch] = useState('');
 
   const boardsQuery = useMoodboards(projectId);
   const boardQuery = useMoodboard(projectId, openBoardId);
   const library = useMoodboardLibrary(projectId);
+  const debouncedLibrarySearch = useDebouncedValue(librarySearch, 250);
+  const librarySearchResults = useMoodboardLibrarySearch(projectId, debouncedLibrarySearch);
 
   const boardId = openBoardId ?? '';
   const createBoard = useCreateMoodboard(projectId);
@@ -164,8 +169,10 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
           createBoard.mutate(name, { onSuccess: (board) => openBoard(board.id) })
         }
         creating={createBoard.isPending}
-        assets={library.assets.data?.items ?? []}
-        entities={library.entities.data?.items ?? []}
+        assets={librarySearchResults.assets.data?.items ?? []}
+        entities={librarySearchResults.entities.data?.items ?? []}
+        librarySearch={librarySearch}
+        onLibrarySearchChange={setLibrarySearch}
         onPlaceAsset={(assetId) => place('asset', { assetId })}
         onPlaceEntity={(entityId) => place('entity', { entityId })}
       />

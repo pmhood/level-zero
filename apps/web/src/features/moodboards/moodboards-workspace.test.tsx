@@ -10,7 +10,7 @@ import type {
   MoodboardNode,
 } from '@level-zero/domain';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MoodboardsWorkspace } from './moodboards-workspace';
@@ -333,7 +333,7 @@ describe('placing and removing', () => {
     // The new node should get zOrder 3, not 2 (which would collide with node_3).
     fireEvent.click(screen.getByRole('button', { name: 'Remove first' }));
     await waitFor(() =>
-      expect(api.removeMoodboardNode).toHaveBeenCalledWith('prj_1', 'board_1', 'node_1'),
+      expect(api.removeMoodboardNodes).toHaveBeenCalledWith('prj_1', 'board_1', ['node_1']),
     );
 
     fireEvent.click(await screen.findByRole('button', { name: /reef\.png/ }));
@@ -396,6 +396,65 @@ describe('placing and removing', () => {
     const shows = await screen.findByText('Shows asset');
     expect(shows.parentElement?.textContent).toContain('reef.png');
     expect(screen.getByText(/any number of boards/)).toBeTruthy();
+  });
+});
+
+describe('the library picker', () => {
+  async function openBoard() {
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: 'Wreck interiors' }));
+    await screen.findByTestId('canvas');
+    return within(screen.getByRole('region', { name: 'Add to board' }));
+  }
+
+  it('excludes moodboards from what it offers, so a board cannot be placed on itself', async () => {
+    // A fake backend: real filtering, so this only passes if the request the
+    // picker sends actually excludes `moodboard` from the types it asks for.
+    const allEntities = [TAM, BOARD];
+    vi.mocked(api.listEntities).mockImplementation(async (_projectId, params) => {
+      const type = params?.type;
+      return entityPage(
+        type ? allEntities.filter((entity) => type.includes(entity.type)) : allEntities,
+      );
+    });
+
+    const library = await openBoard();
+
+    await library.findByText('Tam');
+    expect(library.queryByText('Wreck interiors')).toBeNull();
+  });
+
+  it('searches the API rather than filtering a fetched page, so a match beyond the old cap is found', async () => {
+    const FAR_ASSET: Asset = { ...REEF, id: 'asset_far', filename: 'deep-trench.png' };
+    const FAR_ENTITY: Entity = { ...TAM, id: 'ent_far', name: 'Distant reef' };
+
+    vi.mocked(api.listAssets).mockImplementation(async (_projectId, params) =>
+      assetPage(params?.search === 'deep' ? [FAR_ASSET] : [REEF]),
+    );
+    vi.mocked(api.listEntities).mockImplementation(async (_projectId, params) => {
+      if (params?.type?.includes('moodboard')) return entityPage([BOARD]);
+      return entityPage(params?.search === 'deep' ? [FAR_ENTITY] : [TAM]);
+    });
+
+    const library = await openBoard();
+    await library.findByText('reef.png');
+    expect(library.queryByText('deep-trench.png')).toBeNull();
+    expect(library.queryByText('Distant reef')).toBeNull();
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search images and entities' }), {
+      target: { value: 'deep' },
+    });
+
+    await library.findByText('deep-trench.png');
+    expect(library.getByText('Distant reef')).toBeTruthy();
+    expect(api.listAssets).toHaveBeenCalledWith(
+      'prj_1',
+      expect.objectContaining({ search: 'deep' }),
+    );
+    expect(api.listEntities).toHaveBeenCalledWith(
+      'prj_1',
+      expect.objectContaining({ search: 'deep' }),
+    );
   });
 });
 
