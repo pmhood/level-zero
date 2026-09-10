@@ -125,7 +125,12 @@ export function RichTextEditor({
 
   return (
     <div ref={surfaceRef} className={cn('relative flex min-w-0 flex-col gap-3', className)}>
-      <EditorToolbar editor={editor} groups={config.toolbar} actions={toolbarActions} />
+      {/* A surface nobody can type on has nothing to format: a read-only
+          preview — a version being compared, an embed — shows the writing
+          alone. */}
+      {editable && (
+        <EditorToolbar editor={editor} groups={config.toolbar} actions={toolbarActions} />
+      )}
       <EditorContent editor={editor} />
       {ai && (
         <AiEditingLayer

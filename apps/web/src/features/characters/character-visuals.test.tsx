@@ -17,6 +17,7 @@ vi.mock('@/lib/api', () => ({
   getEntityNeighborhood: vi.fn(),
   createRelationship: vi.fn(),
   deleteRelationship: vi.fn(),
+  listGenerationsForAsset: vi.fn(),
 }));
 
 const api = await import('@/lib/api');
@@ -112,6 +113,7 @@ describe('Character visuals', () => {
     vi.mocked(api.getEntityNeighborhood).mockResolvedValue(neighborhood([]));
     vi.mocked(api.listAssets).mockResolvedValue({ items: [], total: 0 });
     vi.mocked(api.listEntities).mockResolvedValue({ items: [], total: 0 });
+    vi.mocked(api.listGenerationsForAsset).mockResolvedValue({ items: [], total: 0 });
   });
 
   afterEach(cleanup);
@@ -146,6 +148,39 @@ describe('Character visuals', () => {
     const generate = screen.getByRole('button', { name: 'Generate Portrait' });
     expect(generate).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: '3D Concept' })).toBeDefined();
+  });
+
+  it('offers a comparison only once there are two pictures to compare', async () => {
+    vi.mocked(api.getEntityNeighborhood).mockResolvedValue(
+      neighborhood([edge(reference('ast_portrait'))]),
+    );
+    vi.mocked(api.listAssets).mockResolvedValue({ items: [asset()], total: 1 });
+
+    renderVisuals();
+
+    await screen.findByRole('img', { name: 'kael-portrait.png' });
+    expect(screen.queryByRole('button', { name: 'Compare two images' })).toBeNull();
+  });
+
+  it('compares two of the character’s pictures side by side', async () => {
+    const outfit = asset({ id: 'ast_outfit', filename: 'kael-outfit.png' });
+    vi.mocked(api.getEntityNeighborhood).mockResolvedValue(
+      neighborhood([
+        edge(reference('ast_portrait')),
+        edge(reference('ast_outfit', { id: 'ent_ref_2', name: 'kael-outfit.png' }), 'rel_2'),
+      ]),
+    );
+    vi.mocked(api.listAssets).mockResolvedValue({ items: [asset(), outfit], total: 2 });
+
+    renderVisuals();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Compare two images' }));
+
+    await screen.findByRole('region', { name: 'Side A' });
+    expect(screen.getByRole('region', { name: 'Differences' })).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to visuals' }));
+    await screen.findByRole('button', { name: 'Compare two images' });
   });
 
   it('shows a linked asset as the picture it is', async () => {

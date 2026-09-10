@@ -32,6 +32,8 @@ const characterKeys = {
   history: (projectId: string, entityId: string) =>
     ['projects', projectId, 'entities', entityId, 'versions'] as const,
   images: (projectId: string) => ['projects', projectId, 'assets', 'image'] as const,
+  provenance: (projectId: string, assetId: string) =>
+    ['projects', projectId, 'assets', assetId, 'generations'] as const,
 };
 
 /**
@@ -90,6 +92,24 @@ export function useProjectImages(projectId: string) {
     queryKey: characterKeys.images(projectId),
     queryFn: () => api.listAssets(projectId, { kind: ['image'], limit: 200 }),
     enabled: Boolean(projectId),
+  });
+}
+
+/**
+ * How one image came to exist, where it was generated rather than uploaded.
+ *
+ * An asset carries no link back to the act that made it — provenance is read
+ * from the generation whose output it is — so this is a separate read, and an
+ * uploaded image simply has no record to find.
+ */
+export function useAssetProvenance(projectId: string, assetId: string | null) {
+  return useQuery({
+    queryKey: characterKeys.provenance(projectId, assetId ?? ''),
+    queryFn: async () => {
+      const page = await api.listGenerationsForAsset(projectId, assetId as string);
+      return page.items[0] ?? null;
+    },
+    enabled: Boolean(projectId) && Boolean(assetId),
   });
 }
 

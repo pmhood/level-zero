@@ -363,6 +363,7 @@ export {
   DOCUMENT_VERSION_REASONS,
   MAX_DOCUMENT_VERSION_NAME_LENGTH,
   MIN_AI_EDIT_VERSION_LENGTH,
+  documentBlocks,
   documentContent,
   documentData,
   documentPlainText,
@@ -371,6 +372,7 @@ export {
   emptyDocumentContent,
   isSignificantAiEdit,
   requireDocumentContent,
+  type DocumentBlock,
   type DocumentContent,
   type DocumentVersionReason,
 } from './document/document';
@@ -413,3 +415,35 @@ export {
   SearchIndexService,
   type SearchIndexServiceDeps,
 } from './search/search-index-service';
+
+export {
+  MAX_DIFFERENCE_VALUE_LENGTH,
+  changeOf,
+  compactDifferences,
+  describeValue,
+  difference,
+  fieldLabel,
+  type Difference,
+  type DifferenceChange,
+  type DifferenceGroup,
+} from './compare/difference';
+export {
+  DETAILS_GROUP,
+  TUNING_GROUP,
+  WRITING_GROUP,
+  entityVersionDifferences,
+} from './compare/entity-differences';
+export { parameterDifferences } from './compare/parameter-differences';
+export { documentDifferences } from './compare/document-differences';
+export {
+  FILE_GROUP,
+  PROVENANCE_GROUP,
+  assetDifferences,
+  type AssetComparisonSide,
+} from './compare/asset-differences';
+export {
+  CONTENTS_GROUP,
+  PROTOTYPE_DETAILS_GROUP,
+  UNAVAILABLE,
+  prototypeVersionDifferences,
+} from './compare/prototype-differences';

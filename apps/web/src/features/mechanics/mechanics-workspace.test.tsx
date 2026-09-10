@@ -22,6 +22,7 @@ vi.mock('@/lib/api', () => ({
   deleteRelationship: vi.fn(),
   commitEntityVersion: vi.fn(),
   restoreEntityVersion: vi.fn(),
+  branchEntityVersion: vi.fn(),
 }));
 
 const api = await import('@/lib/api');
@@ -188,6 +189,59 @@ describe('Mechanics workspace', () => {
       'value',
       'Oxygen drains faster while sprinting',
     );
+  });
+
+  it('compares two tunings of the mechanic in hand', async () => {
+    const drain = (value: number) => ({
+      id: 'oxygen-drain',
+      label: 'Oxygen drain',
+      type: 'range',
+      value,
+      min: 0,
+      max: 240,
+      step: 1,
+      units: 's',
+    });
+    const at = (id: string, versionNumber: number, value: number) => ({
+      id,
+      projectId: 'prj_1',
+      entityId: 'ent_oxygen',
+      versionNumber,
+      parentVersionId: null,
+      branchName: 'main',
+      snapshot: {
+        name: 'Oxygen management',
+        description: null,
+        status: 'active' as const,
+        tags: [],
+        data: { tuningParameters: [drain(value)] },
+      },
+      reason: 'manual' as const,
+      metadata: {},
+      createdBy: null,
+      createdAt: new Date('2026-03-01T09:00:00.000Z'),
+    });
+
+    vi.mocked(api.listEntities).mockResolvedValue(page([mechanic()]));
+    vi.mocked(api.getEntity).mockResolvedValue(mechanic());
+    vi.mocked(api.getEntityHistory).mockResolvedValue({
+      entityId: 'ent_oxygen',
+      currentVersionId: 'ver_2',
+      branches: ['main'],
+      versions: [at('ver_2', 2, 90), at('ver_1', 1, 120)],
+      total: 2,
+    });
+
+    renderWorkspace();
+    fireEvent.click(await screen.findByText('Oxygen management'));
+
+    const surface = within(await detail());
+    fireEvent.click(surface.getByRole('tab', { name: 'Compare' }));
+
+    const differences = within(await screen.findByRole('region', { name: 'Differences' }));
+    expect(differences.getByText('Oxygen drain')).toBeDefined();
+    expect(differences.getByText('120 s')).toBeDefined();
+    expect(differences.getByText('90 s')).toBeDefined();
   });
 
   it('saves structured edits without dropping the data it does not own', async () => {

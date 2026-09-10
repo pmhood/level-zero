@@ -10,6 +10,7 @@ export { Tabs, type TabItem, type TabsProps } from './tabs';
 export { EmptyState, type EmptyStateProps } from './empty-state';
 export { Inspector, type InspectorProps } from './inspector';
 export { EntityCard, EntityCardSkeleton, type EntityCardProps } from './entity-card';
+export { CompareView, type CompareSide, type CompareViewProps } from './compare-view';
 export { PromoteAction, type PromoteActionProps } from './promote-action';
 export {
   AppShell,
