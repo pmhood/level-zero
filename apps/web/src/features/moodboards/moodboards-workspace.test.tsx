@@ -33,10 +33,10 @@ vi.mock('@/lib/api', () => ({
 }));
 
 /**
- * tldraw drives a real canvas element and a real pointer, neither of which
- * jsdom has. The projection it is given is covered directly in
- * `moodboard.test.ts`; what this file tests is the screen around it, so the
- * canvas stands in as the actions it can fire.
+ * The canvas has its own tests: the projection in `moodboard.test.ts`, the
+ * geometry in `moodboard-geometry.test.ts` and the gestures in
+ * `moodboard-canvas.test.tsx`. What this file tests is the screen around it, so
+ * the canvas stands in as the actions it can fire.
  */
 vi.mock('./moodboard-canvas', () => ({
   MoodboardCanvas: ({

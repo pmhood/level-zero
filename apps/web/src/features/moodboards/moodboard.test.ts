@@ -4,13 +4,12 @@ import { describe, expect, it } from 'vitest';
 import {
   contentData,
   differsFromNode,
-  MOODBOARD_SHAPE_TYPE,
-  nodeIdForShape,
+  drawnInZOrder,
+  movedToEnd,
   pendingNodePatches,
-  shapeIdForNode,
   toNodePatch,
-  toShape,
-  type MoodboardShapeSnapshot,
+  toSnapshot,
+  type MoodboardNodeSnapshot,
 } from './moodboard';
 
 function node(overrides: Partial<MoodboardNode> = {}): MoodboardNode {
@@ -36,15 +35,15 @@ function node(overrides: Partial<MoodboardNode> = {}): MoodboardNode {
   };
 }
 
-function snapshot(overrides: Partial<MoodboardShapeSnapshot> = {}): MoodboardShapeSnapshot {
+function snapshot(overrides: Partial<MoodboardNodeSnapshot> = {}): MoodboardNodeSnapshot {
   return {
-    id: 'shape:node-1',
+    id: 'node-1',
     x: 10,
     y: 20,
     rotation: 0,
-    isLocked: false,
-    parentId: 'page:page',
-    props: {
+    locked: false,
+    groupId: null,
+    content: {
       nodeType: 'note',
       w: 200,
       h: 200,
@@ -58,19 +57,9 @@ function snapshot(overrides: Partial<MoodboardShapeSnapshot> = {}): MoodboardSha
   };
 }
 
-describe('shape ids', () => {
-  it('round-trips a node id', () => {
-    expect(nodeIdForShape(shapeIdForNode('node-1'))).toBe('node-1');
-  });
-
-  it('leaves an id that is not a shape id alone', () => {
-    expect(nodeIdForShape('page:page')).toBe('page:page');
-  });
-});
-
-describe('toShape', () => {
+describe('toSnapshot', () => {
   it('projects layout and reference onto the canvas', () => {
-    const projected = toShape(
+    const projected = toSnapshot(
       node({
         type: 'asset',
         assetId: 'asset-1',
@@ -84,42 +73,43 @@ describe('toShape', () => {
     );
 
     expect(projected).toMatchObject({
-      id: 'shape:node-1',
-      type: MOODBOARD_SHAPE_TYPE,
+      id: 'node-1',
       x: -40,
       y: 12,
       rotation: 0.5,
-      isLocked: true,
-      props: { nodeType: 'asset', w: 320, h: 180, assetId: 'asset-1', entityId: null },
+      locked: true,
+      content: { nodeType: 'asset', w: 320, h: 180, assetId: 'asset-1', entityId: null },
     });
   });
 
   it('flattens the node data each kind actually draws', () => {
-    expect(toShape(node({ type: 'note', data: { text: 'colder' } })).props.text).toBe('colder');
-    expect(toShape(node({ type: 'link', data: { url: 'https://example.com' } })).props.url).toBe(
-      'https://example.com',
+    expect(toSnapshot(node({ type: 'note', data: { text: 'colder' } })).content.text).toBe(
+      'colder',
     );
     expect(
-      toShape(node({ type: 'palette', data: { colors: ['#fff', '#000'] } })).props.colors,
+      toSnapshot(node({ type: 'link', data: { url: 'https://example.com' } })).content.url,
+    ).toBe('https://example.com');
+    expect(
+      toSnapshot(node({ type: 'palette', data: { colors: ['#fff', '#000'] } })).content.colors,
     ).toEqual(['#fff', '#000']);
   });
 
   it('ignores data of the wrong shape rather than crashing on it', () => {
-    const projected = toShape(node({ data: { text: 42, colors: ['#fff', 7] } }));
+    const projected = toSnapshot(node({ data: { text: 42, colors: ['#fff', 7] } }));
 
-    expect(projected.props.text).toBe('');
-    expect(projected.props.colors).toEqual(['#fff']);
+    expect(projected.content.text).toBe('');
+    expect(projected.content.colors).toEqual(['#fff']);
   });
 });
 
 describe('toNodePatch', () => {
-  it('reads a transform back as named layout fields', () => {
+  it('reads a placement back as named layout fields', () => {
     const patch = toNodePatch(
       snapshot({
         x: 500,
         y: -80,
         rotation: Math.PI / 2,
-        props: { ...snapshot().props, w: 400, h: 300 },
+        content: { ...snapshot().content, w: 400, h: 300 },
       }),
       3,
       new Set(),
@@ -137,36 +127,36 @@ describe('toNodePatch', () => {
     });
   });
 
-  it('turns a parent that is a group node into a group id', () => {
-    const patch = toNodePatch(snapshot({ parentId: 'shape:group-1' }), 0, new Set(['group-1']));
+  it('keeps a group that is still on the board', () => {
+    const patch = toNodePatch(snapshot({ groupId: 'group-1' }), 0, new Set(['group-1']));
 
     expect(patch.groupId).toBe('group-1');
   });
 
-  it('treats a parent that is not a group node as no group', () => {
-    const patch = toNodePatch(snapshot({ parentId: 'page:page' }), 0, new Set(['group-1']));
+  it('treats a group that is no longer on the board as no group', () => {
+    const patch = toNodePatch(snapshot({ groupId: 'group-gone' }), 0, new Set(['group-1']));
 
     expect(patch.groupId).toBeNull();
   });
 
   it('carries a lock through', () => {
-    expect(toNodePatch(snapshot({ isLocked: true }), 0, new Set()).locked).toBe(true);
+    expect(toNodePatch(snapshot({ locked: true }), 0, new Set()).locked).toBe(true);
   });
 });
 
 describe('contentData', () => {
   it('stores only what the node kind means', () => {
-    const props = { ...snapshot().props, text: 'a', url: 'b', colors: ['#fff'] };
+    const content = { ...snapshot().content, text: 'a', url: 'b', colors: ['#fff'] };
 
-    expect(contentData({ ...props, nodeType: 'note' })).toEqual({ text: 'a' });
-    expect(contentData({ ...props, nodeType: 'link' })).toEqual({ url: 'b', text: 'a' });
-    expect(contentData({ ...props, nodeType: 'palette' })).toEqual({ colors: ['#fff'] });
-    expect(contentData({ ...props, nodeType: 'asset' })).toEqual({});
+    expect(contentData({ ...content, nodeType: 'note' })).toEqual({ text: 'a' });
+    expect(contentData({ ...content, nodeType: 'link' })).toEqual({ url: 'b', text: 'a' });
+    expect(contentData({ ...content, nodeType: 'palette' })).toEqual({ colors: ['#fff'] });
+    expect(contentData({ ...content, nodeType: 'asset' })).toEqual({});
   });
 
   it('leaves an untouched node with the empty data it was created with', () => {
-    expect(contentData({ ...snapshot().props, nodeType: 'note' })).toEqual({});
-    expect(contentData({ ...snapshot().props, nodeType: 'palette' })).toEqual({});
+    expect(contentData({ ...snapshot().content, nodeType: 'note' })).toEqual({});
+    expect(contentData({ ...snapshot().content, nodeType: 'palette' })).toEqual({});
   });
 });
 
@@ -183,7 +173,12 @@ describe('differsFromNode', () => {
     const stored = node({ type: 'link', data: { text: 'Ref', url: 'https://example.com' } });
     const patch = toNodePatch(
       snapshot({
-        props: { ...snapshot().props, nodeType: 'link', text: 'Ref', url: 'https://example.com' },
+        content: {
+          ...snapshot().content,
+          nodeType: 'link',
+          text: 'Ref',
+          url: 'https://example.com',
+        },
       }),
       0,
       new Set(),
@@ -203,7 +198,7 @@ describe('pendingNodePatches', () => {
 
     const patches = pendingNodePatches(
       [moved, still],
-      [snapshot({ id: 'shape:node-1', x: 999 }), snapshot({ id: 'shape:node-2', x: 300, y: 300 })],
+      [snapshot({ id: 'node-1', x: 999 }), snapshot({ id: 'node-2', x: 300, y: 300 })],
     );
 
     expect(patches.map((patch) => patch.id)).toEqual(['node-1']);
@@ -216,7 +211,7 @@ describe('pendingNodePatches', () => {
 
     const patches = pendingNodePatches(
       [first, second],
-      [snapshot({ id: 'shape:node-2' }), snapshot({ id: 'shape:node-1' })],
+      [snapshot({ id: 'node-2' }), snapshot({ id: 'node-1' })],
     );
 
     expect(patches).toEqual([
@@ -225,8 +220,8 @@ describe('pendingNodePatches', () => {
     ]);
   });
 
-  it('ignores a shape whose node is no longer on the board', () => {
-    const patches = pendingNodePatches([], [snapshot({ id: 'shape:gone', x: 99 })]);
+  it('ignores a tile whose node is no longer on the board', () => {
+    const patches = pendingNodePatches([], [snapshot({ id: 'gone', x: 99 })]);
 
     expect(patches).toEqual([]);
   });
@@ -237,9 +232,58 @@ describe('pendingNodePatches', () => {
 
     const patches = pendingNodePatches(
       [group, member],
-      [snapshot({ id: 'shape:node-1', parentId: 'shape:group-1' })],
+      [snapshot({ id: 'node-1', groupId: 'group-1' })],
     );
 
     expect(patches).toEqual([expect.objectContaining({ id: 'node-1', groupId: 'group-1' })]);
+  });
+});
+
+describe('drawnInZOrder', () => {
+  it('draws back to front and leaves group rows out', () => {
+    const drawn = drawnInZOrder([
+      node({ id: 'front', zOrder: 2 }),
+      node({ id: 'group-1', type: 'group', zOrder: 1 }),
+      node({ id: 'back', zOrder: 0 }),
+    ]);
+
+    expect(drawn.map((tile) => tile.id)).toEqual(['back', 'front']);
+  });
+});
+
+describe('movedToEnd', () => {
+  const ordered = [node({ id: 'a' }), node({ id: 'b' }), node({ id: 'c' })];
+
+  it('brings a selection to the front, keeping its own order', () => {
+    const moved = movedToEnd(ordered, new Set(['a', 'b']), 'front');
+
+    expect(moved.map((tile) => tile.id)).toEqual(['c', 'a', 'b']);
+  });
+
+  it('sends a selection to the back', () => {
+    expect(movedToEnd(ordered, new Set(['c']), 'back').map((tile) => tile.id)).toEqual([
+      'c',
+      'a',
+      'b',
+    ]);
+  });
+
+  it('renumbers z-order from the resulting order', () => {
+    const nodes = [
+      node({ id: 'a', zOrder: 0 }),
+      node({ id: 'b', zOrder: 1 }),
+      node({ id: 'c', zOrder: 2 }),
+    ];
+
+    const patches = pendingNodePatches(
+      nodes,
+      movedToEnd(nodes, new Set(['c']), 'back').map(toSnapshot),
+    );
+
+    expect(patches).toEqual([
+      expect.objectContaining({ id: 'c', zOrder: 0 }),
+      expect.objectContaining({ id: 'a', zOrder: 1 }),
+      expect.objectContaining({ id: 'b', zOrder: 2 }),
+    ]);
   });
 });

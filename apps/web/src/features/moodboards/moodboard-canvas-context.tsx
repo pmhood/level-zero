@@ -8,12 +8,13 @@ import { createContext, useContext } from 'react';
  *
  * A shape's `props` carry a reference, never a copy, so the name of an entity
  * and the filename of an asset are read from the canonical rows the board is
- * pointing at. tldraw renders shapes inside its own React tree, so this is the
- * only route from the workspace's queries into a shape.
+ * pointing at. The layers the canvas draws sit under its own transform rather
+ * than under the workspace, so this is the only route from the workspace's
+ * queries into a tile.
  */
 export interface MoodboardCanvasContextValue {
   projectId: string;
-  /** What is on the board, for the layers tldraw renders inside its own tree. */
+  /** What is on the board, as the canvas is currently showing it. */
   nodes: readonly MoodboardNode[];
   connectors: readonly MoodboardConnector[];
   entities: ReadonlyMap<string, Entity>;

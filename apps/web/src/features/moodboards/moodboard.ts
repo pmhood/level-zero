@@ -4,20 +4,17 @@ import type { MoodboardNode, MoodboardNodePatch, MoodboardNodeType } from '@leve
  * Projection between the stored board model and the canvas that draws it.
  *
  * The board's own model is the one in Postgres: named x/y/width/height/
- * rotation/z-order/group/lock fields on `moodboard_nodes`. tldraw is the
- * interaction layer over it and persists nothing of its own — every shape on
- * the canvas is built from a node here, and every drag comes back through
+ * rotation/z-order/group/lock fields on `moodboard_nodes`. The canvas is the
+ * interaction layer over it and persists nothing of its own — every tile on the
+ * board is built from a node here, and every settled gesture comes back through
  * `toNodePatch` as a change to those same named fields.
  *
  * Keeping the translation in one framework-free module is what makes it
  * testable: the canvas component is a thin shell around these functions.
  */
-export const MOODBOARD_SHAPE_TYPE = 'lz-node';
 
-const SHAPE_ID_PREFIX = 'shape:';
-
-/** The node's content, flattened into the fields the shape actually draws. */
-export interface MoodboardShapeProps {
+/** The node's content, flattened into the fields a tile actually draws. */
+export interface MoodboardNodeContent {
   nodeType: MoodboardNodeType;
   w: number;
   h: number;
@@ -31,35 +28,16 @@ export interface MoodboardShapeProps {
   colors: string[];
 }
 
-/** What `editor.createShapes` needs to draw one node. */
-export interface MoodboardShapeInput {
-  id: string;
-  type: typeof MOODBOARD_SHAPE_TYPE;
-  x: number;
-  y: number;
-  rotation: number;
-  isLocked: boolean;
-  props: MoodboardShapeProps;
-}
-
-/** The subset of a tldraw shape this projection reads back. */
-export interface MoodboardShapeSnapshot {
+/** One tile as the canvas is drawing it, which is not always what is stored. */
+export interface MoodboardNodeSnapshot {
   id: string;
   x: number;
   y: number;
   rotation: number;
-  isLocked: boolean;
-  parentId: string;
-  props: MoodboardShapeProps;
-}
-
-/** Shape ids mirror node ids, so no lookup table has to be kept in sync. */
-export function shapeIdForNode(nodeId: string): string {
-  return `${SHAPE_ID_PREFIX}${nodeId}`;
-}
-
-export function nodeIdForShape(shapeId: string): string {
-  return shapeId.startsWith(SHAPE_ID_PREFIX) ? shapeId.slice(SHAPE_ID_PREFIX.length) : shapeId;
+  locked: boolean;
+  /** The `group` node this tile is being dragged as part of, if any. */
+  groupId: string | null;
+  content: MoodboardNodeContent;
 }
 
 /** How big each kind of node starts, before anyone resizes it. */
@@ -89,15 +67,15 @@ export const MOODBOARD_NODE_LABEL: Record<MoodboardNodeType, string> = {
 /** The kinds a person adds from the toolbar; the rest come from the library. */
 export const MOODBOARD_AUTHORED_NODE_TYPES = ['note', 'text', 'palette', 'link'] as const;
 
-export function toShape(node: MoodboardNode): MoodboardShapeInput {
+export function toSnapshot(node: MoodboardNode): MoodboardNodeSnapshot {
   return {
-    id: shapeIdForNode(node.id),
-    type: MOODBOARD_SHAPE_TYPE,
+    id: node.id,
     x: node.x,
     y: node.y,
     rotation: node.rotation,
-    isLocked: node.locked,
-    props: {
+    locked: node.locked,
+    groupId: node.groupId,
+    content: {
       nodeType: node.type,
       w: node.width,
       h: node.height,
@@ -111,30 +89,29 @@ export function toShape(node: MoodboardNode): MoodboardShapeInput {
 }
 
 /**
- * Reads a shape back as a change to the node it was built from.
+ * Reads a tile back as a change to the node it was built from.
  *
- * `zOrder` comes from the shape's position in the canvas' own sorted order and
- * `groupId` from its parent, so tldraw's fractional indices and parent ids stay
- * inside tldraw: what is stored is a plain integer and a plain node id.
+ * `zOrder` comes from the tile's position in the canvas' own back-to-front
+ * order, and a `groupId` naming a group that is no longer on the board reads
+ * back as no group at all, so ungrouping settles itself on the next gesture.
  */
 export function toNodePatch(
-  shape: MoodboardShapeSnapshot,
+  snapshot: MoodboardNodeSnapshot,
   zOrder: number,
   groupNodeIds: ReadonlySet<string>,
 ): MoodboardNodePatch {
-  const parentNodeId = nodeIdForShape(shape.parentId);
-
   return {
-    id: nodeIdForShape(shape.id),
-    x: shape.x,
-    y: shape.y,
-    width: shape.props.w,
-    height: shape.props.h,
-    rotation: shape.rotation,
+    id: snapshot.id,
+    x: snapshot.x,
+    y: snapshot.y,
+    width: snapshot.content.w,
+    height: snapshot.content.h,
+    rotation: snapshot.rotation,
     zOrder,
-    locked: shape.isLocked,
-    groupId: groupNodeIds.has(parentNodeId) ? parentNodeId : null,
-    data: contentData(shape.props),
+    locked: snapshot.locked,
+    groupId:
+      snapshot.groupId !== null && groupNodeIds.has(snapshot.groupId) ? snapshot.groupId : null,
+    data: contentData(snapshot.content),
   };
 }
 
@@ -168,10 +145,10 @@ function sameContent(a: Record<string, unknown>, b: Record<string, unknown>): bo
   return true;
 }
 
-/** Every change a canvas full of shapes implies, and nothing it does not. */
+/** Every change a canvas full of tiles implies, and nothing it does not. */
 export function pendingNodePatches(
   nodes: readonly MoodboardNode[],
-  sortedShapes: readonly MoodboardShapeSnapshot[],
+  sortedSnapshots: readonly MoodboardNodeSnapshot[],
 ): MoodboardNodePatch[] {
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const groupNodeIds = new Set(
@@ -179,13 +156,36 @@ export function pendingNodePatches(
   );
 
   const patches: MoodboardNodePatch[] = [];
-  sortedShapes.forEach((shape, zOrder) => {
-    const patch = toNodePatch(shape, zOrder, groupNodeIds);
+  sortedSnapshots.forEach((snapshot, zOrder) => {
+    const patch = toNodePatch(snapshot, zOrder, groupNodeIds);
     const node = byId.get(patch.id);
     if (node && differsFromNode(node, patch)) patches.push(patch);
   });
 
   return patches;
+}
+
+/** The board's tiles back to front. Group rows are not drawn, so are not here. */
+export function drawnInZOrder(nodes: readonly MoodboardNode[]): MoodboardNode[] {
+  return nodes.filter((node) => node.type !== 'group').sort((a, b) => a.zOrder - b.zOrder);
+}
+
+/**
+ * The same order with some tiles moved to one end of it.
+ *
+ * Front and back are the only ordering the board offers, and `zOrder` is
+ * renumbered from the resulting order by `pendingNodePatches`, so this never
+ * has to invent an index between two others.
+ */
+export function movedToEnd(
+  ordered: readonly MoodboardNode[],
+  moving: ReadonlySet<string>,
+  end: 'front' | 'back',
+): MoodboardNode[] {
+  const moved = ordered.filter((node) => moving.has(node.id));
+  const rest = ordered.filter((node) => !moving.has(node.id));
+
+  return end === 'front' ? [...rest, ...moved] : [...moved, ...rest];
 }
 
 /**
@@ -195,15 +195,15 @@ export function pendingNodePatches(
  * typed in reads back as the `{}` it was created with and does not look like a
  * change every time the board is opened.
  */
-export function contentData(props: MoodboardShapeProps): Record<string, unknown> {
-  switch (props.nodeType) {
+export function contentData(content: MoodboardNodeContent): Record<string, unknown> {
+  switch (content.nodeType) {
     case 'text':
     case 'note':
-      return withoutEmpty({ text: props.text });
+      return withoutEmpty({ text: content.text });
     case 'link':
-      return withoutEmpty({ url: props.url, text: props.text });
+      return withoutEmpty({ url: content.url, text: content.text });
     case 'palette':
-      return props.colors.length > 0 ? { colors: props.colors } : {};
+      return content.colors.length > 0 ? { colors: content.colors } : {};
     default:
       return {};
   }

@@ -2,15 +2,8 @@
 
 import type { MoodboardNodePatch, MoodboardNodeType } from '@level-zero/domain';
 import { Button, PlusIcon } from '@level-zero/ui';
-import { useEffect } from 'react';
-import { useValue, type Editor } from 'tldraw';
 
-import {
-  MOODBOARD_AUTHORED_NODE_TYPES,
-  MOODBOARD_NODE_LABEL,
-  MOODBOARD_SHAPE_TYPE,
-  nodeIdForShape,
-} from './moodboard';
+import { MOODBOARD_AUTHORED_NODE_TYPES, MOODBOARD_NODE_LABEL } from './moodboard';
 
 /** Everything the canvas can ask the workspace to do to the stored board. */
 export interface MoodboardCanvasActions {
@@ -19,8 +12,8 @@ export interface MoodboardCanvasActions {
   removeNodes: (nodeIds: readonly string[]) => void;
   duplicateNodes: (nodeIds: readonly string[]) => void;
   /**
-   * Adds a `group` node and puts the given nodes in it. The canvas picks the
-   * new membership up on its next reconcile and groups the shapes to match.
+   * Adds a `group` node and puts the given nodes in it. The canvas draws the
+   * new group as a frame around its members as soon as the board comes back.
    */
   createGroup: (memberNodeIds: readonly string[]) => void;
   removeGroup: (groupNodeId: string) => void;
@@ -28,59 +21,45 @@ export interface MoodboardCanvasActions {
 }
 
 export interface MoodboardToolbarProps {
-  editor: Editor;
   actions: MoodboardCanvasActions;
-  onSelectionChange: (nodeIds: readonly string[]) => void;
+  /** The selected tiles. A selected group contributes its id below, not here. */
+  selectedNodeIds: readonly string[];
+  selectedGroupNodeIds: readonly string[];
+  allLocked: boolean;
+  onSetLocked: (locked: boolean) => void;
+  onReorder: (end: 'front' | 'back') => void;
+  onClearSelection: () => void;
 }
 
 /**
  * The board's compact floating toolbar (design system spec §30).
  *
- * tldraw's own chrome is hidden, so this is the whole surface: what can be
- * added on the left, and what can be done with the current selection along the
- * bottom. Actions that only move pixels are applied to the canvas and picked up
- * by its save loop; actions that change what is *on* the board go through the
- * workspace's mutations.
+ * There is no other chrome, so this is the whole surface: what can be added on
+ * the left, and what can be done with the current selection along the bottom.
+ * Ordering and locking are layout, so they go back through the same patch path
+ * a drag does; adding, removing and grouping change what is *on* the board and
+ * go through the workspace's mutations.
  */
-export function MoodboardToolbar({ editor, actions, onSelectionChange }: MoodboardToolbarProps) {
-  const selectedNodeIds = useValue(
-    'moodboard selection',
-    () =>
-      editor
-        .getSelectedShapes()
-        .filter((shape) => shape.type === MOODBOARD_SHAPE_TYPE)
-        .map((shape) => nodeIdForShape(shape.id)),
-    [editor],
-  );
-  const selectedGroupNodeIds = useValue(
-    'moodboard selected groups',
-    () =>
-      editor
-        .getSelectedShapes()
-        .filter((shape) => shape.type === 'group')
-        .map((shape) => nodeIdForShape(shape.id)),
-    [editor],
-  );
-  const allLocked = useValue(
-    'moodboard selection locked',
-    () => editor.getSelectedShapes().every((shape) => shape.isLocked),
-    [editor],
-  );
-
-  useEffect(() => {
-    onSelectionChange(selectedNodeIds);
-  }, [selectedNodeIds, onSelectionChange]);
-
-  const selectedShapeIds = editor.getSelectedShapeIds();
+export function MoodboardToolbar({
+  actions,
+  selectedNodeIds,
+  selectedGroupNodeIds,
+  allLocked,
+  onSetLocked,
+  onReorder,
+  onClearSelection,
+}: MoodboardToolbarProps) {
   const hasSelection = selectedNodeIds.length > 0 || selectedGroupNodeIds.length > 0;
-
-  function apply(change: () => void) {
-    editor.run(change, { ignoreShapeLock: true });
-  }
 
   return (
     <>
-      <div className="absolute left-4 top-4 z-10 flex items-center gap-1 rounded-lg border border-border bg-surface/95 p-1 shadow-[var(--lz-shadow-floating)]">
+      <div
+        // The toolbar floats over the board but is chrome, not board: without
+        // this a press on a button would also read as a press on the surface
+        // behind it and clear the very selection the button acts on.
+        onPointerDown={(event) => event.stopPropagation()}
+        className="absolute left-4 top-4 z-10 flex items-center gap-1 rounded-lg border border-border bg-surface/95 p-1 shadow-[var(--lz-shadow-floating)]"
+      >
         {MOODBOARD_AUTHORED_NODE_TYPES.map((type) => (
           <Button key={type} variant="ghost" size="sm" onClick={() => actions.addNode(type)}>
             <PlusIcon className="size-3.5" />
@@ -93,6 +72,7 @@ export function MoodboardToolbar({ editor, actions, onSelectionChange }: Moodboa
         <div
           role="toolbar"
           aria-label="Board selection"
+          onPointerDown={(event) => event.stopPropagation()}
           className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 whitespace-nowrap rounded-lg border border-border bg-surface/95 p-1 shadow-[var(--lz-shadow-floating)]"
         >
           <Button
@@ -119,25 +99,13 @@ export function MoodboardToolbar({ editor, actions, onSelectionChange }: Moodboa
           >
             Ungroup
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => apply(() => editor.toggleLock(selectedShapeIds))}
-          >
+          <Button variant="ghost" size="sm" onClick={() => onSetLocked(!allLocked)}>
             {allLocked ? 'Unlock' : 'Lock'}
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => apply(() => editor.bringToFront(selectedShapeIds))}
-          >
+          <Button variant="ghost" size="sm" onClick={() => onReorder('front')}>
             Front
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => apply(() => editor.sendToBack(selectedShapeIds))}
-          >
+          <Button variant="ghost" size="sm" onClick={() => onReorder('back')}>
             Back
           </Button>
           <Button
@@ -154,7 +122,7 @@ export function MoodboardToolbar({ editor, actions, onSelectionChange }: Moodboa
             disabled={selectedNodeIds.length === 0}
             onClick={() => {
               actions.removeNodes(selectedNodeIds);
-              editor.selectNone();
+              onClearSelection();
             }}
           >
             Remove from board

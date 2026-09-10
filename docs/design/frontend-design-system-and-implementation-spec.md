@@ -40,7 +40,6 @@ Optional libraries:
 
 ```txt id="m9mo0o"
 React Flow      — graphs, mechanics, relationships
-tldraw          — moodboard / freeform canvas
 TipTap          — GDD document editing
 Monaco Editor   — code / scripts
 Recharts        — charts and balancing views
