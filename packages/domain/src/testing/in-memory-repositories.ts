@@ -641,6 +641,30 @@ export class InMemoryMoodboardRepository implements MoodboardRepository {
     }
   }
 
+  async deleteNodes(projectId: string, nodeIds: readonly string[]): Promise<void> {
+    const nodesToDelete = new Set<string>();
+    for (const nodeId of nodeIds) {
+      const node = this.nodes.get(nodeId);
+      if (node && node.projectId === projectId) {
+        nodesToDelete.add(nodeId);
+      }
+    }
+
+    for (const nodeId of nodesToDelete) {
+      this.nodes.delete(nodeId);
+    }
+    for (const other of this.nodes.values()) {
+      if (other.groupId && nodesToDelete.has(other.groupId)) {
+        other.groupId = null;
+      }
+    }
+    for (const connector of [...this.connectors.values()]) {
+      if (nodesToDelete.has(connector.fromNodeId) || nodesToDelete.has(connector.toNodeId)) {
+        this.connectors.delete(connector.id);
+      }
+    }
+  }
+
   async listConnectors(projectId: string, boardId: string): Promise<MoodboardConnector[]> {
     return [...this.connectors.values()]
       .filter((connector) => connector.projectId === projectId && connector.boardId === boardId)

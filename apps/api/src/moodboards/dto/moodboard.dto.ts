@@ -105,6 +105,13 @@ export class DuplicateMoodboardNodesDto {
   offset?: number;
 }
 
+export class RemoveMoodboardNodesDto {
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  nodeIds!: string[];
+}
+
 export class ConnectMoodboardNodesDto {
   @IsString()
   fromNodeId!: string;

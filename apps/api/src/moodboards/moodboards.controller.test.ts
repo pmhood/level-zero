@@ -192,6 +192,36 @@ describe('removing and duplicating', () => {
     expect(response.body.nodes).toEqual([]);
   });
 
+  it('removes multiple placements in one request', async () => {
+    const asset1 = await image('img1.png');
+    const asset2 = await image('img2.png');
+    const node1 = await place({ type: 'asset', assetId: asset1.id });
+    const node2 = await place({ type: 'asset', assetId: asset2.id });
+
+    await request(app.getHttpServer())
+      .post(boardPath('/nodes/remove'))
+      .send({ nodeIds: [node1.id, node2.id] })
+      .expect(204);
+
+    const response = await request(app.getHttpServer()).get(boardPath()).expect(200);
+    expect(response.body.nodes).toEqual([]);
+    expect((await assets.getById(project.id, asset1.id)).status).toBe('active');
+    expect((await assets.getById(project.id, asset2.id)).status).toBe('active');
+  });
+
+  it('rejects batch removal with invalid node', async () => {
+    const asset = await image();
+    const node = await place({ type: 'asset', assetId: asset.id });
+
+    await request(app.getHttpServer())
+      .post(boardPath('/nodes/remove'))
+      .send({ nodeIds: [node.id, 'invalid-id'] })
+      .expect(404);
+
+    const response = await request(app.getHttpServer()).get(boardPath()).expect(200);
+    expect(response.body.nodes).toHaveLength(1);
+  });
+
   it('duplicates a placement without duplicating the asset', async () => {
     const asset = await image();
     const node = await place({ type: 'asset', assetId: asset.id, x: 10, y: 10 });

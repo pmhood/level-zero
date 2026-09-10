@@ -22,6 +22,11 @@ export interface MoodboardRepository {
   saveNodes(nodes: readonly MoodboardNode[]): Promise<MoodboardNode[]>;
   /** Also clears the group from any node inside it, and drops its connectors. */
   deleteNode(projectId: string, nodeId: string): Promise<void>;
+  /**
+   * Removes multiple nodes in one transaction, atomically clearing groups
+   * and connectors touching any of them.
+   */
+  deleteNodes(projectId: string, nodeIds: readonly string[]): Promise<void>;
 
   listConnectors(projectId: string, boardId: string): Promise<MoodboardConnector[]>;
   findConnector(projectId: string, connectorId: string): Promise<MoodboardConnector | null>;

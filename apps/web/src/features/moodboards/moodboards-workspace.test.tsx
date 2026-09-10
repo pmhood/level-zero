@@ -28,6 +28,7 @@ vi.mock('@/lib/api', () => ({
   updateMoodboardNodes: vi.fn(),
   duplicateMoodboardNodes: vi.fn(),
   removeMoodboardNode: vi.fn(),
+  removeMoodboardNodes: vi.fn(),
   connectMoodboardNodes: vi.fn(),
   deleteMoodboardConnector: vi.fn(),
   promoteMoodboardConnector: vi.fn(),
@@ -305,7 +306,7 @@ describe('placing and removing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove first' }));
 
     await waitFor(() =>
-      expect(api.removeMoodboardNode).toHaveBeenCalledWith('prj_1', 'board_1', 'node_1'),
+      expect(api.removeMoodboardNodes).toHaveBeenCalledWith('prj_1', 'board_1', ['node_1']),
     );
     expect(api.updateMoodboardNodes).not.toHaveBeenCalled();
   });

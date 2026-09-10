@@ -107,11 +107,8 @@ export function useRemoveMoodboardNodes(projectId: string, boardId: string) {
   const invalidate = useBoardInvalidation(projectId, boardId);
 
   return useMutation({
-    mutationFn: async (nodeIds: readonly string[]) => {
-      for (const nodeId of nodeIds) {
-        await api.removeMoodboardNode(projectId, boardId, nodeId);
-      }
-    },
+    mutationFn: (nodeIds: readonly string[]) =>
+      api.removeMoodboardNodes(projectId, boardId, nodeIds),
     onSuccess: invalidate,
   });
 }

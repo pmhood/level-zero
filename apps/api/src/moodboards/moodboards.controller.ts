@@ -13,6 +13,7 @@ import {
   ConnectMoodboardNodesDto,
   DuplicateMoodboardNodesDto,
   PromoteMoodboardConnectorDto,
+  RemoveMoodboardNodesDto,
   UpdateMoodboardNodesDto,
 } from './dto/moodboard.dto';
 
@@ -73,6 +74,22 @@ export class MoodboardsController {
     @Body() body: DuplicateMoodboardNodesDto,
   ): Promise<MoodboardNode[]> {
     return this.moodboards.duplicateNodes(projectId, boardId, body.nodeIds, body.offset);
+  }
+
+  /**
+   * Removes multiple placements in one request.
+   *
+   * Declared before `nodes/:nodeId` so the literal path wins: Nest matches
+   * routes in declaration order.
+   */
+  @Post(':boardId/nodes/remove')
+  @HttpCode(204)
+  async removeNodes(
+    @Param('projectId') projectId: string,
+    @Param('boardId') boardId: string,
+    @Body() body: RemoveMoodboardNodesDto,
+  ): Promise<void> {
+    await this.moodboards.removeNodes(projectId, boardId, body.nodeIds);
   }
 
   /** Removes the placement only — the asset or entity itself is untouched. */
