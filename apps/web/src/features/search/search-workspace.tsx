@@ -106,7 +106,11 @@ export function SearchWorkspace({ projectId }: { projectId: string }) {
         )}
 
         {results.length > 0 && (
-          <SearchResultList results={results} projectName={projectQuery.data?.name ?? 'Project'} />
+          <SearchResultList
+            results={results}
+            projectId={projectId}
+            projectName={projectQuery.data?.name ?? 'Project'}
+          />
         )}
       </div>
     </div>
