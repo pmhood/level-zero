@@ -143,6 +143,26 @@ describe('promoting an idea', () => {
     );
   });
 
+  it('rejects a source/target pair the promotion catalogue does not offer', async () => {
+    const idea = await entities.create(project.id, { type: 'idea', name: 'Oxygen is currency' });
+
+    await expect(lineage.promote(project.id, idea.id, { type: 'faction' })).rejects.toThrow(
+      ValidationError,
+    );
+  });
+
+  it('creates a second target when the same source is promoted twice to the same type', async () => {
+    const idea = await entities.create(project.id, { type: 'idea', name: 'Oxygen is currency' });
+
+    const first = await lineage.promote(project.id, idea.id, { type: 'mechanic' });
+    const second = await lineage.promote(project.id, idea.id, { type: 'mechanic' });
+
+    expect(first.promoted.id).not.toBe(second.promoted.id);
+
+    const graph = await relationships.neighborhood(project.id, idea.id);
+    expect(graph.outgoing.filter((edge) => edge.entity.type === 'mechanic')).toHaveLength(2);
+  });
+
   it('refuses to promote an entity through another project', async () => {
     const idea = await entities.create(project.id, { type: 'idea', name: 'Oxygen is currency' });
 

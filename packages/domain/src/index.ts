@@ -106,6 +106,13 @@ export {
 } from './relationship/lineage-service';
 
 export {
+  PROMOTIONS,
+  findPromotion,
+  promotionsFor,
+  type PromotionDefinition,
+} from './promotion/promotion-definition';
+
+export {
   DEFAULT_BRANCH,
   MAX_BRANCH_NAME_LENGTH,
   VERSION_REASONS,

@@ -2,6 +2,7 @@ import { type ActivityService } from '../activity/activity-service';
 import { type Entity, type EntityStatus } from '../entity/entity';
 import { type EntityService } from '../entity/entity-service';
 import { type EntityType } from '../entity/entity-type';
+import { findPromotion } from '../promotion/promotion-definition';
 import { ValidationError } from '../shared/errors';
 import { MAX_PAGE_SIZE } from '../shared/paging';
 import { type EntityRelationship } from './entity-relationship';
@@ -55,6 +56,14 @@ export class LineageService {
       throw new ValidationError('Promote an entity to a different type', {
         entityId: sourceEntityId,
         type: source.type,
+      });
+    }
+
+    if (!findPromotion(source.type, input.type)) {
+      throw new ValidationError('This promotion is not offered', {
+        entityId: sourceEntityId,
+        sourceType: source.type,
+        targetType: input.type,
       });
     }
 
