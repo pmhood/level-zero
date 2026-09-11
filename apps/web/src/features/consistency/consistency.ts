@@ -12,9 +12,9 @@ import type { StatusTone } from '@level-zero/ui';
  * deep-link to the real thing rather than duplicating its data (the issue's
  * "use the canonical route" constraint).
  *
- * Deliberately partial: `prototype`, `build`, `scene` and `asset_reference`
- * have no workspace page in this app yet, and evidence for one of those
- * renders without a link rather than a dead one.
+ * Deliberately partial: `build`, `scene` and `asset_reference` have no
+ * workspace page in this app yet, and evidence for one of those renders
+ * without a link rather than a dead one.
  */
 const ENTITY_TYPE_ROUTE_SEGMENTS: Partial<Record<EntityType, string>> = {
   idea: 'idea-lab',
@@ -32,6 +32,7 @@ const ENTITY_TYPE_ROUTE_SEGMENTS: Partial<Record<EntityType, string>> = {
   system: 'mechanics',
   moodboard: 'moodboards',
   document: 'gdd',
+  prototype: 'prototypes',
 };
 
 /** The canonical workspace URL for an entity type, or `null` if it has none yet. */

@@ -17,6 +17,7 @@ import type { ReactNode } from 'react';
 
 import { CharactersIcon } from '@/features/characters/character-icons';
 import { MoodboardIcon } from '@/features/moodboards/moodboard-icon';
+import { PrototypeIcon } from '@/features/prototypes/prototype-icon';
 import { WorldIcon } from '@/features/world/world-icon';
 
 /**
@@ -55,6 +56,7 @@ export function ProjectSidebar({
   const mechanicsHref = `/projects/${projectId}/mechanics`;
   const moodboardsHref = `/projects/${projectId}/moodboards`;
   const gddHref = `/projects/${projectId}/gdd`;
+  const prototypesHref = `/projects/${projectId}/prototypes`;
   const searchHref = `/projects/${projectId}/search`;
   const consistencyHref = `/projects/${projectId}/consistency`;
 
@@ -107,6 +109,13 @@ export function ProjectSidebar({
       label: 'GDD',
       icon: <DocumentIcon className="size-4" />,
       active: pathname?.startsWith(gddHref) ?? false,
+    },
+    {
+      key: 'prototypes',
+      href: prototypesHref,
+      label: 'Prototypes',
+      icon: <PrototypeIcon className="size-4" />,
+      active: pathname?.startsWith(prototypesHref) ?? false,
     },
     {
       key: 'search',
