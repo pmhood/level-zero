@@ -4,9 +4,12 @@ import type { Entity } from '@level-zero/domain';
 import { Button, cn, StatusBadge, Tag } from '@level-zero/ui';
 import { mergeAttributes, Node, type Editor, type Range } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react';
+import type { Route } from 'next';
+import Link from 'next/link';
 import { useState } from 'react';
 
 import { EntityConsistencyNotice } from '@/features/consistency/entity-consistency-notice';
+import { entityRoute } from '@/features/entity-detail/entity-route';
 
 import {
   ENTITY_MENTION_NODE,
@@ -182,9 +185,18 @@ function EntityReferencePreview({
             </span>
           )}
           {projectId && <EntityConsistencyNotice projectId={projectId} entityId={entity.id} />}
-          <Button variant="secondary" size="sm" className="mt-3" onClick={() => onOpen(entity)}>
-            Open
-          </Button>
+          {projectId ? (
+            <Button asChild variant="secondary" size="sm" className="mt-3">
+              <Link href={entityRoute(projectId, entity.id) as Route}>Open</Link>
+            </Button>
+          ) : (
+            // No project to build a route from (untouched by tests and other
+            // callers that predate the canonical route) — fall back to the
+            // inspector, the previous of the two behaviours "Open" ever had.
+            <Button variant="secondary" size="sm" className="mt-3" onClick={() => onOpen(entity)}>
+              Open
+            </Button>
+          )}
         </>
       )}
     </span>

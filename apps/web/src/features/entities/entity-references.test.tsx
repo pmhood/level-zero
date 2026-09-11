@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import type { Entity, EntityStatus, EntityType } from '@level-zero/domain';
 import { createEditorExtensions, RichTextEditor, type JSONContent } from '@level-zero/ui';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Editor } from '@tiptap/core';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { insertEntityMention } from './entity-mention';
@@ -82,23 +84,36 @@ function Harness({
   isPending = false,
   onChange,
   onOpen = () => {},
+  projectId,
 }: {
   content: JSONContent;
   entities: Entity[];
   isPending?: boolean;
   onChange?: (content: JSONContent) => void;
   onOpen?: (entity: Entity) => void;
+  projectId?: string;
 }) {
+  const [queryClient] = useState(
+    () => new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+  );
+
   return (
-    <EntityReferenceProvider entities={entities} isPending={isPending} onOpen={onOpen}>
-      <RichTextEditor
-        label="Game design document"
-        content={content}
-        onChange={onChange}
-        extensions={createEntityReferenceExtensions(() => entities)}
-        commands={ENTITY_EMBED_COMMANDS}
-      />
-    </EntityReferenceProvider>
+    <QueryClientProvider client={queryClient}>
+      <EntityReferenceProvider
+        entities={entities}
+        isPending={isPending}
+        onOpen={onOpen}
+        projectId={projectId}
+      >
+        <RichTextEditor
+          label="Game design document"
+          content={content}
+          onChange={onChange}
+          extensions={createEntityReferenceExtensions(() => entities)}
+          commands={ENTITY_EMBED_COMMANDS}
+        />
+      </EntityReferenceProvider>
+    </QueryClientProvider>
   );
 }
 
@@ -222,6 +237,40 @@ describe('rendering a reference', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Kael Voss' }));
 
     expect(onOpen).toHaveBeenCalledExactlyOnceWith(KAEL);
+  });
+
+  // The regression risk (docs/decisions/canonical-entity-routes.md §9): a
+  // chip click must keep opening the inspector beside the document, never
+  // navigate away from it. Only the hover preview's Open button, which is a
+  // real link, goes to the canonical route.
+  it('keeps a chip click opening the inspector, and only the preview Open link navigates', async () => {
+    const onOpen = vi.fn();
+    render(
+      <Harness
+        entities={[KAEL]}
+        onOpen={onOpen}
+        projectId="prj_1"
+        content={documentWith({ type: 'paragraph', content: [mention(KAEL)] })}
+      />,
+    );
+
+    const chip = await screen.findByRole('button', { name: 'Kael Voss' });
+    expect(chip.hasAttribute('href')).toBe(false);
+
+    fireEvent.click(chip);
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith(KAEL);
+
+    onOpen.mockClear();
+    fireEvent.mouseEnter(chip.parentElement!);
+    const openLink = await screen.findByRole('link', { name: 'Open' });
+
+    // A real anchor: reachable by Tab and activated by Enter/Space like any
+    // other browser link, with no bespoke keydown handling to get wrong.
+    expect(openLink.tagName).toBe('A');
+    expect(openLink.getAttribute('href')).toBe('/projects/prj_1/entities/ent_kael');
+
+    fireEvent.click(openLink);
+    expect(onOpen).not.toHaveBeenCalled();
   });
 
   it('waits instead of showing a break while the entities are still loading', async () => {
