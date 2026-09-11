@@ -172,6 +172,88 @@ describe('promoting an idea', () => {
   });
 });
 
+describe('promoting a reference or moodboard into a visual direction', () => {
+  it('creates a design pillar and records lineage back to the reference, leaving it untouched', async () => {
+    const reference = await entities.create(project.id, {
+      type: 'asset_reference',
+      name: 'Trench palette',
+    });
+
+    const { source, promoted, relationship } = await lineage.promote(project.id, reference.id, {
+      type: 'design_pillar',
+    });
+
+    expect(promoted).toMatchObject({ type: 'design_pillar', name: 'Trench palette' });
+    expect(relationship).toMatchObject({
+      sourceEntityId: reference.id,
+      targetEntityId: promoted.id,
+      relation: 'promoted_to',
+      metadata: { fromType: 'asset_reference', toType: 'design_pillar' },
+    });
+    expect(source.id).toBe(reference.id);
+
+    const original = await entities.getById(project.id, reference.id);
+    expect(original).toMatchObject({ type: 'asset_reference', name: 'Trench palette' });
+  });
+
+  it('offers the same promotion from a whole board', async () => {
+    const moodboard = await entities.create(project.id, {
+      type: 'moodboard',
+      name: 'Deep interiors',
+    });
+
+    const { promoted } = await lineage.promote(project.id, moodboard.id, {
+      type: 'design_pillar',
+    });
+
+    expect(promoted.type).toBe('design_pillar');
+  });
+
+  it('answers "where did this come from?" for the promoted design pillar', async () => {
+    const reference = await entities.create(project.id, {
+      type: 'asset_reference',
+      name: 'Trench palette',
+    });
+    const { promoted } = await lineage.promote(project.id, reference.id, {
+      type: 'design_pillar',
+    });
+
+    const graph = await relationships.neighborhood(project.id, promoted.id);
+
+    expect(graph.incoming).toHaveLength(1);
+    expect(graph.incoming[0]).toMatchObject({
+      entity: { id: reference.id, type: 'asset_reference' },
+      relationship: { relation: 'promoted_to' },
+    });
+  });
+
+  it('creates a second target when promoted twice', async () => {
+    const reference = await entities.create(project.id, {
+      type: 'asset_reference',
+      name: 'Trench palette',
+    });
+
+    const first = await lineage.promote(project.id, reference.id, { type: 'design_pillar' });
+    const second = await lineage.promote(project.id, reference.id, { type: 'design_pillar' });
+
+    expect(first.promoted.id).not.toBe(second.promoted.id);
+
+    const graph = await relationships.neighborhood(project.id, reference.id);
+    expect(graph.outgoing.filter((edge) => edge.entity.type === 'design_pillar')).toHaveLength(2);
+  });
+
+  it('refuses to promote a reference through another project', async () => {
+    const reference = await entities.create(project.id, {
+      type: 'asset_reference',
+      name: 'Trench palette',
+    });
+
+    await expect(
+      lineage.promote(otherProject.id, reference.id, { type: 'design_pillar' }),
+    ).rejects.toThrow(NotFoundError);
+  });
+});
+
 describe('generation lineage', () => {
   it('lets a generated concept trace back to what influenced it', async () => {
     const [reference, character, generated] = [

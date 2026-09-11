@@ -1,13 +1,8 @@
 'use client';
 
-import type {
-  Asset,
-  Entity,
-  MoodboardConnector,
-  MoodboardNode,
-  RelationType,
-} from '@level-zero/domain';
-import { Button, Field, Input, Inspector, Select, Textarea } from '@level-zero/ui';
+import { findPromotion, type Asset, type Entity, type EntityType } from '@level-zero/domain';
+import type { MoodboardConnector, MoodboardNode, RelationType } from '@level-zero/domain';
+import { Button, Field, Input, Inspector, PromoteAction, Select, Textarea } from '@level-zero/ui';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { MOODBOARD_NODE_LABEL } from './moodboard';
@@ -19,6 +14,14 @@ import { MOODBOARD_NODE_LABEL } from './moodboard';
  * is drawn on the board a moment later rather than paragraphs of prose.
  */
 const CONTENT_SAVE_DELAY_MS = 600;
+
+/**
+ * Flow 2 of the promotion catalogue (`docs/decisions/promotion-registry.md`
+ * §5.3): a reference or a whole board becomes a visual direction. Read from
+ * the catalogue rather than restated here, so the button's label and target
+ * type can never drift from what `LineageService.promote` actually offers.
+ */
+const VISUAL_DIRECTION_PROMOTION = findPromotion('asset_reference', 'design_pillar');
 
 /**
  * The relations a board connector can stand for.
@@ -34,6 +37,8 @@ const MOODBOARD_PROMOTION_RELATIONS = [
 ] as const satisfies readonly RelationType[];
 
 export interface MoodboardInspectorProps {
+  /** The open board's own entity — a `moodboard`, and itself promotable. */
+  board: Entity | null;
   node: MoodboardNode | null;
   entities: ReadonlyMap<string, Entity>;
   assets: ReadonlyMap<string, Asset>;
@@ -42,6 +47,15 @@ export interface MoodboardInspectorProps {
   onEditContent: (nodeId: string, data: Record<string, unknown>) => void;
   onPromoteConnector: (connectorId: string, relation: RelationType) => void;
   onDisconnect: (connectorId: string) => void;
+  /**
+   * Turns a reference already in the graph, or a raw asset, into a visual
+   * direction. An `asset` node is resolved to its `asset_reference` entity
+   * first — see `usePromoteToVisualDirection` — so this always promotes an
+   * entity, never a bare file.
+   */
+  onPromoteToVisualDirection: (
+    source: { entityId: string } | { asset: Asset },
+  ) => Promise<{ promoted: Entity }>;
   /**
    * The shared visual generation surface, composed by the workspace.
    *
@@ -60,6 +74,7 @@ export interface MoodboardInspectorProps {
  * that say what it would mean — never a side effect of drawing it.
  */
 export function MoodboardInspector({
+  board,
   node,
   entities,
   assets,
@@ -68,6 +83,7 @@ export function MoodboardInspector({
   onEditContent,
   onPromoteConnector,
   onDisconnect,
+  onPromoteToVisualDirection,
   generator,
 }: MoodboardInspectorProps) {
   return (
@@ -77,11 +93,25 @@ export function MoodboardInspector({
     >
       <div className="flex flex-col gap-5">
         {node ? (
-          <NodeDetails node={node} entities={entities} assets={assets} onEdit={onEditContent} />
+          <NodeDetails
+            node={node}
+            entities={entities}
+            assets={assets}
+            onEdit={onEditContent}
+            onPromoteToVisualDirection={onPromoteToVisualDirection}
+          />
         ) : (
-          <p className="text-sm text-muted-foreground">
-            Select something on the board to see what you can do with it.
-          </p>
+          <div className="flex flex-col gap-3">
+            <p className="text-sm text-muted-foreground">
+              Select something on the board to see what you can do with it.
+            </p>
+            {board && (
+              <VisualDirectionPromotion
+                from="moodboard"
+                onPromote={() => onPromoteToVisualDirection({ entityId: board.id })}
+              />
+            )}
+          </div>
         )}
 
         {generator}
@@ -103,11 +133,15 @@ function NodeDetails({
   entities,
   assets,
   onEdit,
+  onPromoteToVisualDirection,
 }: {
   node: MoodboardNode;
   entities: ReadonlyMap<string, Entity>;
   assets: ReadonlyMap<string, Asset>;
   onEdit: (nodeId: string, data: Record<string, unknown>) => void;
+  onPromoteToVisualDirection: (
+    source: { entityId: string } | { asset: Asset },
+  ) => Promise<{ promoted: Entity }>;
 }) {
   const referenced = node.entityId ? entities.get(node.entityId) : undefined;
   const asset = node.assetId ? assets.get(node.assetId) : undefined;
@@ -120,6 +154,12 @@ function NodeDetails({
           <p className="text-xs text-faint-foreground">
             Removing this node leaves the entity exactly where it is.
           </p>
+          {referenced.type === 'asset_reference' && (
+            <VisualDirectionPromotion
+              from="asset_reference"
+              onPromote={() => onPromoteToVisualDirection({ entityId: referenced.id })}
+            />
+          )}
         </Field>
       )}
       {asset && (
@@ -128,6 +168,10 @@ function NodeDetails({
           <p className="text-xs text-faint-foreground">
             The same file can sit on any number of boards.
           </p>
+          <VisualDirectionPromotion
+            from="asset_reference"
+            onPromote={() => onPromoteToVisualDirection({ asset })}
+          />
         </Field>
       )}
 
@@ -145,6 +189,54 @@ function NodeDetails({
         </p>
       </Field>
     </section>
+  );
+}
+
+/**
+ * The board's one entry point into promotion (§5.3's "Moodboard / reference →
+ * Visual Direction"): makes a reference, or the board itself, a canonical
+ * `design_pillar`. Deliberately ordinary — Level Zero Blue, not the AI
+ * purple, because nothing here is a generative action.
+ *
+ * Holds its own pending/result state, the same way `ConnectorRow` holds its
+ * own relation choice: this button is the only thing on the panel that cares.
+ */
+function VisualDirectionPromotion({
+  from,
+  onPromote,
+}: {
+  from: EntityType;
+  onPromote: () => Promise<{ promoted: Entity }>;
+}) {
+  const [result, setResult] = useState<'idle' | 'pending' | 'done' | 'error'>('idle');
+  const [promotedName, setPromotedName] = useState<string | null>(null);
+
+  if (!VISUAL_DIRECTION_PROMOTION) return null;
+
+  async function handlePromote() {
+    setResult('pending');
+    try {
+      const { promoted } = await onPromote();
+      setPromotedName(promoted.name);
+      setResult('done');
+    } catch {
+      setResult('error');
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5 pt-1">
+      <PromoteAction
+        from={from}
+        to={VISUAL_DIRECTION_PROMOTION.targetType}
+        label={VISUAL_DIRECTION_PROMOTION.label}
+        size="sm"
+        pending={result === 'pending'}
+        onPromote={() => void handlePromote()}
+      />
+      {result === 'done' && <p className="text-xs text-success">Promoted to “{promotedName}”.</p>}
+      {result === 'error' && <p className="text-xs text-error">Could not promote.</p>}
+    </div>
   );
 }
 

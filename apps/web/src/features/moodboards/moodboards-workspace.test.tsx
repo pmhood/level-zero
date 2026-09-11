@@ -32,6 +32,8 @@ vi.mock('@/lib/api', () => ({
   connectMoodboardNodes: vi.fn(),
   deleteMoodboardConnector: vi.fn(),
   promoteMoodboardConnector: vi.fn(),
+  promoteEntity: vi.fn(),
+  findOrCreateAssetReference: vi.fn(),
   assetContentUrl: (projectId: string, assetId: string) => `/assets/${projectId}/${assetId}`,
   listGenerations: vi.fn(),
   createGeneration: vi.fn(),
@@ -116,6 +118,18 @@ const REEF: Asset = {
 };
 
 const TAM: Entity = { ...BOARD, id: 'ent_tam', type: 'character', name: 'Tam' };
+const REFERENCE: Entity = {
+  ...BOARD,
+  id: 'ent_ref',
+  type: 'asset_reference',
+  name: 'Trench palette',
+};
+const PILLAR: Entity = {
+  ...BOARD,
+  id: 'ent_pillar',
+  type: 'design_pillar',
+  name: 'Trench palette',
+};
 
 function node(overrides: Partial<MoodboardNode> = {}): MoodboardNode {
   return {
@@ -166,7 +180,7 @@ function renderWorkspace() {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(api.listEntities).mockImplementation(async (_projectId, params) =>
-    params?.type?.includes('moodboard') ? entityPage([BOARD]) : entityPage([TAM]),
+    params?.type?.includes('moodboard') ? entityPage([BOARD]) : entityPage([TAM, REFERENCE]),
   );
   vi.mocked(api.listAssets).mockResolvedValue(assetPage([REEF]));
   vi.mocked(api.getMoodboard).mockResolvedValue(board());
@@ -184,6 +198,21 @@ beforeEach(() => {
       sourceEntityId: 'ent_tam',
       targetEntityId: 'ent_reef',
       relation: 'references',
+      metadata: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  });
+  vi.mocked(api.findOrCreateAssetReference).mockResolvedValue(REFERENCE);
+  vi.mocked(api.promoteEntity).mockResolvedValue({
+    source: REFERENCE,
+    promoted: PILLAR,
+    relationship: {
+      id: 'rel_promote',
+      projectId: 'prj_1',
+      sourceEntityId: REFERENCE.id,
+      targetEntityId: PILLAR.id,
+      relation: 'promoted_to',
       metadata: {},
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -569,5 +598,73 @@ describe('connectors', () => {
 
     expect(await screen.findByText(/two entity references/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Promote' })).toBeNull();
+  });
+});
+
+describe('promoting into a visual direction', () => {
+  const PROMOTE_LABEL = 'Make this the visual direction';
+
+  async function openBoard() {
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: 'Wreck interiors' }));
+    await screen.findByTestId('canvas');
+  }
+
+  it('promotes an already-linked reference through LineageService.promote', async () => {
+    const referenceNode = node({
+      id: 'node_a',
+      type: 'entity',
+      assetId: null,
+      entityId: REFERENCE.id,
+    });
+    vi.mocked(api.getMoodboard).mockResolvedValue(board({ nodes: [referenceNode] }));
+    await openBoard();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select first' }));
+    fireEvent.click(await screen.findByRole('button', { name: PROMOTE_LABEL }));
+
+    await waitFor(() =>
+      expect(api.promoteEntity).toHaveBeenCalledWith('prj_1', REFERENCE.id, {
+        type: 'design_pillar',
+      }),
+    );
+    expect(api.findOrCreateAssetReference).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Promoted to “Trench palette”/)).toBeTruthy();
+  });
+
+  it('resolves a raw asset to its reference entity first, then promotes that', async () => {
+    // Default board: a single `asset` node showing REEF, not yet an entity.
+    await openBoard();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select first' }));
+    fireEvent.click(await screen.findByRole('button', { name: PROMOTE_LABEL }));
+
+    await waitFor(() =>
+      expect(api.findOrCreateAssetReference).toHaveBeenCalledWith('prj_1', {
+        assetId: REEF.id,
+        name: REEF.filename,
+      }),
+    );
+    expect(api.promoteEntity).toHaveBeenCalledWith('prj_1', REFERENCE.id, {
+      type: 'design_pillar',
+    });
+  });
+
+  it('promotes the board itself when nothing is selected', async () => {
+    await openBoard();
+
+    fireEvent.click(await screen.findByRole('button', { name: PROMOTE_LABEL }));
+
+    await waitFor(() =>
+      expect(api.promoteEntity).toHaveBeenCalledWith('prj_1', BOARD.id, { type: 'design_pillar' }),
+    );
+  });
+
+  it('does not offer board promotion once a node is selected', async () => {
+    await openBoard();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select first' }));
+
+    expect(screen.getAllByRole('button', { name: PROMOTE_LABEL })).toHaveLength(1);
   });
 });

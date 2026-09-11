@@ -24,6 +24,7 @@ import {
   useMoodboardLibrarySearch,
   useMoodboards,
   usePromoteMoodboardConnector,
+  usePromoteToVisualDirection,
   useRemoveMoodboardNodes,
   useUpdateMoodboardNodes,
 } from './use-moodboards';
@@ -63,6 +64,7 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
   const connectNodes = useConnectMoodboardNodes(projectId, boardId);
   const disconnect = useDisconnectMoodboardNodes(projectId, boardId);
   const promote = usePromoteMoodboardConnector(projectId, boardId);
+  const promoteToVisualDirection = usePromoteToVisualDirection(projectId);
 
   const boards = boardsQuery.data?.items ?? [];
   const nodes = useMemo(() => boardQuery.data?.nodes ?? [], [boardQuery.data]);
@@ -135,6 +137,7 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
       description="Visual research: gather references, arrange a direction, and connect what it is for."
       inspector={
         <MoodboardInspector
+          board={boardQuery.data?.board ?? null}
           node={selectedNode}
           entities={entities}
           assets={assets}
@@ -145,6 +148,7 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
             promote.mutate({ connectorId, relation })
           }
           onDisconnect={(connectorId) => disconnect.mutate(connectorId)}
+          onPromoteToVisualDirection={(source) => promoteToVisualDirection.mutateAsync(source)}
           generator={
             openBoardId && (
               <GenerationPanel

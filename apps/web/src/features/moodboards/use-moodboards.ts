@@ -2,6 +2,7 @@
 
 import {
   ENTITY_TYPES,
+  type Asset,
   type Moodboard,
   type MoodboardNode,
   type MoodboardNodePatch,
@@ -9,6 +10,7 @@ import {
 } from '@level-zero/domain';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { findOrCreateAssetReference } from '@/features/entities/asset-reference';
 import * as api from '@/lib/api';
 
 const moodboardKeys = {
@@ -215,6 +217,31 @@ export function usePromoteMoodboardConnector(projectId: string, boardId: string)
     mutationFn: ({ connectorId, relation }: { connectorId: string; relation: RelationType }) =>
       api.promoteMoodboardConnector(projectId, boardId, connectorId, relation),
     onSuccess: invalidate,
+  });
+}
+
+/**
+ * Turns a board's own entity, or an asset already on it, into a visual
+ * direction (`design_pillar`), through the ordinary promotion catalogue.
+ *
+ * An `asset` node has no entity of its own yet — an asset is not an entity —
+ * so a raw asset is resolved to its `asset_reference` first, reusing whatever
+ * entity already stands for that file, before the same
+ * `LineageService.promote` call the board and every `asset_reference` node
+ * use. Nothing on the board changes: the reference and the board it came from
+ * are left exactly as they were, and the new visual direction lives beside
+ * them in the project graph.
+ */
+export function usePromoteToVisualDirection(projectId: string) {
+  return useMutation({
+    mutationFn: async (source: { entityId: string } | { asset: Asset }) => {
+      const entityId =
+        'entityId' in source
+          ? source.entityId
+          : (await findOrCreateAssetReference(projectId, source.asset)).id;
+
+      return api.promoteEntity(projectId, entityId, { type: 'design_pillar' });
+    },
   });
 }
 
