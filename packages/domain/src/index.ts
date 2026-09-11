@@ -516,9 +516,22 @@ export {
   type FindingStatus,
 } from './finding/finding';
 export { fingerprint, type ConsistencyCheck, type ProjectFacts } from './finding/consistency-check';
+export {
+  type AiCheckCandidate,
+  type AiCheckContext,
+  type AiCheckResult,
+  type AiConsistencyCheck,
+  type AiJudgement,
+  type AiJudgementRequest,
+  type AiRetrievalRequest,
+} from './finding/ai-consistency-check';
+export { JUDGEMENT_FORMAT_INSTRUCTION, parseJudgedFindings } from './finding/ai-judgement';
 export { stalePrototypePinCheck } from './finding/stale-prototype-pin-check';
-export { duplicateNameCheck } from './finding/duplicate-name-check';
+export { duplicateNameCheck, normalizedEntityName } from './finding/duplicate-name-check';
+export { loreContradictionCheck } from './finding/lore-contradiction-check';
+export { nearDuplicateCheck } from './finding/near-duplicate-check';
 export { CONSISTENCY_CHECKS } from './finding/consistency-checks';
+export { AI_CONSISTENCY_CHECKS } from './finding/ai-consistency-checks';
 export {
   type FindingListFilter,
   type FindingPage,

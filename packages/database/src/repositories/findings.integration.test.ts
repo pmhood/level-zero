@@ -4,7 +4,8 @@ import {
   dismissFinding,
   systemClock,
   uuidIdGenerator,
-  type CreateFindingInput,
+  type CheckFinding,
+  type Finding,
   type Project,
 } from '@level-zero/domain';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -38,34 +39,42 @@ beforeEach(async () => {
   otherProject = await projects.create({ name: 'Sky Wreck' });
 });
 
-/** A fresh scan's report for one fingerprint — what a runner hands to `upsert`. */
-function reported(overrides: Partial<CreateFindingInput> = {}) {
-  return createFinding(
-    {
-      projectId: project.id,
-      checkId: 'stale-prototype-pin',
-      fingerprint: 'stale-pin::prototype-version-1::entity-1',
-      origin: 'deterministic',
-      severity: 'warning',
-      summary: 'The Diver has changed since this prototype version pinned it.',
-      evidence: [
-        {
-          entityId: 'prototype-1',
-          entityVersionId: 'entity-version-1',
-          where: 'Prototype version 1',
-          states: 'pinned to an earlier The Diver',
-        },
-        {
-          entityId: 'entity-1',
-          entityVersionId: 'entity-version-2',
-          where: 'The Diver',
-          states: 'has a newer current version',
-        },
-      ],
-      ...overrides,
-    },
-    deps,
-  );
+/** What a check reports, before the runner says what kind of claim it is. */
+type Reported = CheckFinding & { projectId: string; checkId: string };
+
+function report(overrides: Partial<Reported> = {}): Reported {
+  return {
+    projectId: project.id,
+    checkId: 'stale-prototype-pin',
+    fingerprint: 'stale-pin::prototype-version-1::entity-1',
+    severity: 'warning',
+    summary: 'The Diver has changed since this prototype version pinned it.',
+    evidence: [
+      {
+        entityId: 'prototype-1',
+        entityVersionId: 'entity-version-1',
+        where: 'Prototype version 1',
+        states: 'pinned to an earlier The Diver',
+      },
+      {
+        entityId: 'entity-1',
+        entityVersionId: 'entity-version-2',
+        where: 'The Diver',
+        states: 'has a newer current version',
+      },
+    ],
+    ...overrides,
+  };
+}
+
+/** A fresh scan's proof for one fingerprint — what a runner hands to `upsert`. */
+function reported(overrides: Partial<Reported> = {}): Finding {
+  return createFinding({ ...report(overrides), origin: 'deterministic' }, deps);
+}
+
+/** The same report, judged rather than proved, with its `Generation` behind it. */
+function judged(generationId: string, overrides: Partial<Reported> = {}): Finding {
+  return createFinding({ ...report(overrides), origin: 'ai_assisted', generationId }, deps);
 }
 
 describe('upsert', () => {
@@ -75,6 +84,33 @@ describe('upsert', () => {
     const { items, total } = await findings.listByProject(project.id);
     expect(total).toBe(1);
     expect(items[0]).toMatchObject({ id: saved.id, status: 'open' });
+  });
+
+  it('round-trips an ai_assisted row with the generation that judged it', async () => {
+    const generationId = uuidIdGenerator.next();
+
+    const saved = await findings.upsert(
+      judged(generationId, {
+        checkId: 'lore-contradiction',
+        fingerprint: 'lore-contradiction::entity-1::entity-2',
+        summary: 'The two accounts of the flood read as though they describe one event twice.',
+      }),
+    );
+
+    await expect(findings.findById(project.id, saved.id)).resolves.toMatchObject({
+      origin: 'ai_assisted',
+      generationId,
+    });
+  });
+
+  it('re-attributes a finding to the judgement that most recently produced it', async () => {
+    const first = await findings.upsert(judged(uuidIdGenerator.next()));
+    const second = uuidIdGenerator.next();
+
+    const rescanned = await findings.upsert(judged(second));
+
+    expect(rescanned.id).toBe(first.id);
+    expect(rescanned.generationId).toBe(second);
   });
 
   it('running the same check twice upserts one row, not two', async () => {

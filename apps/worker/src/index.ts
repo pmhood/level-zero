@@ -1,9 +1,11 @@
 import {
   AiProviderRegistry,
   AnthropicProvider,
+  ContextResolver,
   EchoAiProvider,
   LocalEmbeddingProvider,
   LocalImageProvider,
+  ProviderAiCheckContext,
 } from '@level-zero/ai';
 import { loadDotEnv, parseEnv, workerEnvSchema } from '@level-zero/config';
 import {
@@ -37,6 +39,7 @@ import {
   JobService,
   LineageService,
   SearchIndexService,
+  SearchService,
   systemClock,
   uuidIdGenerator,
   type JobKind,
@@ -78,12 +81,14 @@ async function main(): Promise<void> {
 
   // The API registers the same embedding provider, so a stored vector and the
   // query it is compared against are always in one vector space.
+  const searchDocuments = new DrizzleSearchDocumentRepository(database.db);
+  const embeddings = new LocalEmbeddingProvider();
   const search = new SearchIndexService(
-    new DrizzleSearchDocumentRepository(database.db),
+    searchDocuments,
     entities,
     assets,
     generationRepository,
-    new LocalEmbeddingProvider(),
+    embeddings,
     jobs,
     deps,
   );
@@ -123,6 +128,17 @@ async function main(): Promise<void> {
     providers.register(new EchoAiProvider(['text.generate']));
   }
 
+  // One resolver and one reader, shared by every scan; only the project
+  // binding below is per job.
+  const contexts = new ContextResolver(
+    projects,
+    entities,
+    relationships,
+    assets,
+    generationRepository,
+  );
+  const searchReads = new SearchService(searchDocuments, embeddings);
+
   const probes: WorkerProbe[] = [
     { name: 'postgres', check: () => checkPostgres(database.db) },
     { name: 'redis', check: () => checkRedis(redis.redis) },
@@ -139,7 +155,20 @@ async function main(): Promise<void> {
       logger: console,
     }),
     search_index: createSearchIndexJobHandler({ jobs, search, logger: console }),
-    consistency_scan: createConsistencyScanJobHandler({ jobs, consistency, logger: console }),
+    consistency_scan: createConsistencyScanJobHandler({
+      jobs,
+      consistency,
+      // Bound to the project being scanned, so an AI check has no more reach
+      // across projects than a deterministic one does.
+      aiContext: (projectId) =>
+        new ProviderAiCheckContext(projectId, {
+          contexts,
+          providers,
+          generations,
+          search: searchReads,
+        }),
+      logger: console,
+    }),
   };
 
   const consumer = createJobConsumer({
