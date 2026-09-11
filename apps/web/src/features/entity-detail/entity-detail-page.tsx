@@ -1,6 +1,6 @@
 'use client';
 
-import type { Entity } from '@level-zero/domain';
+import { referencedAssetId, type Entity } from '@level-zero/domain';
 import { Button, EmptyState, HistoryIcon, StatusBadge, WorkspacePage } from '@level-zero/ui';
 import type { Route } from 'next';
 import Link from 'next/link';
@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 
 import { entityStatusBadge, entityTypeLabel } from '@/features/entities/entity-presentation';
 import { useEntity, useRestoreEntity } from '@/features/entities/use-entities';
+import { ReviewSection } from '@/features/review/review-section';
 import { ApiRequestError, apiErrorMessage } from '@/lib/api';
 
 import { EntityDetailFallback } from './entity-detail-fallback';
@@ -105,6 +106,12 @@ function EntityDetailShell({ projectId, entity }: { projectId: string; entity: E
         <Body projectId={projectId} entity={entity} onOpen={openEntity} />
         <EntityRelationships projectId={projectId} entity={entity} />
         <EntityVersionHistory projectId={projectId} entity={entity} />
+        <ReviewSection
+          projectId={projectId}
+          target={{ targetType: 'entity', targetId: entity.id }}
+          description="Where this entity stands, and what people have said about it."
+        />
+        <ReferencedAssetReview projectId={projectId} entity={entity} />
 
         {restoreEntity.isError && (
           <p className="text-xs text-error">
@@ -113,5 +120,26 @@ function EntityDetailShell({ projectId, entity }: { projectId: string; entity: E
         )}
       </div>
     </WorkspacePage>
+  );
+}
+
+/**
+ * An `asset_reference`'s subject is a file, and a file is reviewed as itself:
+ * the same asset can be referenced from a moodboard, a character and the GDD,
+ * so approving the reference would approve only one of those uses. This is
+ * therefore a second review target on the page, not a replacement for the
+ * entity's own (`asset-reference.ts`, and "assets are not entities").
+ */
+function ReferencedAssetReview({ projectId, entity }: { projectId: string; entity: Entity }) {
+  const assetId = referencedAssetId(entity);
+  if (!assetId) return null;
+
+  return (
+    <ReviewSection
+      projectId={projectId}
+      target={{ targetType: 'asset', targetId: assetId }}
+      title="File review"
+      description="Where the file itself stands, wherever else it is used."
+    />
   );
 }

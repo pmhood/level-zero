@@ -1,4 +1,10 @@
-import { ConflictError, DomainError, NotFoundError, ValidationError } from '@level-zero/domain';
+import {
+  ConflictError,
+  DomainError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from '@level-zero/domain';
 import { ArgumentsHost, Catch, ExceptionFilter, HttpStatus, Logger } from '@nestjs/common';
 import { Response } from 'express';
 
@@ -33,5 +39,6 @@ function statusFor(error: DomainError): number {
   if (error instanceof NotFoundError) return HttpStatus.NOT_FOUND;
   if (error instanceof ValidationError) return HttpStatus.BAD_REQUEST;
   if (error instanceof ConflictError) return HttpStatus.CONFLICT;
+  if (error instanceof ForbiddenError) return HttpStatus.FORBIDDEN;
   return HttpStatus.INTERNAL_SERVER_ERROR;
 }

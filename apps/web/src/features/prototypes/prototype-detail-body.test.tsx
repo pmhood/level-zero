@@ -7,6 +7,7 @@ import type {
   PrototypeContents,
   PrototypeVersion,
   PrototypeVersionComparison,
+  ReviewStatus,
 } from '@level-zero/domain';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -31,6 +32,9 @@ vi.mock('@/lib/api', () => ({
   annotatePrototypeVersion: vi.fn(),
   listPlaytests: vi.fn(),
   createPlaytest: vi.fn(),
+  getReviewStatus: vi.fn(),
+  listReviewHistory: vi.fn(),
+  listCommentThreads: vi.fn(),
 }));
 
 const api = await import('@/lib/api');
@@ -135,6 +139,21 @@ function contentsFor(version: PrototypeVersion): PrototypeContents {
   };
 }
 
+/** A version nobody has reviewed yet, resolved to the version itself. */
+function reviewStatus(): ReviewStatus {
+  return {
+    target: {
+      target: { type: 'prototype_version', id: 'pv_2', anchor: null, versionId: null },
+      label: 'v2',
+      archived: false,
+      currentVersionId: null,
+    },
+    state: 'draft',
+    decision: null,
+    staleDecision: null,
+  };
+}
+
 function comparison(): PrototypeVersionComparison {
   return {
     from: v1,
@@ -188,6 +207,11 @@ describe('PrototypeDetailBody', () => {
     );
     vi.mocked(api.comparePrototypeVersions).mockResolvedValue(comparison());
     vi.mocked(api.listPlaytests).mockResolvedValue(playtestsPage());
+    // The overview carries the selected version's review panel; these keep it
+    // rendering its empty state rather than a failed request.
+    vi.mocked(api.getReviewStatus).mockResolvedValue(reviewStatus());
+    vi.mocked(api.listReviewHistory).mockResolvedValue([]);
+    vi.mocked(api.listCommentThreads).mockResolvedValue([]);
   });
 
   afterEach(cleanup);

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { Entity, EntityHistory, EntityNeighborhood } from '@level-zero/domain';
+import type { Entity, EntityHistory, EntityNeighborhood, ReviewStatus } from '@level-zero/domain';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -24,6 +24,9 @@ vi.mock('@/lib/api', () => ({
   getEntityNeighborhood: vi.fn(),
   getEntityHistory: vi.fn(),
   restoreEntity: vi.fn(),
+  getReviewStatus: vi.fn(),
+  listReviewHistory: vi.fn(),
+  listCommentThreads: vi.fn(),
 }));
 
 const api = await import('@/lib/api');
@@ -61,6 +64,21 @@ function history(overrides: Partial<EntityHistory> = {}): EntityHistory {
   };
 }
 
+/** An entity nobody has reviewed yet. */
+function reviewStatus(): ReviewStatus {
+  return {
+    target: {
+      target: { type: 'entity', id: 'ent_haven', anchor: null, versionId: null },
+      label: 'Haven',
+      archived: false,
+      currentVersionId: null,
+    },
+    state: 'draft',
+    decision: null,
+    staleDecision: null,
+  };
+}
+
 function renderPage(projectId = 'prj_1', entityId = 'ent_haven') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -78,6 +96,11 @@ describe('EntityDetailPage', () => {
     vi.clearAllMocks();
     vi.mocked(api.getEntityNeighborhood).mockResolvedValue(neighborhood());
     vi.mocked(api.getEntityHistory).mockResolvedValue(history());
+    // The page carries the entity's review panel; these keep it rendering its
+    // empty state rather than a failed request.
+    vi.mocked(api.getReviewStatus).mockResolvedValue(reviewStatus());
+    vi.mocked(api.listReviewHistory).mockResolvedValue([]);
+    vi.mocked(api.listCommentThreads).mockResolvedValue([]);
   });
 
   afterEach(cleanup);

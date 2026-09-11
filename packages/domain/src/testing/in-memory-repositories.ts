@@ -59,6 +59,11 @@ import {
   type PrototypeVersionPage,
   type PrototypeVersionRepository,
 } from '../prototype/prototype-version-repository';
+import { type Comment } from '../review/comment';
+import { type CommentRepository } from '../review/comment-repository';
+import { type ReviewDecision } from '../review/review-decision';
+import { type ReviewDecisionRepository } from '../review/review-decision-repository';
+import { type ReviewTargetFilter } from '../review/review-target';
 import { type EntityRelationship } from '../relationship/entity-relationship';
 import {
   type EntityRelationshipRepository,
@@ -1059,6 +1064,86 @@ export class InMemoryJobEvents implements JobEvents {
       },
     };
   }
+}
+
+/** In-memory `CommentRepository` for tests. Mirrors the Postgres adapter's ordering. */
+export class InMemoryCommentRepository implements CommentRepository {
+  private readonly rows = new Map<string, Comment>();
+
+  constructor(seed: readonly Comment[] = []) {
+    for (const comment of seed) this.rows.set(comment.id, structuredClone(comment));
+  }
+
+  async insert(comment: Comment): Promise<Comment> {
+    this.rows.set(comment.id, structuredClone(comment));
+    return structuredClone(comment);
+  }
+
+  async findById(projectId: string, commentId: string): Promise<Comment | null> {
+    const comment = this.rows.get(commentId);
+    // A mismatched project reads as missing, never as another project's row.
+    if (!comment || comment.projectId !== projectId) return null;
+    return structuredClone(comment);
+  }
+
+  async listByTarget(projectId: string, filter: ReviewTargetFilter): Promise<Comment[]> {
+    return [...this.rows.values()]
+      .filter((comment) => comment.projectId === projectId && matchesTarget(comment, filter))
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
+      .map((comment) => structuredClone(comment));
+  }
+
+  async save(comment: Comment): Promise<Comment> {
+    const existing = this.rows.get(comment.id);
+    if (!existing || existing.projectId !== comment.projectId) {
+      throw new NotFoundError('Comment', comment.id);
+    }
+    this.rows.set(comment.id, structuredClone(comment));
+    return structuredClone(comment);
+  }
+
+  async remove(projectId: string, commentId: string): Promise<void> {
+    const comment = this.rows.get(commentId);
+    if (!comment || comment.projectId !== projectId) return;
+
+    // The database cascades replies from the comment that starts the thread.
+    for (const row of this.rows.values()) {
+      if (row.parentCommentId === commentId) this.rows.delete(row.id);
+    }
+    this.rows.delete(commentId);
+  }
+}
+
+/** In-memory `ReviewDecisionRepository` for tests. Insert-only, newest first. */
+export class InMemoryReviewDecisionRepository implements ReviewDecisionRepository {
+  private readonly rows = new Map<string, ReviewDecision>();
+
+  constructor(seed: readonly ReviewDecision[] = []) {
+    for (const decision of seed) this.rows.set(decision.id, structuredClone(decision));
+  }
+
+  async insert(decision: ReviewDecision): Promise<ReviewDecision> {
+    this.rows.set(decision.id, structuredClone(decision));
+    return structuredClone(decision);
+  }
+
+  async listByTarget(projectId: string, filter: ReviewTargetFilter): Promise<ReviewDecision[]> {
+    return [...this.rows.values()]
+      .filter((decision) => decision.projectId === projectId && matchesTarget(decision, filter))
+      .sort((a, b) => b.decidedAt.getTime() - a.decidedAt.getTime() || b.id.localeCompare(a.id))
+      .map((decision) => structuredClone(decision));
+  }
+}
+
+function matchesTarget(
+  row: { target: { type: string; id: string; anchor: string | null } },
+  filter: ReviewTargetFilter,
+): boolean {
+  return (
+    row.target.type === filter.targetType &&
+    row.target.id === filter.targetId &&
+    row.target.anchor === filter.anchor
+  );
 }
 
 /**
