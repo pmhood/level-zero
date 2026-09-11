@@ -1,0 +1,11 @@
+import { type ConsistencyCheck } from './consistency-check';
+import { stalePrototypePinCheck } from './stale-prototype-pin-check';
+
+/**
+ * Every deterministic check a scan runs, in the order their findings appear.
+ *
+ * A typed registry, not a rules DSL (#72, #88): adding a check is a file with
+ * a pure function, a test with three literals, and one line here.
+ * `duplicate-name` lands in its own issue.
+ */
+export const CONSISTENCY_CHECKS: readonly ConsistencyCheck[] = [stalePrototypePinCheck];

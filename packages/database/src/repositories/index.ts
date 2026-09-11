@@ -3,6 +3,7 @@ export { DrizzleAssetRepository } from './asset-repository';
 export { DrizzleEntityRelationshipRepository } from './entity-relationship-repository';
 export { DrizzleEntityRepository } from './entity-repository';
 export { DrizzleEntityVersionRepository } from './entity-version-repository';
+export { DrizzleFindingRepository } from './finding-repository';
 export { DrizzleGenerationRepository } from './generation-repository';
 export { DrizzleJobRepository } from './job-repository';
 export { DrizzleMoodboardRepository } from './moodboard-repository';
