@@ -4,6 +4,7 @@ import {
   type Entity,
   type EntityRelationship,
   type EntityVersion,
+  type Finding,
   type Generation,
   type Job,
   type MoodboardConnector,
@@ -27,6 +28,7 @@ import {
   type NewEntityRelationshipRow,
 } from '../schema/entity-relationships';
 import { type EntityVersionRow, type NewEntityVersionRow } from '../schema/entity-versions';
+import { type FindingRow, type NewFindingRow } from '../schema/findings';
 import { type JobRow, type NewJobRow } from '../schema/jobs';
 import {
   type MoodboardConnectorRow,
@@ -664,6 +666,48 @@ export function toPlaytestMetricRow(metric: PlaytestMetric): NewPlaytestMetricRo
     unit: metric.unit,
     createdAt: metric.createdAt,
     updatedAt: metric.updatedAt,
+  };
+}
+
+export function toFinding(row: FindingRow): Finding {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    checkId: row.checkId,
+    fingerprint: row.fingerprint,
+    origin: row.origin,
+    generationId: row.generationId,
+    severity: row.severity,
+    summary: row.summary,
+    evidence: row.evidence,
+    status: row.status,
+    firstSeenAt: row.firstSeenAt,
+    lastSeenAt: row.lastSeenAt,
+    resolvedAt: row.resolvedAt,
+    dismissedAt: row.dismissedAt,
+    dismissedBy: row.dismissedBy,
+    dismissedReason: row.dismissedReason,
+  };
+}
+
+export function toFindingRow(finding: Finding): NewFindingRow {
+  return {
+    id: finding.id,
+    projectId: finding.projectId,
+    checkId: finding.checkId,
+    fingerprint: finding.fingerprint,
+    origin: finding.origin,
+    generationId: finding.generationId,
+    severity: finding.severity,
+    summary: finding.summary,
+    evidence: finding.evidence,
+    status: finding.status,
+    firstSeenAt: finding.firstSeenAt,
+    lastSeenAt: finding.lastSeenAt,
+    resolvedAt: finding.resolvedAt,
+    dismissedAt: finding.dismissedAt,
+    dismissedBy: finding.dismissedBy,
+    dismissedReason: finding.dismissedReason,
   };
 }
 

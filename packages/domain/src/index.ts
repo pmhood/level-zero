@@ -489,6 +489,40 @@ export {
 } from './search/search-index-service';
 
 export {
+  FINDING_ORIGINS,
+  FINDING_SEVERITIES,
+  FINDING_STATUSES,
+  MAX_FINDING_CHECK_ID_LENGTH,
+  MAX_FINDING_DISMISSED_BY_LENGTH,
+  MAX_FINDING_DISMISSED_REASON_LENGTH,
+  MAX_FINDING_EVIDENCE_ENTITY_ID_LENGTH,
+  MAX_FINDING_EVIDENCE_STATES_LENGTH,
+  MAX_FINDING_EVIDENCE_WHERE_LENGTH,
+  MAX_FINDING_FINGERPRINT_LENGTH,
+  MAX_FINDING_SUMMARY_LENGTH,
+  MIN_FINDING_EVIDENCE,
+  createFinding,
+  dismissFinding,
+  type CheckFinding,
+  type CreateFindingInput,
+  type DismissFindingInput,
+  type Finding,
+  type FindingEvidence,
+  type FindingFactoryDeps,
+  type FindingOrigin,
+  type FindingSeverity,
+  type FindingStatus,
+} from './finding/finding';
+export { fingerprint, type ConsistencyCheck, type ProjectFacts } from './finding/consistency-check';
+export { stalePrototypePinCheck } from './finding/stale-prototype-pin-check';
+export { CONSISTENCY_CHECKS } from './finding/consistency-checks';
+export {
+  type FindingListFilter,
+  type FindingPage,
+  type FindingRepository,
+} from './finding/finding-repository';
+
+export {
   MAX_DIFFERENCE_VALUE_LENGTH,
   changeOf,
   compactDifferences,
