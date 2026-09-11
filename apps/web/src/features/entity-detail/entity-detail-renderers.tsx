@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 
 import { CharacterDetailBody } from '@/features/characters/character-detail-body';
 import { MechanicDetailBody } from '@/features/mechanics/mechanic-detail-body';
+import { PrototypeDetailBody } from '@/features/prototypes/prototype-detail-body';
 import { WorldDetailBody } from '@/features/world/world-detail-body';
 
 /**
@@ -39,6 +40,9 @@ export const ENTITY_DETAIL_BODIES: Partial<Record<EntityType, EntityDetailBody>>
     <MechanicDetailBody projectId={projectId} mechanic={entity} />
   ),
   system: ({ projectId, entity }) => <MechanicDetailBody projectId={projectId} mechanic={entity} />,
+  prototype: ({ projectId, entity }) => (
+    <PrototypeDetailBody projectId={projectId} entity={entity} />
+  ),
   region: ({ projectId, entity, onOpen }) => (
     <WorldDetailBody projectId={projectId} entity={entity} onOpenReference={onOpen} />
   ),

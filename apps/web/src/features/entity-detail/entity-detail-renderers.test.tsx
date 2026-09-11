@@ -5,6 +5,7 @@ import {
   type EntityHistory,
   type EntityNeighborhood,
   type EntityType,
+  type PrototypeVersion,
 } from '@level-zero/domain';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
@@ -27,10 +28,17 @@ vi.mock('@/lib/api', () => ({
   },
   apiErrorMessage: (error: unknown, fallback = 'Something went wrong talking to the API.') =>
     error instanceof Error ? error.message : fallback,
+  assetContentUrl: (projectId: string, assetId: string) => `/assets/${projectId}/${assetId}`,
   getEntity: vi.fn(),
   getEntityNeighborhood: vi.fn(),
   getEntityHistory: vi.fn(),
   restoreEntity: vi.fn(),
+  listPrototypeVersions: vi.fn(),
+  getPrototypeVersionContents: vi.fn(),
+  comparePrototypeVersions: vi.fn(),
+  annotatePrototypeVersion: vi.fn(),
+  listPlaytests: vi.fn(),
+  createPlaytest: vi.fn(),
 }));
 
 const api = await import('@/lib/api');
@@ -77,8 +85,29 @@ function renderEntity(type: EntityType) {
   );
 }
 
-// The eleven types docs/decisions/canonical-entity-routes.md §7 gives a
+function protoVersion(overrides: Partial<PrototypeVersion> = {}): PrototypeVersion {
+  return {
+    id: 'pv_1',
+    projectId: 'prj_1',
+    prototypeId: 'ent_1',
+    versionNumber: 1,
+    name: null,
+    status: 'draft',
+    notes: null,
+    buildAssetId: null,
+    members: [],
+    createdBy: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  };
+}
+
+// The twelve types docs/decisions/canonical-entity-routes.md §7 gives a
 // bespoke body; every other ENTITY_TYPES member takes the fallback.
+// `prototype` joined this list once issue #64 built its own tabbed surface —
+// §12's own follow-up note said this would be "one line in the map" once
+// that feature had a detail surface worth showing.
 const BESPOKE_TYPES: EntityType[] = [
   'character',
   'mechanic',
@@ -91,16 +120,17 @@ const BESPOKE_TYPES: EntityType[] = [
   'event',
   'hazard',
   'lore',
+  'prototype',
 ];
 
 describe('ENTITY_DETAIL_BODIES', () => {
-  it('names exactly the eleven types §7 gives a bespoke body', () => {
+  it('names exactly the twelve types §7 (as amended by issue #64) gives a bespoke body', () => {
     expect(Object.keys(ENTITY_DETAIL_BODIES).sort()).toEqual([...BESPOKE_TYPES].sort());
   });
 
-  it('leaves the other eight types to the fallback', () => {
+  it('leaves the other seven types to the fallback', () => {
     const fallbackTypes = ENTITY_TYPES.filter((type) => !BESPOKE_TYPES.includes(type));
-    expect(fallbackTypes).toHaveLength(8);
+    expect(fallbackTypes).toHaveLength(7);
 
     for (const type of fallbackTypes) {
       expect(ENTITY_DETAIL_BODIES[type]).toBeUndefined();
@@ -144,6 +174,23 @@ describe('the canonical route renders the real tabbed surface for a bespoke type
 
     expect(await screen.findByRole('tab', { name: 'Canon' })).toBeDefined();
   });
+
+  it('prototype opens onto PrototypeDetailBody', async () => {
+    const version = protoVersion();
+    vi.mocked(api.listPrototypeVersions).mockResolvedValue({ items: [version], total: 1 });
+    vi.mocked(api.getPrototypeVersionContents).mockResolvedValue({
+      prototype: entity('prototype'),
+      version,
+      entityVersions: [],
+      buildAsset: null,
+    });
+    vi.mocked(api.listPlaytests).mockResolvedValue({ items: [], total: 0 });
+
+    renderEntity('prototype');
+
+    expect(await screen.findByRole('tab', { name: 'Playtests' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: 'Compare' })).toBeDefined();
+  });
 });
 
 describe('the canonical route still renders the fallback for the eight remaining types', () => {
@@ -157,8 +204,8 @@ describe('the canonical route still renders the fallback for the eight remaining
     expect(screen.queryByRole('tablist')).toBeNull();
   });
 
-  it('document, moodboard, prototype and build (no bespoke body yet) also get the fallback', async () => {
-    for (const type of ['document', 'moodboard', 'prototype', 'build'] as const) {
+  it('document, moodboard and build (no bespoke body yet) also get the fallback', async () => {
+    for (const type of ['document', 'moodboard', 'build'] as const) {
       const { unmount } = renderEntity(type);
 
       expect(await screen.findByText('No description yet.')).toBeDefined();

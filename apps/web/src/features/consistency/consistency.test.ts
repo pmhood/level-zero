@@ -38,10 +38,10 @@ describe('canonicalEntityHref', () => {
     expect(canonicalEntityHref('prj_1', 'location')).toBe('/projects/prj_1/world');
     expect(canonicalEntityHref('prj_1', 'idea')).toBe('/projects/prj_1/idea-lab');
     expect(canonicalEntityHref('prj_1', 'moodboard')).toBe('/projects/prj_1/moodboards');
+    expect(canonicalEntityHref('prj_1', 'prototype')).toBe('/projects/prj_1/prototypes');
   });
 
   it('returns null for a type with no workspace page yet, rather than a dead link', () => {
-    expect(canonicalEntityHref('prj_1', 'prototype')).toBeNull();
     expect(canonicalEntityHref('prj_1', 'build')).toBeNull();
     expect(canonicalEntityHref('prj_1', 'scene')).toBeNull();
     expect(canonicalEntityHref('prj_1', 'asset_reference')).toBeNull();

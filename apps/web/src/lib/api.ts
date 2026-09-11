@@ -34,11 +34,19 @@ import type {
   MoodboardConnectorPromotion,
   MoodboardNode,
   MoodboardNodePatch,
+  Playtest,
+  PlaytestPage,
+  PlaytestStatus,
   Project,
   ProjectPage,
   ProjectStatus,
   PromoteEntityInput,
   PromotionResult,
+  PrototypeContents,
+  PrototypeVersion,
+  PrototypeVersionComparison,
+  PrototypeVersionPage,
+  PrototypeVersionStatus,
   RelationshipDirection,
   RelationType,
   SearchResultPage,
@@ -719,4 +727,94 @@ export function dismissFinding(
 /** Undoes a dismissal — one click, per the finding lifecycle's own rule. */
 export function reopenFinding(projectId: string, findingId: string): Promise<Finding> {
   return post(`/api/projects/${projectId}/findings/${findingId}/reopen`);
+}
+
+// --- Prototypes -------------------------------------------------------------
+
+/**
+ * A prototype's captured versions, newest first. The prototype itself is a
+ * `prototype` entity — read and edited through the entities endpoints above —
+ * so this only ever reaches its version history.
+ */
+export function listPrototypeVersions(
+  projectId: string,
+  prototypeId: string,
+  params: { limit?: number; offset?: number } = {},
+): Promise<PrototypeVersionPage> {
+  return apiFetch(
+    `/api/projects/${projectId}/prototypes/${prototypeId}/versions${toQueryString(params)}`,
+  );
+}
+
+/** A version's pinned entity versions and build artifact, resolved. */
+export function getPrototypeVersionContents(
+  projectId: string,
+  prototypeId: string,
+  prototypeVersionId: string,
+): Promise<PrototypeContents> {
+  return apiFetch(
+    `/api/projects/${projectId}/prototypes/${prototypeId}/versions/${prototypeVersionId}/contents`,
+  );
+}
+
+/** Which entity versions were added, removed or changed between two versions of the same prototype. */
+export function comparePrototypeVersions(
+  projectId: string,
+  prototypeId: string,
+  from: string,
+  to: string,
+): Promise<PrototypeVersionComparison> {
+  return apiFetch(
+    `/api/projects/${projectId}/prototypes/${prototypeId}/versions/compare${toQueryString({ from, to })}`,
+  );
+}
+
+export interface AnnotatePrototypeVersionParams {
+  status?: PrototypeVersionStatus;
+  notes?: string | null;
+  buildAssetId?: string | null;
+}
+
+/** Updates status, notes or the build artifact. The pinned members never change. */
+export function annotatePrototypeVersion(
+  projectId: string,
+  prototypeId: string,
+  prototypeVersionId: string,
+  input: AnnotatePrototypeVersionParams,
+): Promise<PrototypeVersion> {
+  return patch(
+    `/api/projects/${projectId}/prototypes/${prototypeId}/versions/${prototypeVersionId}`,
+    input,
+  );
+}
+
+// --- Playtests ----------------------------------------------------------------
+
+export interface ListPlaytestsParams {
+  /** Scopes to playtests of one exact prototype version — there is no prototype-level scope. */
+  prototypeVersionId?: string;
+  tag?: string[];
+  limit?: number;
+  offset?: number;
+}
+
+/** Evidence about one exact prototype version. */
+export function listPlaytests(
+  projectId: string,
+  params: ListPlaytestsParams = {},
+): Promise<PlaytestPage> {
+  return apiFetch(`/api/projects/${projectId}/playtests${toQueryString(params)}`);
+}
+
+export interface CreatePlaytestParams {
+  /** The exact version this playtest is evidence about; never rewritten after creation. */
+  prototypeVersionId: string;
+  name: string;
+  goal?: string | null;
+  status?: PlaytestStatus;
+  createdBy?: string | null;
+}
+
+export function createPlaytest(projectId: string, input: CreatePlaytestParams): Promise<Playtest> {
+  return post(`/api/projects/${projectId}/playtests`, input);
 }
