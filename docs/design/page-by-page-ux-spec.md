@@ -296,6 +296,32 @@ If canonical entity data changes, dependent text can become **Stale** and reques
 
 ---
 
+## Canonical entity page
+
+### Purpose
+Deep link and navigation destination for **Open** commands across the project.
+
+The inspector is the primary in-workspace reading surface; this page is where **Open** navigates.
+
+### Route
+`/projects/:projectId/entities/:entityId`
+
+### Components
+- Entity identity and status
+- Entity relationships
+- Entity version history
+- Type-specific body
+
+For types with a dedicated detail surface (Character, Mechanic, Location, etc.), the page shows the full rich body. Other types see a generic fallback displaying description, tags, and any additional data fields.
+
+### States
+
+**Archived** renders the full page read-only with an archived status badge and a Restore action.
+
+**Missing** and cross-project ids render the same not-found state, without confirming whether the entity exists elsewhere.
+
+---
+
 ## Prototypes
 
 ### Purpose
