@@ -503,6 +503,7 @@ export {
   MIN_FINDING_EVIDENCE,
   createFinding,
   dismissFinding,
+  resolveFinding,
   type CheckFinding,
   type CreateFindingInput,
   type DismissFindingInput,
@@ -522,6 +523,11 @@ export {
   type FindingPage,
   type FindingRepository,
 } from './finding/finding-repository';
+export {
+  CONSISTENCY_SCAN_JOB_STEPS,
+  ConsistencyScanService,
+  type ConsistencyScanServiceDeps,
+} from './finding/consistency-scan-service';
 
 export {
   MAX_DIFFERENCE_VALUE_LENGTH,

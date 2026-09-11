@@ -35,8 +35,13 @@ export type JobStatus = (typeof JOB_STATUSES)[number];
  * `search_index` refreshes a project's searchable copy and builds the vectors
  * behind semantic retrieval — a provider call, so it belongs out here rather
  * than in the request that changed the material.
+ *
+ * `consistency_scan` recomputes a project's findings (see
+ * docs/decisions/consistency-findings.md §8) — a project-wide read plus a
+ * batch of writes, queued on demand only and never as a side effect of an
+ * ordinary write, the way `search_index` is.
  */
-export const JOB_KINDS = ['generation', 'search_index'] as const;
+export const JOB_KINDS = ['generation', 'search_index', 'consistency_scan'] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 
 /**

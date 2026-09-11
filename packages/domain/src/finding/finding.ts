@@ -171,6 +171,20 @@ export function dismissFinding(
   };
 }
 
+/**
+ * Closes a finding a fresh scan no longer produced.
+ *
+ * Only an `open` row moves to `resolved` this way and it is idempotent on
+ * everything else: a `dismissed` row keeps the user's judgement even after
+ * its fingerprint stops appearing, and an already-`resolved` row has nothing
+ * left to close. This is what lets a scan runner call it unconditionally on
+ * every row it did not reproduce (docs/decisions/consistency-findings.md §3.2, §5).
+ */
+export function resolveFinding(finding: Finding, deps: { clock: Clock }): Finding {
+  if (finding.status !== 'open') return finding;
+  return { ...finding, status: 'resolved', resolvedAt: deps.clock.now() };
+}
+
 function normalizeEvidence(evidence: readonly FindingEvidence[]): FindingEvidence[] {
   if (evidence.length < MIN_FINDING_EVIDENCE) {
     throw new ValidationError(

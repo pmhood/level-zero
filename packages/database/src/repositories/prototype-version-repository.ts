@@ -113,6 +113,39 @@ export class DrizzlePrototypeVersionRepository implements PrototypeVersionReposi
     };
   }
 
+  async listByProject(
+    projectId: string,
+    filter: PrototypeVersionListFilter,
+  ): Promise<PrototypeVersionPage> {
+    const where = eq(prototypeVersions.projectId, projectId);
+
+    const [rows, [totals]] = await Promise.all([
+      this.db
+        .select()
+        .from(prototypeVersions)
+        .where(where)
+        .orderBy(desc(prototypeVersions.createdAt), desc(prototypeVersions.id))
+        .limit(filter.limit ?? 50)
+        .offset(filter.offset ?? 0),
+      this.db.select({ value: count() }).from(prototypeVersions).where(where),
+    ]);
+
+    const members = await this.membersOf(
+      projectId,
+      rows.map((row) => row.id),
+    );
+
+    return {
+      items: rows.map((row) =>
+        toPrototypeVersion(
+          row,
+          members.filter((member) => member.prototypeVersionId === row.id),
+        ),
+      ),
+      total: totals?.value ?? 0,
+    };
+  }
+
   async latestVersionNumber(projectId: string, prototypeId: string): Promise<number> {
     const [row] = await this.db
       .select({ value: prototypeVersions.versionNumber })
