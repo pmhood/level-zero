@@ -68,6 +68,7 @@ export function WorldLore({
       entities={entities}
       isPending={entitiesQuery.isPending}
       onOpen={onOpenReference}
+      projectId={projectId}
     >
       <RichTextEditor
         mode="notes"

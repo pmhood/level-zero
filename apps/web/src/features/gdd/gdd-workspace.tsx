@@ -186,6 +186,7 @@ function GddDocumentEditor({
       entities={entities}
       isPending={entitiesQuery.isPending}
       onOpen={openReference}
+      projectId={projectId}
     >
       <div className="flex h-full min-h-0">
         {!comparing && <DocumentOutline content={content} onSelect={scrollToHeading} />}

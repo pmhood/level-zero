@@ -6,6 +6,8 @@ import { mergeAttributes, Node } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react';
 import { useState } from 'react';
 
+import { EntityConsistencyNotice } from '@/features/consistency/entity-consistency-notice';
+
 import { EntityOptionList } from './entity-option-list';
 import { entityStatusBadge, entityTypeLabel } from './entity-presentation';
 import {
@@ -49,7 +51,7 @@ export const EntityEmbed = Node.create({
 function EntityEmbedView({ node, editor, updateAttributes, deleteNode }: NodeViewProps) {
   const { entityId, entityType, label } = node.attrs as EntityReferenceAttributes;
   const resolved = useResolvedEntity(entityId);
-  const { onOpen } = useEntityReferences();
+  const { onOpen, projectId } = useEntityReferences();
 
   function choose(entity: Entity) {
     updateAttributes({ entityId: entity.id, entityType: entity.type, label: entity.name });
@@ -75,6 +77,13 @@ function EntityEmbedView({ node, editor, updateAttributes, deleteNode }: NodeVie
                 {/* Whatever the entity is tuned by, if anything: a section
                     about a mechanic is usually about its numbers. */}
                 <ParameterSummary parameters={readParameters(entity)} className="mb-3" />
+                {projectId && (
+                  <EntityConsistencyNotice
+                    projectId={projectId}
+                    entityId={entity.id}
+                    className="mb-3"
+                  />
+                )}
                 <Button variant="secondary" size="sm" onClick={() => onOpen(entity)}>
                   Open
                 </Button>

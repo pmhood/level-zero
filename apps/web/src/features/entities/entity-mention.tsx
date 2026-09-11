@@ -6,6 +6,8 @@ import { mergeAttributes, Node, type Editor, type Range } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react';
 import { useState } from 'react';
 
+import { EntityConsistencyNotice } from '@/features/consistency/entity-consistency-notice';
+
 import {
   ENTITY_MENTION_NODE,
   entityReferenceLabel,
@@ -67,7 +69,7 @@ export function insertEntityMention(editor: Editor, range: Range, entity: Entity
 function EntityMentionView({ node, editor, deleteNode }: NodeViewProps) {
   const { entityId, label } = node.attrs as EntityReferenceAttributes;
   const resolved = useResolvedEntity(entityId);
-  const { onOpen } = useEntityReferences();
+  const { onOpen, projectId } = useEntityReferences();
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const entity = resolved.state === 'found' ? resolved.entity : null;
@@ -117,7 +119,14 @@ function EntityMentionView({ node, editor, deleteNode }: NodeViewProps) {
           </button>
         )}
 
-        {previewOpen && <EntityReferencePreview entity={entity} broken={broken} onOpen={onOpen} />}
+        {previewOpen && (
+          <EntityReferencePreview
+            entity={entity}
+            broken={broken}
+            onOpen={onOpen}
+            projectId={projectId}
+          />
+        )}
       </span>
     </NodeViewWrapper>
   );
@@ -131,10 +140,12 @@ function EntityReferencePreview({
   entity,
   broken,
   onOpen,
+  projectId,
 }: {
   entity: Entity | null;
   broken: boolean;
   onOpen: (entity: Entity) => void;
+  projectId?: string;
 }) {
   const status = entity ? entityStatusBadge(entity.status) : null;
 
@@ -170,6 +181,7 @@ function EntityReferencePreview({
               ))}
             </span>
           )}
+          {projectId && <EntityConsistencyNotice projectId={projectId} entityId={entity.id} />}
           <Button variant="secondary" size="sm" className="mt-3" onClick={() => onOpen(entity)}>
             Open
           </Button>

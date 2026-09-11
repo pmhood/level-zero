@@ -11,6 +11,13 @@ interface EntityReferenceContextValue {
   isPending: boolean;
   /** Opening the canonical entity the reference points at. */
   onOpen: (entity: Entity) => void;
+  /**
+   * Lets a reference offer a contextual entry point to the Consistency
+   * surface for the entity it names. Optional, and left unset by callers
+   * that predate that surface (and by tests), in which case a reference
+   * renders exactly as it did before.
+   */
+  projectId?: string;
 }
 
 /**
@@ -30,9 +37,13 @@ export function EntityReferenceProvider({
   entities,
   isPending,
   onOpen,
+  projectId,
   children,
 }: EntityReferenceContextValue & { children: ReactNode }) {
-  const value = useMemo(() => ({ entities, isPending, onOpen }), [entities, isPending, onOpen]);
+  const value = useMemo(
+    () => ({ entities, isPending, onOpen, projectId }),
+    [entities, isPending, onOpen, projectId],
+  );
 
   return <EntityReferenceContext value={value}>{children}</EntityReferenceContext>;
 }

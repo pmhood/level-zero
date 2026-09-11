@@ -6,6 +6,7 @@ import { sequentialIdGenerator } from '../shared/id';
 import {
   createFinding,
   dismissFinding,
+  reopenFinding,
   resolveFinding,
   type CheckFinding,
   type CreateFindingInput,
@@ -126,6 +127,39 @@ describe('dismissFinding', () => {
   it('leaves the reason null when none is given', () => {
     const dismissed = dismissFinding(finding(), { dismissedBy: 'pete' }, { clock: laterClock });
     expect(dismissed.dismissedReason).toBeNull();
+  });
+});
+
+describe('reopenFinding', () => {
+  it('clears the dismissal and goes back to open', () => {
+    const dismissed = dismissFinding(
+      finding(),
+      { dismissedBy: 'pete', reason: 'known trade-off' },
+      { clock: laterClock },
+    );
+
+    const reopened = reopenFinding(dismissed);
+
+    expect(reopened).toMatchObject({
+      status: 'open',
+      dismissedAt: null,
+      dismissedBy: null,
+      dismissedReason: null,
+    });
+    // The derived content a scan last wrote is untouched by reopening it.
+    expect(reopened.summary).toBe(finding().summary);
+  });
+
+  it('is a no-op on a finding that was never dismissed', () => {
+    const open = finding();
+
+    expect(reopenFinding(open)).toBe(open);
+  });
+
+  it('is a no-op on an already-resolved finding', () => {
+    const resolved = resolveFinding(finding(), { clock: laterClock });
+
+    expect(reopenFinding(resolved)).toBe(resolved);
   });
 });
 
