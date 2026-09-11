@@ -25,7 +25,7 @@ export const duplicateNameCheck: ConsistencyCheck = {
     for (const entity of entities) {
       if (entity.status === 'archived') continue;
 
-      const key = `${entity.type}::${normalizeName(entity.name)}`;
+      const key = `${entity.type}::${normalizedEntityName(entity.name)}`;
       const group = groups.get(key);
       if (group) {
         group.push(entity);
@@ -68,8 +68,15 @@ function buildFinding(a: Entity, b: Entity): CheckFinding {
   };
 }
 
-/** Case-folds and strips punctuation so "The Diver", "the diver!" and "THE-DIVER" all match. */
-function normalizeName(name: string): string {
+/**
+ * Case-folds and strips punctuation so "The Diver", "the diver!" and
+ * "THE-DIVER" all match.
+ *
+ * Exported because the AI-assisted `near-duplicate` check uses it to leave
+ * out the pairs this check already proves: one rule for what counts as the
+ * same name, in the check that owns it.
+ */
+export function normalizedEntityName(name: string): string {
   return name
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, ' ')

@@ -99,13 +99,20 @@ export interface Finding {
 /**
  * What the runner adds to a `CheckFinding` to make it a row: identity and
  * provenance the check has no way to supply for itself (§6.4).
+ *
+ * `origin` and `generationId` are one choice, not two fields: the union makes
+ * "`generationId` is non-null exactly when this is `ai_assisted`" a compile
+ * error to break rather than a rule to remember. A deterministic finding
+ * cannot be handed a generation, and an AI-assisted one cannot be written
+ * without the judgement behind it.
  */
-export interface CreateFindingInput extends CheckFinding {
+export type CreateFindingInput = CheckFinding & {
   projectId: string;
   checkId: string;
-  origin: FindingOrigin;
-  generationId?: string | null;
-}
+} & (
+    | { origin: 'deterministic'; generationId?: never }
+    | { origin: 'ai_assisted'; generationId: string }
+  );
 
 export interface FindingFactoryDeps {
   clock: Clock;
@@ -129,7 +136,10 @@ export function createFinding(input: CreateFindingInput, deps: FindingFactoryDep
     checkId: requireText('checkId', input.checkId, MAX_FINDING_CHECK_ID_LENGTH),
     fingerprint: requireText('fingerprint', input.fingerprint, MAX_FINDING_FINGERPRINT_LENGTH),
     origin: requireOneOf('origin', input.origin, FINDING_ORIGINS),
-    generationId: input.generationId ?? null,
+    // The other half of the union above, for a caller that reached here
+    // through `any` or across a package boundary.
+    generationId:
+      input.origin === 'ai_assisted' ? requireText('generationId', input.generationId, 200) : null,
     severity: requireOneOf('severity', input.severity, FINDING_SEVERITIES),
     summary: requireText('summary', input.summary, MAX_FINDING_SUMMARY_LENGTH),
     evidence: normalizeEvidence(input.evidence),

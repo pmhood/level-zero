@@ -3,6 +3,7 @@ import {
   CONSISTENCY_SCAN_JOB_STEPS,
   isDomainError,
   isJobActive,
+  type AiCheckContext,
   type ConsistencyScanService,
   type FailJobInput,
   type JobService,
@@ -15,6 +16,12 @@ const [LOADING_STEP, DETERMINISTIC_STEP, AI_STEP] = CONSISTENCY_SCAN_JOB_STEPS;
 export interface ConsistencyScanJobDeps {
   jobs: JobService;
   consistency: ConsistencyScanService;
+  /**
+   * Builds the retrieval-and-provider context the AI pass runs against, bound
+   * to the project being scanned. A factory rather than one shared instance
+   * because that binding is what stops a check reaching a second project.
+   */
+  aiContext: (projectId: string) => AiCheckContext;
   logger: WorkerLogger;
 }
 
@@ -25,9 +32,9 @@ export interface ConsistencyScanJobDeps {
  * The three named steps map onto job statuses the way `search-index-job.ts`
  * maps its two: `preparing_context` for the read-only pass that builds
  * `ProjectFacts`, `running` for the deterministic checks, and `processing`
- * reserved for the AI pass once a check of that type exists to run there —
- * nothing runs there yet, so the step advances straight through to
- * `complete`.
+ * for the AI pass. The order is the guarantee: the deterministic writes have
+ * committed before a provider is called, so a provider that is down costs the
+ * scan its interpretations and none of its proofs (§8).
  *
  * Unlike `search-index-job.ts`'s handler for `SearchIndexService.record`,
  * there is no swallowed-error counterpart here to avoid copying: a
@@ -45,7 +52,10 @@ export function createConsistencyScanJobHandler(
     if (!isJobActive(job)) return;
 
     try {
-      await deps.jobs.advance(projectId, jobId, { status: 'preparing_context', step: LOADING_STEP });
+      await deps.jobs.advance(projectId, jobId, {
+        status: 'preparing_context',
+        step: LOADING_STEP,
+      });
       const facts = await deps.consistency.loadProjectFacts(job.targetId);
 
       await deps.jobs.advance(projectId, jobId, {
@@ -63,16 +73,16 @@ export function createConsistencyScanJobHandler(
         completed: 2,
         step: AI_STEP,
       });
-      // No AI-assisted check is registered yet (§6.4, §7.6); the step is
-      // reserved so a later pass can be added here without touching the
-      // progress wiring.
+      const judged = await deps.consistency.runAiChecks(facts, deps.aiContext(job.targetId));
 
       await deps.jobs.advance(projectId, jobId, {
         status: 'complete',
         completed: CONSISTENCY_SCAN_JOB_STEPS.length,
         step: null,
       });
-      deps.logger.log(`[worker] consistency scan found ${produced} finding(s) in ${jobId}`);
+      deps.logger.log(
+        `[worker] consistency scan found ${produced} deterministic and ${judged} AI-assisted finding(s) in ${jobId}`,
+      );
     } catch (error) {
       await recordFailure(deps, delivery, error);
       // Throwing is how a failed attempt asks the queue for another one.

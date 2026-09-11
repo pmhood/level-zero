@@ -7,6 +7,7 @@ import {
   createFinding,
   dismissFinding,
   resolveFinding,
+  type CheckFinding,
   type CreateFindingInput,
   type Finding,
   type FindingEvidence,
@@ -20,20 +21,21 @@ const evidence: FindingEvidence[] = [
   { entityId: 'entity-1', where: 'The Diver', states: 'has a newer current version' },
 ];
 
-function input(overrides: Partial<CreateFindingInput> = {}): CreateFindingInput {
-  return {
-    projectId: 'project-1',
-    checkId: 'stale-prototype-pin',
-    fingerprint: 'fingerprint-1',
-    origin: 'deterministic',
-    severity: 'warning',
-    summary: 'The Diver has changed since this prototype version pinned it.',
-    evidence,
-    ...overrides,
-  };
+/** Everything a check reports, before the runner says what kind of claim it is. */
+const reported: CheckFinding & { projectId: string; checkId: string } = {
+  projectId: 'project-1',
+  checkId: 'stale-prototype-pin',
+  fingerprint: 'fingerprint-1',
+  severity: 'warning',
+  summary: 'The Diver has changed since this prototype version pinned it.',
+  evidence,
+};
+
+function input(overrides: Partial<typeof reported> = {}): CreateFindingInput {
+  return { ...reported, origin: 'deterministic', ...overrides };
 }
 
-function finding(overrides: Partial<CreateFindingInput> = {}): Finding {
+function finding(overrides: Partial<typeof reported> = {}): Finding {
   return createFinding(input(overrides), { clock, ids: sequentialIdGenerator('finding') });
 }
 
@@ -57,9 +59,34 @@ describe('createFinding', () => {
     });
   });
 
-  it('carries a generation id only when the origin is ai_assisted', () => {
-    const aiFinding = finding({ origin: 'ai_assisted', generationId: 'generation-1' });
-    expect(aiFinding.generationId).toBe('generation-1');
+  it('carries the judgement that produced an ai_assisted finding', () => {
+    const aiFinding = createFinding(
+      { ...reported, origin: 'ai_assisted', generationId: 'generation-1' },
+      { clock, ids: sequentialIdGenerator('finding') },
+    );
+
+    expect(aiFinding).toMatchObject({ origin: 'ai_assisted', generationId: 'generation-1' });
+  });
+
+  it('refuses an ai_assisted finding with no generation behind it', () => {
+    expect(() =>
+      createFinding(
+        // @ts-expect-error the union already forbids this; the guard is for
+        // callers that reach here without the types.
+        { ...reported, origin: 'ai_assisted' },
+        { clock, ids: sequentialIdGenerator('finding') },
+      ),
+    ).toThrow(ValidationError);
+  });
+
+  it('refuses to attach a generation to a deterministic finding', () => {
+    // @ts-expect-error a proof has no judgement behind it, by construction.
+    const rejected: CreateFindingInput = {
+      ...reported,
+      origin: 'deterministic',
+      generationId: 'g',
+    };
+    expect(rejected.origin).toBe('deterministic');
   });
 
   it('rejects a finding with fewer than two pieces of evidence', () => {

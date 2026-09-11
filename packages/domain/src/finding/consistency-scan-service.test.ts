@@ -16,6 +16,10 @@ import {
   InMemoryProjectRepository,
   InMemoryPrototypeVersionRepository,
 } from '../testing';
+import { type AiCheckContext } from './ai-consistency-check';
+import { AI_CONSISTENCY_CHECKS } from './ai-consistency-checks';
+import { CONSISTENCY_CHECKS } from './consistency-checks';
+import { type ProjectFacts } from './consistency-check';
 import { dismissFinding } from './finding';
 import { CONSISTENCY_SCAN_JOB_STEPS, ConsistencyScanService } from './consistency-scan-service';
 
@@ -60,7 +64,13 @@ function draftVersion(
   overrides: Partial<Parameters<typeof createPrototypeVersion>[0]> = {},
 ): PrototypeVersion {
   return createPrototypeVersion(
-    { projectId: project.id, prototypeId: 'prototype-1', versionNumber: 1, members: [], ...overrides },
+    {
+      projectId: project.id,
+      prototypeId: 'prototype-1',
+      versionNumber: 1,
+      members: [],
+      ...overrides,
+    },
     deps,
   );
 }
@@ -112,7 +122,9 @@ describe('loadProjectFacts', () => {
     await projectRepo.insert(otherProject);
 
     const mine = await entityRepo.insert(entity());
-    await entityRepo.insert(createEntity({ projectId: otherProject.id, type: 'character', name: 'Stranger' }, deps));
+    await entityRepo.insert(
+      createEntity({ projectId: otherProject.id, type: 'character', name: 'Stranger' }, deps),
+    );
 
     const myVersion = await prototypeVersionRepo.insert(draftVersion());
     await prototypeVersionRepo.insert(
@@ -225,5 +237,141 @@ describe('runDeterministicChecks', () => {
     expect(produced).toBe(0);
     const { items } = await findingRepo.listByProject(project.id);
     expect(items).toHaveLength(0);
+  });
+});
+
+describe('runAiChecks', () => {
+  /**
+   * Two lore entries with different dates: the least the lore check will read,
+   * and the material the judgement below pretends to have read.
+   */
+  async function insertLore(): Promise<Entity[]> {
+    return Promise.all([
+      entityRepo.insert(
+        entity({ type: 'lore', name: 'The Flood', description: 'The flood came in year nine.' }),
+      ),
+      entityRepo.insert(
+        entity({
+          type: 'lore',
+          name: 'The Drowning',
+          description: 'The waters rose in year eleven.',
+        }),
+      ),
+    ]);
+  }
+
+  /** An AI context that judges everything it is shown to be in tension. */
+  function judging(generationId: string): AiCheckContext {
+    return {
+      retrieve: () => Promise.resolve([]),
+      judge: (request) =>
+        Promise.resolve({
+          generationId,
+          output: JSON.stringify({
+            findings: [
+              {
+                severity: 'warning',
+                summary: 'The two accounts of the flood read as though they describe one event.',
+                evidence: request.contextEntityIds.map((entityId) => ({
+                  entityId,
+                  where: 'Description',
+                  states: 'dates the flood differently',
+                })),
+              },
+            ],
+          }),
+        }),
+    };
+  }
+
+  it('writes an ai_assisted finding carrying the generation that judged it', async () => {
+    await insertLore();
+
+    const produced = await scans.runAiChecks(
+      await scans.loadProjectFacts(project.id),
+      judging('generation-1'),
+    );
+
+    expect(produced).toBe(1);
+    const { items } = await findingRepo.listByProject(project.id);
+    expect(items[0]).toMatchObject({
+      checkId: 'lore-contradiction',
+      origin: 'ai_assisted',
+      generationId: 'generation-1',
+      status: 'open',
+    });
+  });
+
+  it('re-attributes a finding to the judgement that most recently produced it', async () => {
+    await insertLore();
+    const facts = await scans.loadProjectFacts(project.id);
+
+    await scans.runAiChecks(facts, judging('generation-1'));
+    await scans.runAiChecks(facts, judging('generation-2'));
+
+    const { items } = await findingRepo.listByProject(project.id);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ generationId: 'generation-2', status: 'open' });
+  });
+
+  it('writes nothing at all when the judgement fails', async () => {
+    await insertLore();
+    const broken: AiCheckContext = {
+      retrieve: () => Promise.resolve([]),
+      judge: () => Promise.reject(new Error('anthropic is unreachable')),
+    };
+
+    await expect(
+      scans.runAiChecks(await scans.loadProjectFacts(project.id), broken),
+    ).rejects.toThrow('anthropic is unreachable');
+
+    await expect(findingRepo.listByProject(project.id)).resolves.toMatchObject({ total: 0 });
+  });
+
+  it("leaves last scan's AI findings alone when this scan's AI pass never ran", async () => {
+    await insertLore();
+    const facts = await scans.loadProjectFacts(project.id);
+    await scans.runAiChecks(facts, judging('generation-1'));
+
+    // The next scan's deterministic pass runs, and the AI pass does not.
+    await scans.runDeterministicChecks(facts);
+
+    const { items } = await findingRepo.listByProject(project.id);
+    expect(items[0]).toMatchObject({ origin: 'ai_assisted', status: 'open' });
+  });
+
+  it('closes an AI finding the next judgement no longer reports', async () => {
+    await insertLore();
+    const facts = await scans.loadProjectFacts(project.id);
+    await scans.runAiChecks(facts, judging('generation-1'));
+
+    const silent: AiCheckContext = {
+      retrieve: () => Promise.resolve([]),
+      judge: () => Promise.resolve({ generationId: 'generation-2', output: '{"findings":[]}' }),
+    };
+    await scans.runAiChecks(facts, silent);
+
+    const { items } = await findingRepo.listByProject(project.id);
+    expect(items[0]).toMatchObject({ status: 'resolved' });
+  });
+});
+
+describe('the two check registries', () => {
+  it("names its checks apart, so a finding's check id says which kind it is", () => {
+    const deterministic = CONSISTENCY_CHECKS.map((check) => check.id);
+    const assisted = AI_CONSISTENCY_CHECKS.map((check) => check.id);
+
+    expect(deterministic.some((id) => assisted.includes(id))).toBe(false);
+  });
+
+  it('keeps every deterministic check synchronous and provider-free', () => {
+    const facts: ProjectFacts = { projectId: project.id, entities: [], prototypeVersions: [] };
+
+    for (const check of CONSISTENCY_CHECKS) {
+      // A model call cannot happen in a function that returns before it could
+      // await one, and `run` is handed nothing to make one with (§6.4).
+      expect(Array.isArray(check.run(facts))).toBe(true);
+      expect(check.run).toHaveLength(1);
+    }
   });
 });
