@@ -39,9 +39,18 @@ export interface MoodboardCanvasActions {
   /**
    * Adds a `group` node and puts the given nodes in it. The canvas draws the
    * new group as a frame around its members as soon as the board comes back.
+   * Returns the created row, the same way `addNode` does, so a group and its
+   * ungroup are each one step of history (issue #126) rather than untracked.
    */
-  createGroup: (memberNodeIds: readonly string[]) => void;
-  removeGroup: (groupNodeId: string) => void;
+  createGroup: (memberNodeIds: readonly string[]) => Promise<MoodboardNode>;
+  /**
+   * Removes a group row. The database detaches its members itself (the
+   * `group_id` foreign key is `ON DELETE SET NULL`), so this never needs to
+   * patch them. Resolves once the removal is confirmed, the same reason
+   * `removeNodes` does, so an ungroup recorded ahead of the save can be
+   * popped back off if it is rejected.
+   */
+  removeGroup: (groupNodeId: string) => Promise<void>;
   connect: (fromNodeId: string, toNodeId: string) => void;
 }
 
@@ -55,6 +64,10 @@ export interface MoodboardToolbarProps {
   onAddNode: (type: MoodboardNodeType) => void;
   /** Removes the given placements as one step of history. */
   onRemoveNodes: (nodeIds: readonly string[]) => void;
+  /** Groups the selection as one step of history, in place of `actions.createGroup`. */
+  onCreateGroup: (memberNodeIds: readonly string[]) => void;
+  /** Removes a group as one step of history, in place of `actions.removeGroup`. */
+  onRemoveGroup: (groupNodeId: string) => void;
   /** The selected tiles. A selected group contributes its id below, not here. */
   selectedNodeIds: readonly string[];
   selectedGroupNodeIds: readonly string[];
@@ -77,6 +90,8 @@ export function MoodboardToolbar({
   actions,
   onAddNode,
   onRemoveNodes,
+  onCreateGroup,
+  onRemoveGroup,
   selectedNodeIds,
   selectedGroupNodeIds,
   allLocked,
@@ -121,7 +136,7 @@ export function MoodboardToolbar({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => actions.createGroup(selectedNodeIds)}
+            onClick={() => onCreateGroup(selectedNodeIds)}
             disabled={selectedNodeIds.length < 2}
           >
             Group
@@ -129,7 +144,7 @@ export function MoodboardToolbar({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => selectedGroupNodeIds.forEach(actions.removeGroup)}
+            onClick={() => selectedGroupNodeIds.forEach(onRemoveGroup)}
             disabled={selectedGroupNodeIds.length === 0}
           >
             Ungroup

@@ -362,6 +362,10 @@ function MoodboardCanvasImpl(
         return actionsRef.current
           .restoreNodes(entry.nodes)
           .then((restored) => idMapOf(entry.nodes, restored));
+      case 'group':
+        return dissolveGroup(entry);
+      case 'ungroup':
+        return restoreGroup(entry);
     }
   }
 
@@ -376,7 +380,47 @@ function MoodboardCanvasImpl(
           .then((restored) => idMapOf(entry.nodes, restored));
       case 'delete':
         return actionsRef.current.removeNodes(entry.nodes.map((node) => node.id)).then(() => null);
+      case 'group':
+        return restoreGroup(entry);
+      case 'ungroup':
+        return dissolveGroup(entry);
     }
+  }
+
+  /**
+   * Detaches a group's members and removes its row — undoing a `group` entry
+   * and redoing an `ungroup` one are the same operation. The members are
+   * patched to no group explicitly rather than left to the database's
+   * `ON DELETE SET NULL`, so the board's own state is consistent even before
+   * the remove settles.
+   */
+  function dissolveGroup(entry: {
+    group: MoodboardNode;
+    memberIds: readonly string[];
+  }): Promise<null> {
+    return actionsRef.current
+      .updateNodes(entry.memberIds.map((id) => ({ id, groupId: null })))
+      .then(() => actionsRef.current.removeGroup(entry.group.id))
+      .then(() => null);
+  }
+
+  /**
+   * Recreates a removed group row and rejoins its members — undoing an
+   * `ungroup` entry and redoing a `group` one are the same operation. The row
+   * comes back under a fresh id, same as a delete's restore, so the id map
+   * this resolves with is what `remapHistory` needs to keep the rest of the
+   * history pointed at a group that still exists.
+   */
+  function restoreGroup(entry: {
+    group: MoodboardNode;
+    memberIds: readonly string[];
+  }): Promise<ReadonlyMap<string, string>> {
+    return actionsRef.current.restoreNodes([entry.group]).then((restored) => {
+      const group = restored[0]!;
+      return actionsRef.current
+        .updateNodes(entry.memberIds.map((id) => ({ id, groupId: group.id })))
+        .then(() => idMapOf([entry.group], restored));
+    });
   }
 
   /**
@@ -566,6 +610,61 @@ function MoodboardCanvasImpl(
 
     setSaveError(null);
     actionsRef.current.removeNodes(nodeIds).catch((error: unknown) => {
+      if (historyRef.current.undo.at(-1) === entry) {
+        historyRef.current = { ...historyRef.current, undo: historyRef.current.undo.slice(0, -1) };
+      }
+      setSaveError(error);
+    });
+  }
+
+  /**
+   * Groups a selection and records it as one step of history (issue #126) —
+   * folds the two calls `createGroup` makes under the hood (the group row,
+   * then the membership patch) into one entry, the same way `commitDelete`
+   * folds a multi-node remove into one.
+   *
+   * Pushed once the group actually exists, like `trackCreate` and for the
+   * same reason: there is nothing to record until the database hands back
+   * the id it assigned the new row, so a rejected call never becomes a
+   * history entry in the first place.
+   */
+  function commitGroup(memberNodeIds: readonly string[]) {
+    setSaveError(null);
+    actionsRef.current.createGroup(memberNodeIds).then(
+      (group) => {
+        historyRef.current = pushHistory(historyRef.current, {
+          kind: 'group',
+          group,
+          memberIds: memberNodeIds,
+        });
+      },
+      (error: unknown) => {
+        setSaveError(error);
+      },
+    );
+  }
+
+  /**
+   * Removes a group and records it as one step of history.
+   *
+   * The members are read off the board before the remove call goes out —
+   * `removeGroup` never hands them back, since the database detaches them
+   * itself, so this is the only place that still knows who was in it. Pushed
+   * ahead of the save, like `commitDelete`, and popped back off if the save
+   * is rejected and nothing has landed on top of it since.
+   */
+  function commitUngroup(groupNodeId: string) {
+    const group = nodesRef.current.find((node) => node.id === groupNodeId);
+    if (!group) return;
+    const memberIds = nodesRef.current
+      .filter((node) => node.groupId === groupNodeId)
+      .map((node) => node.id);
+
+    const entry: MoodboardHistoryEntry = { kind: 'ungroup', group, memberIds };
+    historyRef.current = pushHistory(historyRef.current, entry);
+
+    setSaveError(null);
+    actionsRef.current.removeGroup(groupNodeId).catch((error: unknown) => {
       if (historyRef.current.undo.at(-1) === entry) {
         historyRef.current = { ...historyRef.current, undo: historyRef.current.undo.slice(0, -1) };
       }
@@ -918,6 +1017,8 @@ function MoodboardCanvasImpl(
         actions={actions}
         onAddNode={commitCreate}
         onRemoveNodes={commitDelete}
+        onCreateGroup={commitGroup}
+        onRemoveGroup={commitUngroup}
         selectedNodeIds={selectedNodeIds}
         selectedGroupNodeIds={selectedGroupNodeIds}
         allLocked={
@@ -1024,7 +1125,28 @@ function remapEntry(
       return { kind: 'create', nodes: entry.nodes.map((node) => remapNode(node, idMap)) };
     case 'delete':
       return { kind: 'delete', nodes: entry.nodes.map((node) => remapNode(node, idMap)) };
+    case 'group':
+      return {
+        kind: 'group',
+        group: remapNode(entry.group, idMap),
+        memberIds: remapIds(entry.memberIds, idMap),
+      };
+    case 'ungroup':
+      return {
+        kind: 'ungroup',
+        group: remapNode(entry.group, idMap),
+        memberIds: remapIds(entry.memberIds, idMap),
+      };
   }
+}
+
+/**
+ * A group or ungroup entry's own member list needs the same rewrite a
+ * patch's `id` does — a member restored elsewhere in the same history is
+ * still one of these ids, just under a fresh one.
+ */
+function remapIds(ids: readonly string[], idMap: ReadonlyMap<string, string>): readonly string[] {
+  return ids.map((id) => idMap.get(id) ?? id);
 }
 
 /**
