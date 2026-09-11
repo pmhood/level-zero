@@ -41,6 +41,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { DomainExceptionFilter } from '../common/domain-exception.filter';
 import { AI_PROVIDERS } from '../infrastructure/ai.module';
+import { InlineAiRequestService } from '../infrastructure/inline-ai-request.service';
 import { PrototypeOutcomesAiController } from './prototype-outcomes-ai.controller';
 
 const clock = fixedClock('2026-03-01T09:00:00.000Z');
@@ -137,6 +138,7 @@ beforeEach(async () => {
         ),
       },
       { provide: AI_PROVIDERS, useValue: providers },
+      InlineAiRequestService,
       { provide: APP_FILTER, useClass: DomainExceptionFilter },
     ],
   }).compile();

@@ -39,6 +39,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { DomainExceptionFilter } from '../common/domain-exception.filter';
 import { AI_PROVIDERS } from '../infrastructure/ai.module';
+import { InlineAiRequestService } from '../infrastructure/inline-ai-request.service';
 import { DocumentAiController } from './document-ai.controller';
 
 const clock = fixedClock('2026-03-01T09:00:00.000Z');
@@ -84,6 +85,7 @@ function buildApp(registry: AiProviderRegistry) {
       { provide: GenerationService, useValue: generations },
       { provide: ContextResolver, useValue: resolver },
       { provide: AI_PROVIDERS, useValue: registry },
+      InlineAiRequestService,
       { provide: APP_FILTER, useClass: DomainExceptionFilter },
     ],
   }).compile();
