@@ -421,6 +421,46 @@ the sake of a text editor is the exact thing the entity model exists to prevent.
   per version; a body arrives only when one version is read or two are compared,
   which hands back both sides for a side-by-side view rather than diffing prose.
 
+### Comments and review
+
+```text
+Project ──owns──> Comment (target, parent, author, body, resolvedAt/By)
+Project ──owns──> ReviewDecision (target, state, actor, note, decidedAt)
+
+target = type (entity | asset | prototype_version) + id
+         + optional anchor (a document section) + optional entity version
+```
+
+A comment and a review decision are about the same kinds of thing, so they spell
+that thing the same way. `document` is not a target type: a GDD is a `document`
+entity, so reviewing one of its sections is an entity target with an `anchor`.
+
+- **A target is referenced, never copied.** `target_id` carries no foreign key —
+  the same choice `activities.subject_id` makes — because a row here has to
+  outlive what it names. The label a reader sees is resolved on every read, so a
+  rename is invisible to the thread about it, an archived target still reads (and
+  says it is archived), and one that has gone entirely renders its history
+  instead of an error.
+- **A comment is never inside its target's `data`.** Threads are rows, so they
+  survive edits, versions and archiving of the thing discussed. Bodies are plain
+  text: rich text in this repo is the material being designed, not a remark
+  about it.
+- **A thread is one level deep.** A reply inherits its parent's target rather
+  than naming one, and only the comment that starts a thread can be resolved.
+  Resolving records who did it; editing and deleting are the author's alone.
+- **Review state is a history, not a column.** Decisions are only ever inserted,
+  and a target's state is the newest one that still applies, so who approved what
+  is always answerable. `draft` is what no decision at all reads as.
+- **A judgement is pinned to what was read.** Approving or rejecting an entity
+  records the version in force, enforced by a composite foreign key against
+  `entity_versions(id, entity_id, project_id)`. Committing a new version
+  therefore does not inherit the approval, and nothing else moves review state:
+  generating content, capturing a prototype version and committing all leave it
+  where the last person put it.
+- **Existing statuses are left alone.** `EntityStatus`, `AssetStatus` and
+  `PrototypeVersionStatus` are lifecycle — being worked on, playable, archived —
+  which is orthogonal to whether anyone has read the work and agreed to it.
+
 ### Search and retrieval
 
 ```text
@@ -584,9 +624,29 @@ generation), `GET :jobId` reads one, and `GET stream` is a server-sent event
 stream of every job change in the project. There is no route to start or cancel
 a job directly: work is queued and cancelled through the feature that owns it.
 
+Comments live under `/api/projects/:projectId/comments`: `POST` starts a thread on
+a target (`targetType` + `targetId`, plus an `anchor` for a section of a
+document), `GET` reads that target's threads with their replies,
+`POST :commentId/replies` adds to one, `POST :commentId/resolve` · `/reopen`
+close and reopen it, and `PATCH`/`DELETE :commentId` are the author's own — an
+`actor` who is not the author gets 403, while another project's comment is 404
+for everyone.
+
+Review state lives under `/api/projects/:projectId/reviews`: `POST` records one
+decision (`draft`, `review`, `approved`, `rejected`) with its actor and an
+optional note, `GET` answers where the target stands now, and `GET reviews/history`
+lists every decision newest first. Nothing updates or deletes a decision.
+Approving or rejecting an entity pins the judgement to the version the reviewer
+was reading, so committing a new version leaves the state back at `draft` with
+the earlier approval reported as `staleDecision` rather than silently carried
+forward. A status reads even when its target has gone — `target` comes back
+null — while recording a decision about one is a 404.
+
 Domain errors map to HTTP in one place: `NotFoundError` → 404,
-`ValidationError` → 400, `ConflictError` → 409, each with a stable `error` code
-and structured `details`.
+`ValidationError` → 400, `ForbiddenError` → 403, `ConflictError` → 409, each with
+a stable `error` code and structured `details`. 403 is only for an act that is
+not the caller's — editing another author's comment; a cross-project id is
+always 404, so nothing can be probed for.
 
 ## Architecture rules
 
@@ -670,6 +730,13 @@ bypasses the services:
   `(source_type, source_id)` is unique, so the text a query matches cannot drift
   from the text that was indexed, and re-indexing a record replaces its row
   rather than adding a second one.
+- A comment or a review decision that names an entity version references
+  `entity_versions(id, entity_id, project_id)`, so a judgement cannot cite
+  another entity's or another project's history, and `ON DELETE RESTRICT` keeps
+  the reviewed version alive for as long as something cites it. A reply's parent
+  is referenced by `(id, project_id)`, so a thread cannot span two projects, and
+  check constraints keep a reply from carrying a resolution and a non-entity
+  target from carrying a version.
 
 > **NestJS gotcha:** constructor injection relies on `design:paramtypes` metadata,
 > which TypeScript only emits for _value_ imports. `@typescript-eslint/consistent-type-imports`

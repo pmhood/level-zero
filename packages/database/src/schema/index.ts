@@ -11,4 +11,5 @@ export * from './moodboards';
 export * from './playtests';
 export * from './projects';
 export * from './prototype-versions';
+export * from './reviews';
 export * from './search-documents';

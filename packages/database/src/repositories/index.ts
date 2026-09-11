@@ -1,5 +1,6 @@
 export { DrizzleActivityRepository } from './activity-repository';
 export { DrizzleAssetRepository } from './asset-repository';
+export { DrizzleCommentRepository } from './comment-repository';
 export { DrizzleEntityRelationshipRepository } from './entity-relationship-repository';
 export { DrizzleEntityRepository } from './entity-repository';
 export { DrizzleEntityVersionRepository } from './entity-version-repository';
@@ -10,5 +11,6 @@ export { DrizzleMoodboardRepository } from './moodboard-repository';
 export { DrizzlePlaytestRepository } from './playtest-repository';
 export { DrizzleProjectRepository } from './project-repository';
 export { DrizzlePrototypeVersionRepository } from './prototype-version-repository';
+export { DrizzleReviewDecisionRepository } from './review-decision-repository';
 export { DrizzleSearchDocumentRepository } from './search-document-repository';
 export { escapeLikePattern } from './mappers';

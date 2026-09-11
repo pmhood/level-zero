@@ -22,6 +22,7 @@ import { PlaytestsModule } from './playtests/playtests.module';
 import { ProjectsModule } from './projects/projects.module';
 import { PrototypesModule } from './prototypes/prototypes.module';
 import { RelationshipsModule } from './relationships/relationships.module';
+import { ReviewsModule } from './reviews/reviews.module';
 import { SearchModule } from './search/search.module';
 import { VersionsModule } from './versions/versions.module';
 
@@ -57,6 +58,7 @@ import { VersionsModule } from './versions/versions.module';
     ActivityModule,
     SearchModule,
     FindingsModule,
+    ReviewsModule,
     InspectorModule,
   ],
 })

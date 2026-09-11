@@ -4,6 +4,7 @@ export { sequentialIdGenerator, uuidIdGenerator, type IdGenerator } from './shar
 export {
   ConflictError,
   DomainError,
+  ForbiddenError,
   NotFoundError,
   ValidationError,
   isDomainError,
@@ -559,6 +560,58 @@ export {
   type ConsistencyScanServiceDeps,
 } from './finding/consistency-scan-service';
 export { FindingService, type FindingServiceDeps } from './finding/finding-service';
+
+export {
+  MAX_REVIEW_TARGET_ANCHOR_LENGTH,
+  REVIEW_TARGET_TYPES,
+  requireReviewTarget,
+  reviewTargetFilter,
+  type ResolvedReviewTarget,
+  type ReviewTarget,
+  type ReviewTargetFilter,
+  type ReviewTargetInput,
+  type ReviewTargetType,
+} from './review/review-target';
+export { ReviewTargetResolver } from './review/review-target-resolver';
+export {
+  MAX_REVIEW_ACTOR_LENGTH,
+  MAX_REVIEW_NOTE_LENGTH,
+  REVIEW_STATES,
+  createReviewDecision,
+  isReviewJudgement,
+  pinJudgement,
+  resolveReviewState,
+  type RecordReviewDecisionInput,
+  type ReviewDecision,
+  type ReviewState,
+  type ReviewStatus,
+} from './review/review-decision';
+export { type ReviewDecisionRepository } from './review/review-decision-repository';
+export {
+  ReviewService,
+  type NewReviewDecisionInput,
+  type ReviewServiceDeps,
+} from './review/review-service';
+export {
+  MAX_COMMENT_AUTHOR_LENGTH,
+  MAX_COMMENT_BODY_LENGTH,
+  applyCommentEdit,
+  createComment,
+  groupCommentThreads,
+  reopenComment,
+  resolveComment,
+  type Comment,
+  type CommentThread,
+  type CreateCommentInput,
+} from './review/comment';
+export { type CommentRepository } from './review/comment-repository';
+export {
+  CommentService,
+  type CommentServiceDeps,
+  type EditCommentInput,
+  type NewCommentInput,
+  type NewReplyInput,
+} from './review/comment-service';
 
 export {
   MAX_DIFFERENCE_VALUE_LENGTH,

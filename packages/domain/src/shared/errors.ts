@@ -35,6 +35,24 @@ export class ValidationError extends DomainError {
   }
 }
 
+/**
+ * The caller may see the thing but not do this to it — editing a comment
+ * somebody else wrote.
+ *
+ * Distinct from `NotFoundError`, which is what an id from *another project*
+ * reports: project scoping is structural and answers "not found" precisely so a
+ * caller cannot probe for rows it may not see. This is for the narrower case
+ * where the row is already on the caller's screen and the act is still not
+ * theirs.
+ */
+export class ForbiddenError extends DomainError {
+  readonly code = 'forbidden';
+
+  constructor(message: string, details: Record<string, unknown> = {}) {
+    super(message, details);
+  }
+}
+
 export class ConflictError extends DomainError {
   readonly code = 'conflict';
 

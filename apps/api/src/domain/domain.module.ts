@@ -1,6 +1,7 @@
 import {
   DrizzleActivityRepository,
   DrizzleAssetRepository,
+  DrizzleCommentRepository,
   DrizzleEntityRelationshipRepository,
   DrizzleEntityRepository,
   DrizzleEntityVersionRepository,
@@ -11,12 +12,14 @@ import {
   DrizzlePlaytestRepository,
   DrizzleProjectRepository,
   DrizzlePrototypeVersionRepository,
+  DrizzleReviewDecisionRepository,
   DrizzleSearchDocumentRepository,
   type DatabaseClient,
 } from '@level-zero/database';
 import {
   ActivityService,
   AssetService,
+  CommentService,
   ConsistencyScanService,
   DocumentService,
   EntityRelationshipService,
@@ -31,12 +34,15 @@ import {
   PlaytestService,
   ProjectService,
   PrototypeService,
+  ReviewService,
+  ReviewTargetResolver,
   SearchIndexService,
   SearchService,
   systemClock,
   uuidIdGenerator,
   type ActivityRepository,
   type AssetRepository,
+  type CommentRepository,
   type EntityRelationshipRepository,
   type EntityRepository,
   type EmbeddingProvider,
@@ -52,6 +58,7 @@ import {
   type PlaytestRepository,
   type ProjectRepository,
   type PrototypeVersionRepository,
+  type ReviewDecisionRepository,
   type SearchDocumentRepository,
 } from '@level-zero/domain';
 import { Global, Module } from '@nestjs/common';
@@ -76,6 +83,8 @@ export const JOB_REPOSITORY = Symbol('JOB_REPOSITORY');
 export const MOODBOARD_REPOSITORY = Symbol('MOODBOARD_REPOSITORY');
 export const SEARCH_DOCUMENT_REPOSITORY = Symbol('SEARCH_DOCUMENT_REPOSITORY');
 export const FINDING_REPOSITORY = Symbol('FINDING_REPOSITORY');
+export const COMMENT_REPOSITORY = Symbol('COMMENT_REPOSITORY');
+export const REVIEW_DECISION_REPOSITORY = Symbol('REVIEW_DECISION_REPOSITORY');
 export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
 
 /**
@@ -411,7 +420,13 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     },
     {
       provide: ConsistencyScanService,
-      inject: [ENTITY_REPOSITORY, PROTOTYPE_VERSION_REPOSITORY, FINDING_REPOSITORY, JobService, DOMAIN_DEPS],
+      inject: [
+        ENTITY_REPOSITORY,
+        PROTOTYPE_VERSION_REPOSITORY,
+        FINDING_REPOSITORY,
+        JobService,
+        DOMAIN_DEPS,
+      ],
       useFactory: (
         entities: EntityRepository,
         prototypeVersions: PrototypeVersionRepository,
@@ -420,6 +435,52 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
         deps: EntityServiceDeps,
       ): ConsistencyScanService =>
         new ConsistencyScanService(entities, prototypeVersions, findings, jobs, deps),
+    },
+    {
+      provide: COMMENT_REPOSITORY,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: DatabaseClient): CommentRepository =>
+        new DrizzleCommentRepository(client.db),
+    },
+    {
+      provide: REVIEW_DECISION_REPOSITORY,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: DatabaseClient): ReviewDecisionRepository =>
+        new DrizzleReviewDecisionRepository(client.db),
+    },
+    {
+      provide: ReviewTargetResolver,
+      inject: [
+        ENTITY_REPOSITORY,
+        ASSET_REPOSITORY,
+        PROTOTYPE_VERSION_REPOSITORY,
+        VERSION_REPOSITORY,
+      ],
+      useFactory: (
+        entities: EntityRepository,
+        assets: AssetRepository,
+        prototypeVersions: PrototypeVersionRepository,
+        versions: EntityVersionRepository,
+      ): ReviewTargetResolver =>
+        new ReviewTargetResolver(entities, assets, prototypeVersions, versions),
+    },
+    {
+      provide: CommentService,
+      inject: [COMMENT_REPOSITORY, ReviewTargetResolver, DOMAIN_DEPS],
+      useFactory: (
+        comments: CommentRepository,
+        targets: ReviewTargetResolver,
+        deps: EntityServiceDeps,
+      ): CommentService => new CommentService(comments, targets, deps),
+    },
+    {
+      provide: ReviewService,
+      inject: [REVIEW_DECISION_REPOSITORY, ReviewTargetResolver, DOMAIN_DEPS],
+      useFactory: (
+        decisions: ReviewDecisionRepository,
+        targets: ReviewTargetResolver,
+        deps: EntityServiceDeps,
+      ): ReviewService => new ReviewService(decisions, targets, deps),
     },
     { provide: APP_FILTER, useClass: DomainExceptionFilter },
   ],
@@ -442,6 +503,9 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     SearchIndexService,
     FindingService,
     ConsistencyScanService,
+    CommentService,
+    ReviewService,
+    ReviewTargetResolver,
     PROJECT_REPOSITORY,
     ENTITY_REPOSITORY,
     RELATIONSHIP_REPOSITORY,
@@ -455,6 +519,8 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     ACTIVITY_REPOSITORY,
     SEARCH_DOCUMENT_REPOSITORY,
     FINDING_REPOSITORY,
+    COMMENT_REPOSITORY,
+    REVIEW_DECISION_REPOSITORY,
     DOMAIN_DEPS,
   ],
 })

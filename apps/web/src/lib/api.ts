@@ -2,6 +2,8 @@ import type { AiCapability, ResolvedContext } from '@level-zero/ai';
 import type {
   Asset,
   AssetKind,
+  Comment,
+  CommentThread,
   AssetPage,
   AssetStatus,
   CreateDocumentInput,
@@ -50,6 +52,10 @@ import type {
   PrototypeVersionStatus,
   RelationshipDirection,
   RelationType,
+  ReviewDecision,
+  ReviewState,
+  ReviewStatus,
+  ReviewTargetType,
   SearchResultPage,
   SearchSourceType,
   SnapshotDocumentInput,
@@ -926,4 +932,106 @@ export function acceptAiActionResult(
   input: AcceptAiActionInput,
 ): Promise<Entity> {
   return post(`/api/projects/${projectId}/ai/actions/${generationId}/apply`, input);
+}
+
+// --- Comments and review ----------------------------------------------------
+
+/**
+ * What a comment or a review decision is about: an entity (a document
+ * included), an asset or a prototype version, optionally narrowed to a stable
+ * anchor inside it.
+ */
+export interface ReviewTargetParams {
+  targetType: ReviewTargetType;
+  targetId: string;
+  anchor?: string;
+}
+
+/** The target's threads, oldest first, each with its replies. */
+export function listCommentThreads(
+  projectId: string,
+  target: ReviewTargetParams,
+): Promise<CommentThread[]> {
+  return apiFetch(`/api/projects/${projectId}/comments${toQueryString(target)}`);
+}
+
+export interface CreateCommentInput extends ReviewTargetParams {
+  /** Free text until authentication lands; then the session's user. */
+  author: string;
+  body: string;
+}
+
+export function createComment(projectId: string, input: CreateCommentInput): Promise<Comment> {
+  return post(`/api/projects/${projectId}/comments`, input);
+}
+
+export function replyToComment(
+  projectId: string,
+  commentId: string,
+  input: { author: string; body: string },
+): Promise<Comment> {
+  return post(`/api/projects/${projectId}/comments/${commentId}/replies`, input);
+}
+
+/** The author's own text, rewritten. Anyone else gets a 403. */
+export function updateComment(
+  projectId: string,
+  commentId: string,
+  input: { actor: string; body: string },
+): Promise<Comment> {
+  return patch(`/api/projects/${projectId}/comments/${commentId}`, input);
+}
+
+/** Deleting the comment that starts a thread deletes the replies under it. */
+export function deleteComment(projectId: string, commentId: string, actor: string): Promise<void> {
+  return apiFetch(`/api/projects/${projectId}/comments/${commentId}${toQueryString({ actor })}`, {
+    method: 'DELETE',
+  });
+}
+
+export function resolveComment(
+  projectId: string,
+  commentId: string,
+  actor: string,
+): Promise<Comment> {
+  return post(`/api/projects/${projectId}/comments/${commentId}/resolve`, { actor });
+}
+
+export function reopenComment(projectId: string, commentId: string): Promise<Comment> {
+  return post(`/api/projects/${projectId}/comments/${commentId}/reopen`);
+}
+
+/**
+ * Where the target stands. `target` comes back null when the thing reviewed no
+ * longer resolves, and the state is still reported.
+ */
+export function getReviewStatus(
+  projectId: string,
+  target: ReviewTargetParams,
+): Promise<ReviewStatus> {
+  return apiFetch(`/api/projects/${projectId}/reviews${toQueryString(target)}`);
+}
+
+/** Every decision about the target, newest first. Nothing is ever overwritten. */
+export function listReviewHistory(
+  projectId: string,
+  target: ReviewTargetParams,
+): Promise<ReviewDecision[]> {
+  return apiFetch(`/api/projects/${projectId}/reviews/history${toQueryString(target)}`);
+}
+
+export interface RecordReviewDecisionInput extends ReviewTargetParams {
+  state: ReviewState;
+  /** Free text until authentication lands; then the session's user. */
+  actor: string;
+  note?: string;
+  /** An entity version to judge. Left out, a judgement lands on the current one. */
+  versionId?: string;
+}
+
+export function recordReviewDecision(
+  projectId: string,
+  input: RecordReviewDecisionInput,
+): Promise<ReviewDecision> {
+  return post(`/api/projects/${projectId}/reviews`, input);
 }

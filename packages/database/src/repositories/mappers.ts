@@ -1,6 +1,7 @@
 import {
   type Activity,
   type Asset,
+  type Comment,
   type Entity,
   type EntityRelationship,
   type EntityVersion,
@@ -16,6 +17,8 @@ import {
   type PlaytestSession,
   type Project,
   type PrototypeVersion,
+  type ReviewDecision,
+  type ReviewTarget,
   type SearchDocument,
 } from '@level-zero/domain';
 
@@ -49,6 +52,12 @@ import {
   type PlaytestSessionRow,
 } from '../schema/playtests';
 import { type NewProjectRow, type ProjectRow } from '../schema/projects';
+import {
+  type CommentRow,
+  type NewCommentRow,
+  type NewReviewDecisionRow,
+  type ReviewDecisionRow,
+} from '../schema/reviews';
 import { type NewSearchDocumentRow, type SearchDocumentRow } from '../schema/search-documents';
 import {
   type NewPrototypeEntityVersionRow,
@@ -708,6 +717,76 @@ export function toFindingRow(finding: Finding): NewFindingRow {
     dismissedAt: finding.dismissedAt,
     dismissedBy: finding.dismissedBy,
     dismissedReason: finding.dismissedReason,
+  };
+}
+
+export function toComment(row: CommentRow): Comment {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    target: toReviewTarget(row),
+    parentCommentId: row.parentCommentId,
+    author: row.author,
+    body: row.body,
+    resolvedAt: row.resolvedAt,
+    resolvedBy: row.resolvedBy,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export function toCommentRow(comment: Comment): NewCommentRow {
+  return {
+    id: comment.id,
+    projectId: comment.projectId,
+    targetType: comment.target.type,
+    targetId: comment.target.id,
+    targetAnchor: comment.target.anchor,
+    versionId: comment.target.versionId,
+    parentCommentId: comment.parentCommentId,
+    author: comment.author,
+    body: comment.body,
+    resolvedAt: comment.resolvedAt,
+    resolvedBy: comment.resolvedBy,
+    createdAt: comment.createdAt,
+    updatedAt: comment.updatedAt,
+  };
+}
+
+export function toReviewDecision(row: ReviewDecisionRow): ReviewDecision {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    target: toReviewTarget(row),
+    state: row.state,
+    actor: row.actor,
+    note: row.note,
+    decidedAt: row.decidedAt,
+  };
+}
+
+export function toReviewDecisionRow(decision: ReviewDecision): NewReviewDecisionRow {
+  return {
+    id: decision.id,
+    projectId: decision.projectId,
+    targetType: decision.target.type,
+    targetId: decision.target.id,
+    targetAnchor: decision.target.anchor,
+    versionId: decision.target.versionId,
+    state: decision.state,
+    actor: decision.actor,
+    note: decision.note,
+    decidedAt: decision.decidedAt,
+  };
+}
+
+/** The four columns both review tables spell the target with. */
+function toReviewTarget(row: CommentRow | ReviewDecisionRow): ReviewTarget {
+  return {
+    type: row.targetType,
+    id: row.targetId,
+    anchor: row.targetAnchor,
+    versionId: row.versionId,
   };
 }
 

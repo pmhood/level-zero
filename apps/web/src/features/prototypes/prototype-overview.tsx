@@ -3,6 +3,7 @@
 import type { PrototypeVersion } from '@level-zero/domain';
 import { Button, SectionPanel, Tag } from '@level-zero/ui';
 
+import { ReviewSection } from '@/features/review/review-section';
 import { apiErrorMessage } from '@/lib/api';
 
 import { PrototypeMembersList } from './prototype-members-list';
@@ -88,6 +89,19 @@ export function PrototypeOverview({
             version={selectedVersion}
           />
         </SectionPanel>
+
+        {/*
+          A prototype version is immutable, so a decision about it stays true:
+          keyed by the selected version so switching versions reads that
+          version's own review rather than carrying the last one's over.
+        */}
+        <ReviewSection
+          key={selectedVersion.id}
+          projectId={projectId}
+          target={{ targetType: 'prototype_version', targetId: selectedVersion.id }}
+          title="Version review"
+          description={`This applies to v${selectedVersion.versionNumber} and nothing after it.`}
+        />
       </div>
     </div>
   );
