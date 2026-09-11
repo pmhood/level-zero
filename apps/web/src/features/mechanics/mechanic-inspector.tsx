@@ -23,7 +23,7 @@ export function MechanicInspector({
 }: {
   projectId: string;
   mechanic: Entity;
-  onClose: () => void;
+  onClose?: () => void;
 }) {
   const [tab, setTab] = useState<InspectorTab>('links');
   const archiveMechanic = useArchiveMechanic(projectId);

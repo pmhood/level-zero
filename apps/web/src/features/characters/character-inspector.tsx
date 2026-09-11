@@ -24,7 +24,7 @@ export function CharacterInspector({
 }: {
   projectId: string;
   character: Entity;
-  onClose: () => void;
+  onClose?: () => void;
 }) {
   const archiveCharacter = useArchiveCharacter(projectId);
   const restoreCharacter = useRestoreCharacter(projectId);
