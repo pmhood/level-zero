@@ -1,6 +1,7 @@
 import {
   ActivityService,
   ConflictError,
+  EntityRelationshipService,
   EntityService,
   PlaytestService,
   ProjectService,
@@ -17,6 +18,7 @@ import { type DatabaseClient } from '../postgres/client';
 import { connectTestDatabase, truncateDomainTables } from '../testing/test-database';
 import { DrizzleActivityRepository } from './activity-repository';
 import { DrizzleAssetRepository } from './asset-repository';
+import { DrizzleEntityRelationshipRepository } from './entity-relationship-repository';
 import { DrizzleEntityRepository } from './entity-repository';
 import { DrizzleEntityVersionRepository } from './entity-version-repository';
 import { DrizzlePlaytestRepository } from './playtest-repository';
@@ -40,6 +42,7 @@ beforeAll(async () => {
   const entityRepo = new DrizzleEntityRepository(client.db);
   const entityVersionRepo = new DrizzleEntityVersionRepository(client.db);
   const assetRepo = new DrizzleAssetRepository(client.db);
+  const relationshipRepo = new DrizzleEntityRelationshipRepository(client.db);
   const prototypeVersionRepo = new DrizzlePrototypeVersionRepository(client.db);
   playtestRepo = new DrizzlePlaytestRepository(client.db);
 
@@ -47,12 +50,14 @@ beforeAll(async () => {
 
   projects = new ProjectService(projectRepo, deps);
   entities = new EntityService(entityRepo, projectRepo, activity, deps);
+  const relationships = new EntityRelationshipService(relationshipRepo, entityRepo, deps);
   prototypes = new PrototypeService(
     prototypeVersionRepo,
     entities,
     entityVersionRepo,
     assetRepo,
     activity,
+    relationships,
     deps,
   );
   playtests = new PlaytestService(playtestRepo, prototypeVersionRepo, entities, deps);

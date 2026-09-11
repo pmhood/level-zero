@@ -4,12 +4,14 @@ import { ActivityService } from '../activity/activity-service';
 import { AssetService } from '../asset/asset-service';
 import { EntityService } from '../entity/entity-service';
 import { createProject, type Project } from '../project/project';
+import { EntityRelationshipService } from '../relationship/entity-relationship-service';
 import { fixedClock } from '../shared/clock';
 import { ConflictError, NotFoundError, ValidationError } from '../shared/errors';
 import { sequentialIdGenerator } from '../shared/id';
 import {
   InMemoryActivityRepository,
   InMemoryAssetRepository,
+  InMemoryEntityRelationshipRepository,
   InMemoryEntityRepository,
   InMemoryEntityVersionRepository,
   InMemoryObjectStorageProvider,
@@ -24,6 +26,7 @@ const clock = fixedClock('2026-03-01T09:00:00.000Z');
 let entities: EntityService;
 let versions: EntityVersionService;
 let assets: AssetService;
+let relationships: EntityRelationshipService;
 let prototypes: PrototypeService;
 let activityRepo: InMemoryActivityRepository;
 let project: Project;
@@ -35,18 +38,21 @@ beforeEach(async () => {
   const entityRepo = new InMemoryEntityRepository();
   const versionRepo = new InMemoryEntityVersionRepository();
   const assetRepo = new InMemoryAssetRepository();
+  const relationshipRepo = new InMemoryEntityRelationshipRepository();
   activityRepo = new InMemoryActivityRepository();
   const activity = new ActivityService(activityRepo, deps);
 
   entities = new EntityService(entityRepo, projectRepo, activity, deps);
   versions = new EntityVersionService(versionRepo, entityRepo, activity, deps);
   assets = new AssetService(assetRepo, projectRepo, new InMemoryObjectStorageProvider(), deps);
+  relationships = new EntityRelationshipService(relationshipRepo, entityRepo, deps);
   prototypes = new PrototypeService(
     new InMemoryPrototypeVersionRepository(),
     entities,
     versionRepo,
     assetRepo,
     activity,
+    relationships,
     deps,
   );
 
@@ -132,6 +138,79 @@ describe('creating a prototype', () => {
         members: [{ entityId: draft.id }],
       }),
     ).rejects.toThrow(ConflictError);
+  });
+});
+
+describe('promoting a mechanic into a prototype', () => {
+  it('records a promoted_to edge from the source to the new prototype', async () => {
+    const oxygen = await committed('mechanic', 'Oxygen drain');
+
+    const { prototype, version } = await prototypes.create(project.id, {
+      prototypeName: 'Oxygen drain, prototyped',
+      members: [{ entityId: oxygen.id }],
+      promotedFromEntityId: oxygen.id,
+    });
+
+    expect(version.members).toEqual([
+      { entityId: oxygen.id, entityVersionId: oxygen.currentVersionId },
+    ]);
+
+    const graph = await relationships.neighborhood(project.id, oxygen.id);
+    expect(graph.outgoing).toHaveLength(1);
+    expect(graph.outgoing[0]).toMatchObject({
+      direction: 'outgoing',
+      entity: { id: prototype.id, type: 'prototype' },
+      relationship: {
+        sourceEntityId: oxygen.id,
+        targetEntityId: prototype.id,
+        relation: 'promoted_to',
+        metadata: { fromType: 'mechanic', toType: 'prototype' },
+      },
+    });
+  });
+
+  it('promotes the same mechanic into two prototypes', async () => {
+    const oxygen = await committed('mechanic', 'Oxygen drain');
+
+    const first = await prototypes.create(project.id, {
+      prototypeName: 'First experiment',
+      members: [{ entityId: oxygen.id }],
+      promotedFromEntityId: oxygen.id,
+    });
+    const second = await prototypes.create(project.id, {
+      prototypeName: 'Second experiment',
+      members: [{ entityId: oxygen.id }],
+      promotedFromEntityId: oxygen.id,
+    });
+
+    expect(first.prototype.id).not.toBe(second.prototype.id);
+
+    const graph = await relationships.neighborhood(project.id, oxygen.id);
+    expect(graph.outgoing.filter((edge) => edge.entity.type === 'prototype')).toHaveLength(2);
+  });
+
+  it('rejects a source type the promotion catalogue does not offer', async () => {
+    const idea = await entities.create(project.id, { type: 'idea', name: 'A rough idea' });
+
+    await expect(
+      prototypes.create(project.id, {
+        prototypeName: 'Too early',
+        members: [],
+        promotedFromEntityId: idea.id,
+      }),
+    ).rejects.toThrow(ValidationError);
+  });
+
+  it('refuses to promote a source entity from another project', async () => {
+    const foreign = await committed('mechanic', 'Someone else', otherProject.id);
+
+    await expect(
+      prototypes.create(project.id, {
+        prototypeName: 'Cross-project promotion',
+        members: [],
+        promotedFromEntityId: foreign.id,
+      }),
+    ).rejects.toThrow(NotFoundError);
   });
 });
 

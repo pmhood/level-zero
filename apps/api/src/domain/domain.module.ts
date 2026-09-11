@@ -262,6 +262,7 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
         VERSION_REPOSITORY,
         ASSET_REPOSITORY,
         ActivityService,
+        EntityRelationshipService,
         DOMAIN_DEPS,
       ],
       useFactory: (
@@ -270,9 +271,18 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
         versions: EntityVersionRepository,
         assets: AssetRepository,
         activity: ActivityService,
+        relationships: EntityRelationshipService,
         deps: EntityServiceDeps,
       ): PrototypeService =>
-        new PrototypeService(prototypeVersions, entities, versions, assets, activity, deps),
+        new PrototypeService(
+          prototypeVersions,
+          entities,
+          versions,
+          assets,
+          activity,
+          relationships,
+          deps,
+        ),
     },
     {
       provide: PLAYTEST_REPOSITORY,

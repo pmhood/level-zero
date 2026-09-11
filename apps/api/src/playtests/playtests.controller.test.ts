@@ -1,6 +1,7 @@
 import {
   ActivityService,
   AssetService,
+  EntityRelationshipService,
   EntityService,
   EntityVersionService,
   PlaytestService,
@@ -15,6 +16,7 @@ import {
 import {
   InMemoryActivityRepository,
   InMemoryAssetRepository,
+  InMemoryEntityRelationshipRepository,
   InMemoryEntityRepository,
   InMemoryEntityVersionRepository,
   InMemoryObjectStorageProvider,
@@ -53,12 +55,18 @@ beforeEach(async () => {
   entities = new EntityService(entityRepo, projects, activity, deps);
   versions = new EntityVersionService(versionRepo, entityRepo, activity, deps);
   new AssetService(assetRepo, projects, new InMemoryObjectStorageProvider(), deps);
+  const relationships = new EntityRelationshipService(
+    new InMemoryEntityRelationshipRepository(),
+    entityRepo,
+    deps,
+  );
   prototypes = new PrototypeService(
     prototypeVersionRepo,
     entities,
     versionRepo,
     assetRepo,
     activity,
+    relationships,
     deps,
   );
   const playtestService = new PlaytestService(playtestRepo, prototypeVersionRepo, entities, deps);
