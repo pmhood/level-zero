@@ -172,6 +172,27 @@ export function dismissFinding(
 }
 
 /**
+ * Reverses a dismissal — the "one click" undo §4.4 promises. A finding that
+ * is not dismissed is returned unchanged.
+ *
+ * Goes back to `open` unconditionally rather than trying to guess whether the
+ * underlying contradiction is still real: that judgement belongs to the next
+ * scan, the same authority that would have closed it as `resolved` if nobody
+ * had dismissed it in the first place. The dismissal fields are cleared, not
+ * left stale, so a reopened row does not read as still dismissed by someone.
+ */
+export function reopenFinding(finding: Finding): Finding {
+  if (finding.status !== 'dismissed') return finding;
+  return {
+    ...finding,
+    status: 'open',
+    dismissedAt: null,
+    dismissedBy: null,
+    dismissedReason: null,
+  };
+}
+
+/**
  * Closes a finding a fresh scan no longer produced.
  *
  * Only an `open` row moves to `resolved` this way and it is idempotent on

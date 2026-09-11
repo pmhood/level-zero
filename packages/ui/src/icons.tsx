@@ -105,3 +105,19 @@ export const DocumentIcon = createIcon(
     <path d="M6.5 6v2M6.5 10v2M6.5 14v2" />
   </>,
 );
+
+/** `assets/icons/warning.svg` — the Consistency surface's sidebar mark. */
+export const WarningIcon = createIcon(
+  <>
+    <path d="M12 3 21 20H3L12 3Z" />
+    <path d="M12 9v5M12 17h.01" />
+  </>,
+);
+
+/** `assets/icons/refresh.svg` — reused for "Run analysis". */
+export const RefreshIcon = createIcon(
+  <>
+    <path d="M20 7v5h-5" />
+    <path d="M18.5 8.5A7.5 7.5 0 1 0 19 15" />
+  </>,
+);

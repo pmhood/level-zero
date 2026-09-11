@@ -4,6 +4,7 @@ import {
   DrizzleEntityRelationshipRepository,
   DrizzleEntityRepository,
   DrizzleEntityVersionRepository,
+  DrizzleFindingRepository,
   DrizzleGenerationRepository,
   DrizzleJobRepository,
   DrizzleMoodboardRepository,
@@ -16,10 +17,12 @@ import {
 import {
   ActivityService,
   AssetService,
+  ConsistencyScanService,
   DocumentService,
   EntityRelationshipService,
   EntityService,
   EntityVersionService,
+  FindingService,
   GenerationService,
   JobService,
   LineageService,
@@ -38,6 +41,7 @@ import {
   type EmbeddingProvider,
   type EntityVersionRepository,
   type EntityServiceDeps,
+  type FindingRepository,
   type GenerationRepository,
   type JobEvents,
   type JobQueue,
@@ -70,6 +74,7 @@ export const PLAYTEST_REPOSITORY = Symbol('PLAYTEST_REPOSITORY');
 export const JOB_REPOSITORY = Symbol('JOB_REPOSITORY');
 export const MOODBOARD_REPOSITORY = Symbol('MOODBOARD_REPOSITORY');
 export const SEARCH_DOCUMENT_REPOSITORY = Symbol('SEARCH_DOCUMENT_REPOSITORY');
+export const FINDING_REPOSITORY = Symbol('FINDING_REPOSITORY');
 export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
 
 /**
@@ -383,6 +388,30 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
         embeddings: EmbeddingProvider,
       ): SearchService => new SearchService(documents, embeddings),
     },
+    {
+      provide: FINDING_REPOSITORY,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: DatabaseClient): FindingRepository =>
+        new DrizzleFindingRepository(client.db),
+    },
+    {
+      provide: FindingService,
+      inject: [FINDING_REPOSITORY, DOMAIN_DEPS],
+      useFactory: (findings: FindingRepository, deps: EntityServiceDeps): FindingService =>
+        new FindingService(findings, deps),
+    },
+    {
+      provide: ConsistencyScanService,
+      inject: [ENTITY_REPOSITORY, PROTOTYPE_VERSION_REPOSITORY, FINDING_REPOSITORY, JobService, DOMAIN_DEPS],
+      useFactory: (
+        entities: EntityRepository,
+        prototypeVersions: PrototypeVersionRepository,
+        findings: FindingRepository,
+        jobs: JobService,
+        deps: EntityServiceDeps,
+      ): ConsistencyScanService =>
+        new ConsistencyScanService(entities, prototypeVersions, findings, jobs, deps),
+    },
     { provide: APP_FILTER, useClass: DomainExceptionFilter },
   ],
   exports: [
@@ -401,6 +430,8 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     ActivityService,
     SearchService,
     SearchIndexService,
+    FindingService,
+    ConsistencyScanService,
     PROJECT_REPOSITORY,
     ENTITY_REPOSITORY,
     RELATIONSHIP_REPOSITORY,
@@ -413,6 +444,7 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     JOB_REPOSITORY,
     ACTIVITY_REPOSITORY,
     SEARCH_DOCUMENT_REPOSITORY,
+    FINDING_REPOSITORY,
     DOMAIN_DEPS,
   ],
 })

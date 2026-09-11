@@ -6,6 +6,7 @@ import { ApiConfigModule } from './config/config.module';
 import { DocumentsModule } from './documents/documents.module';
 import { DomainModule } from './domain/domain.module';
 import { EntitiesModule } from './entities/entities.module';
+import { FindingsModule } from './findings/findings.module';
 import { GenerationsModule } from './generations/generations.module';
 import { HealthModule } from './health/health.module';
 import { AiModule } from './infrastructure/ai.module';
@@ -54,6 +55,7 @@ import { VersionsModule } from './versions/versions.module';
     JobsModule,
     ActivityModule,
     SearchModule,
+    FindingsModule,
   ],
 })
 export class AppModule {}

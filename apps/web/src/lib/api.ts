@@ -18,10 +18,14 @@ import type {
   EntityStatus,
   EntityType,
   EntityVersion,
+  Finding,
+  FindingPage,
+  FindingStatus,
   Generation,
   GenerationPage,
   GenerationProvenance,
   GenerationStatus,
+  Job,
   JobKind,
   JobPage,
   JobStatus,
@@ -671,4 +675,48 @@ export function searchProject(
   params: SearchParams = {},
 ): Promise<SearchResultPage> {
   return apiFetch(`/api/projects/${projectId}/search${toQueryString(params)}`);
+}
+
+// --- Findings ---------------------------------------------------------------
+
+export interface ListFindingsParams {
+  status?: FindingStatus[];
+  checkId?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/** The Consistency surface's findings — what the last project-wide scan saw. */
+export function listFindings(
+  projectId: string,
+  params: ListFindingsParams = {},
+): Promise<FindingPage> {
+  return apiFetch(`/api/projects/${projectId}/findings${toQueryString(params)}`);
+}
+
+/**
+ * Queues a project-wide consistency scan and answers with the job running it.
+ * A scan already in flight is returned rather than queueing a second one.
+ */
+export function requestConsistencyScan(projectId: string): Promise<Job> {
+  return post(`/api/projects/${projectId}/findings/scan`);
+}
+
+export interface DismissFindingParams {
+  dismissedBy: string;
+  reason?: string;
+}
+
+/** Records the finding as a known, accepted state. The row survives. */
+export function dismissFinding(
+  projectId: string,
+  findingId: string,
+  input: DismissFindingParams,
+): Promise<Finding> {
+  return post(`/api/projects/${projectId}/findings/${findingId}/dismiss`, input);
+}
+
+/** Undoes a dismissal — one click, per the finding lifecycle's own rule. */
+export function reopenFinding(projectId: string, findingId: string): Promise<Finding> {
+  return post(`/api/projects/${projectId}/findings/${findingId}/reopen`);
 }

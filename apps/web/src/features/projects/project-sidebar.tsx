@@ -7,6 +7,7 @@ import {
   MechanicsIcon,
   OverviewIcon,
   SearchIcon,
+  WarningIcon,
   type SidebarNavItem,
 } from '@level-zero/ui';
 import type { Route } from 'next';
@@ -55,6 +56,7 @@ export function ProjectSidebar({
   const moodboardsHref = `/projects/${projectId}/moodboards`;
   const gddHref = `/projects/${projectId}/gdd`;
   const searchHref = `/projects/${projectId}/search`;
+  const consistencyHref = `/projects/${projectId}/consistency`;
 
   const items: SidebarNavItem[] = [
     {
@@ -112,6 +114,13 @@ export function ProjectSidebar({
       label: 'Search',
       icon: <SearchIcon className="size-4" />,
       active: pathname?.startsWith(searchHref) ?? false,
+    },
+    {
+      key: 'consistency',
+      href: consistencyHref,
+      label: 'Consistency',
+      icon: <WarningIcon className="size-4" />,
+      active: pathname?.startsWith(consistencyHref) ?? false,
     },
   ];
 
