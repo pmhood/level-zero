@@ -515,6 +515,7 @@ export {
 } from './finding/finding';
 export { fingerprint, type ConsistencyCheck, type ProjectFacts } from './finding/consistency-check';
 export { stalePrototypePinCheck } from './finding/stale-prototype-pin-check';
+export { duplicateNameCheck } from './finding/duplicate-name-check';
 export { CONSISTENCY_CHECKS } from './finding/consistency-checks';
 export {
   type FindingListFilter,
