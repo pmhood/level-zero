@@ -3,6 +3,8 @@ import { type Asset } from '../asset/asset';
 import { type AssetRepository } from '../asset/asset-repository';
 import { type Entity } from '../entity/entity';
 import { type EntityService } from '../entity/entity-service';
+import { findPromotion } from '../promotion/promotion-definition';
+import { type EntityRelationshipService } from '../relationship/entity-relationship-service';
 import { type Clock } from '../shared/clock';
 import { ConflictError, NotFoundError, ValidationError } from '../shared/errors';
 import { type IdGenerator } from '../shared/id';
@@ -52,6 +54,14 @@ export interface CreatePrototypeInput extends CapturePrototypeVersionInput {
   description?: string | null;
   tags?: string[];
   data?: Record<string, unknown>;
+  /**
+   * Set when this prototype is being promoted from a mechanic, system or scene
+   * (the promotion registry's flow 3). Validated against the same catalogue
+   * `LineageService.promote` reads, and recorded as a `promoted_to` edge from
+   * this entity to the new prototype — the pin in `members` already captures
+   * which version it was built from.
+   */
+  promotedFromEntityId?: string;
 }
 
 /** A new prototype and the first version recording what it was assembled from. */
@@ -86,11 +96,23 @@ export class PrototypeService {
     private readonly entityVersions: EntityVersionRepository,
     private readonly assets: AssetRepository,
     private readonly activity: ActivityService,
+    private readonly relationships: EntityRelationshipService,
     private readonly deps: PrototypeServiceDeps,
   ) {}
 
-  /** Creates the prototype entity and captures its first version in one step. */
+  /**
+   * Creates the prototype entity and captures its first version in one step.
+   *
+   * `promotedFromEntityId`, when given, is validated against the promotion
+   * catalogue before anything is created — this is flow 3's own guard,
+   * `PrototypeService.create` never goes through `LineageService.promote` — and
+   * a `promoted_to` edge is recorded once the prototype exists.
+   */
   async create(projectId: string, input: CreatePrototypeInput): Promise<PrototypeCreation> {
+    const promotionSource = input.promotedFromEntityId
+      ? await this.requirePromotionSource(projectId, input.promotedFromEntityId)
+      : null;
+
     const prototype = await this.entities.create(projectId, {
       type: 'prototype',
       name: input.prototypeName,
@@ -99,7 +121,18 @@ export class PrototypeService {
       data: input.data ?? {},
     });
 
-    return { prototype, version: await this.capture(projectId, prototype.id, input) };
+    const version = await this.capture(projectId, prototype.id, input);
+
+    if (promotionSource) {
+      await this.relationships.link(projectId, {
+        sourceEntityId: promotionSource.id,
+        targetEntityId: prototype.id,
+        relation: 'promoted_to',
+        metadata: { fromType: promotionSource.type, toType: 'prototype' },
+      });
+    }
+
+    return { prototype, version };
   }
 
   /**
@@ -262,6 +295,21 @@ export class PrototypeService {
     }
 
     return resolved;
+  }
+
+  /** Flow 3's own catalogue guard — `create` never delegates to `LineageService.promote`. */
+  private async requirePromotionSource(projectId: string, entityId: string): Promise<Entity> {
+    const source = await this.entities.getById(projectId, entityId);
+
+    if (!findPromotion(source.type, 'prototype')) {
+      throw new ValidationError('This promotion is not offered', {
+        entityId: source.id,
+        sourceType: source.type,
+        targetType: 'prototype',
+      });
+    }
+
+    return source;
   }
 
   private async requireEntityVersion(

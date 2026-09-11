@@ -2,6 +2,7 @@ import {
   ActivityService,
   AssetService,
   ConflictError,
+  EntityRelationshipService,
   EntityService,
   EntityVersionService,
   ProjectService,
@@ -19,6 +20,7 @@ import { type DatabaseClient } from '../postgres/client';
 import { connectTestDatabase, truncateDomainTables } from '../testing/test-database';
 import { DrizzleActivityRepository } from './activity-repository';
 import { DrizzleAssetRepository } from './asset-repository';
+import { DrizzleEntityRelationshipRepository } from './entity-relationship-repository';
 import { DrizzleEntityRepository } from './entity-repository';
 import { DrizzleEntityVersionRepository } from './entity-version-repository';
 import { DrizzleProjectRepository } from './project-repository';
@@ -32,6 +34,7 @@ let projects: ProjectService;
 let entities: EntityService;
 let versions: EntityVersionService;
 let assets: AssetService;
+let relationships: EntityRelationshipService;
 let prototypes: PrototypeService;
 let project: Project;
 let otherProject: Project;
@@ -42,6 +45,7 @@ beforeAll(async () => {
   const entityRepo = new DrizzleEntityRepository(client.db);
   const versionRepo = new DrizzleEntityVersionRepository(client.db);
   const assetRepo = new DrizzleAssetRepository(client.db);
+  const relationshipRepo = new DrizzleEntityRelationshipRepository(client.db);
   prototypeRepo = new DrizzlePrototypeVersionRepository(client.db);
 
   const activity = new ActivityService(new DrizzleActivityRepository(client.db), deps);
@@ -50,12 +54,14 @@ beforeAll(async () => {
   entities = new EntityService(entityRepo, projectRepo, activity, deps);
   versions = new EntityVersionService(versionRepo, entityRepo, activity, deps);
   assets = new AssetService(assetRepo, projectRepo, new InMemoryObjectStorageProvider(), deps);
+  relationships = new EntityRelationshipService(relationshipRepo, entityRepo, deps);
   prototypes = new PrototypeService(
     prototypeRepo,
     entities,
     versionRepo,
     assetRepo,
     activity,
+    relationships,
     deps,
   );
 });
