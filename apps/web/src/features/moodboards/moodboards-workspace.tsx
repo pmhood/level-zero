@@ -25,6 +25,7 @@ import {
   useMoodboards,
   usePromoteMoodboardConnector,
   useRemoveMoodboardNodes,
+  useRestoreMoodboardNodes,
   useUpdateMoodboardNodes,
 } from './use-moodboards';
 import type { MoodboardCanvasActions } from './moodboard-toolbar';
@@ -58,6 +59,7 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
   const addNode = useAddMoodboardNode(projectId, boardId);
   const updateNodes = useUpdateMoodboardNodes(projectId, boardId);
   const removeNodes = useRemoveMoodboardNodes(projectId, boardId);
+  const restoreNodes = useRestoreMoodboardNodes(projectId, boardId);
   const duplicateNodes = useDuplicateMoodboardNodes(projectId, boardId);
   const groupNodes = useGroupMoodboardNodes(projectId, boardId);
   const connectNodes = useConnectMoodboardNodes(projectId, boardId);
@@ -83,7 +85,7 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
       const lastNode = drawn.at(-1);
       const maxZOrder = lastNode?.zOrder ?? -1;
       const offset = PLACEMENT_ORIGIN + nodes.length * PLACEMENT_STEP;
-      addNode.mutate({
+      return addNode.mutateAsync({
         type,
         ...reference,
         x: offset,
@@ -99,13 +101,14 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
     () => ({
       addNode: (type) => place(type),
       updateNodes: (patches) => updateNodes.mutateAsync(patches),
-      removeNodes: (nodeIds) => removeNodes.mutate(nodeIds),
+      removeNodes: (nodeIds) => removeNodes.mutateAsync(nodeIds),
+      restoreNodes: (nodesToRestore) => restoreNodes.mutateAsync(nodesToRestore),
       duplicateNodes: (nodeIds) => duplicateNodes.mutate(nodeIds),
       createGroup: (memberNodeIds) => groupNodes.mutate(memberNodeIds),
       removeGroup: (groupNodeId) => removeNodes.mutate([groupNodeId]),
       connect: (fromNodeId, toNodeId) => connectNodes.mutate({ fromNodeId, toNodeId }),
     }),
-    [place, updateNodes, removeNodes, duplicateNodes, groupNodes, connectNodes],
+    [place, updateNodes, removeNodes, restoreNodes, duplicateNodes, groupNodes, connectNodes],
   );
 
   const selectedNode =

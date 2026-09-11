@@ -159,6 +159,48 @@ export function useRemoveMoodboardNodes(projectId: string, boardId: string) {
   });
 }
 
+/**
+ * Re-creates nodes that were removed from the board — undo's inverse of
+ * {@link useRemoveMoodboardNodes} (issue #125).
+ *
+ * Each restored node keeps its layout, group membership, lock state and
+ * content, and re-points at the same asset or entity it always did rather
+ * than copying either — but under a fresh id, since the row that was deleted
+ * is really gone and there is no way to ask the database for it back. One
+ * `addMoodboardNode` call per node: the create endpoint takes one node at a
+ * time, so a multi-select delete restores as several requests, not one, even
+ * though the canvas records it as a single history entry.
+ */
+export function useRestoreMoodboardNodes(projectId: string, boardId: string) {
+  const invalidate = useBoardInvalidation(projectId, boardId);
+
+  return useMutation({
+    mutationFn: (nodes: readonly MoodboardNode[]) =>
+      Promise.all(
+        nodes.map((node) => api.addMoodboardNode(projectId, boardId, restoreInput(node))),
+      ),
+    onSuccess: invalidate,
+  });
+}
+
+/** What re-adding a removed node from scratch needs, read back off the row it is restoring. */
+function restoreInput(node: MoodboardNode): api.AddMoodboardNodeInput {
+  return {
+    type: node.type,
+    ...(node.assetId ? { assetId: node.assetId } : {}),
+    ...(node.entityId ? { entityId: node.entityId } : {}),
+    x: node.x,
+    y: node.y,
+    width: node.width,
+    height: node.height,
+    rotation: node.rotation,
+    zOrder: node.zOrder,
+    groupId: node.groupId,
+    locked: node.locked,
+    data: node.data,
+  };
+}
+
 export function useDuplicateMoodboardNodes(projectId: string, boardId: string) {
   const invalidate = useBoardInvalidation(projectId, boardId);
 

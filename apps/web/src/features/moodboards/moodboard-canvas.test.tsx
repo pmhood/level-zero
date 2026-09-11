@@ -47,9 +47,12 @@ let selected: readonly string[];
 
 beforeEach(() => {
   actions = {
-    addNode: vi.fn(),
+    addNode: vi.fn().mockResolvedValue(node({ id: 'node_new' })),
     updateNodes: vi.fn().mockResolvedValue(undefined),
-    removeNodes: vi.fn(),
+    removeNodes: vi.fn().mockResolvedValue(undefined),
+    restoreNodes: vi.fn().mockImplementation((nodes: readonly MoodboardNode[]) =>
+      Promise.resolve(nodes.map((given, index) => ({ ...given, id: `restored_${index}` }))),
+    ),
     duplicateNodes: vi.fn(),
     createGroup: vi.fn(),
     removeGroup: vi.fn(),
@@ -582,6 +585,119 @@ describe('undo/redo', () => {
     // the space-pan modifier already leaves a focused control alone.
     expect(fireEvent.keyDown(input, { key: 'z', ctrlKey: true })).toBe(true);
     expect(calls()).toHaveLength(1); // only the drag's own commit
+  });
+});
+
+describe('creating and deleting (issue #125)', () => {
+  function select(nodeId: string) {
+    drag(tile(nodeId), { x: 0, y: 0 }, { x: 0, y: 0 });
+  }
+
+  function undo(target: HTMLElement, meta = false) {
+    fireEvent.keyDown(target, { key: 'z', ctrlKey: !meta, metaKey: meta });
+  }
+
+  function redo(target: HTMLElement, meta = false) {
+    fireEvent.keyDown(target, { key: 'z', ctrlKey: !meta, metaKey: meta, shiftKey: true });
+  }
+
+  it('undoes an added node by removing the id the server assigned it', async () => {
+    actions.addNode = vi.fn().mockResolvedValue(node({ id: 'node_created', type: 'text' }));
+    const canvas = renderCanvas([]);
+
+    press('Text');
+    await waitFor(() => expect(actions.addNode).toHaveBeenCalledWith('text'));
+
+    undo(canvas);
+    await waitFor(() => expect(actions.removeNodes).toHaveBeenCalledWith(['node_created']));
+  });
+
+  it('redoes a create by re-adding it, and a further undo removes the id that re-add was given', async () => {
+    actions.addNode = vi.fn().mockResolvedValue(node({ id: 'node_created', type: 'text' }));
+    const canvas = renderCanvas([]);
+
+    press('Text');
+    await waitFor(() => expect(actions.addNode).toHaveBeenCalledTimes(1));
+    undo(canvas);
+    await waitFor(() => expect(actions.removeNodes).toHaveBeenCalledWith(['node_created']));
+
+    redo(canvas);
+    await waitFor(() =>
+      expect(actions.restoreNodes).toHaveBeenCalledWith([
+        expect.objectContaining({ id: 'node_created', type: 'text' }),
+      ]),
+    );
+
+    // The mocked restore hands back a fresh id (`restored_0`) exactly as the
+    // real endpoint would, since it cannot be asked for the old one back. A
+    // further undo has to remove *that* id — the original row is long gone.
+    undo(canvas);
+    await waitFor(() => expect(actions.removeNodes).toHaveBeenCalledWith(['restored_0']));
+  });
+
+  it('restores a deleted placement on undo, pointing at the same asset rather than a new one', async () => {
+    const canvas = renderCanvas([node({ id: 'node_1', type: 'asset', assetId: 'asset_99' })]);
+    select('node_1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from board' }));
+    await waitFor(() => expect(actions.removeNodes).toHaveBeenCalledWith(['node_1']));
+
+    undo(canvas);
+    await waitFor(() =>
+      expect(actions.restoreNodes).toHaveBeenCalledWith([
+        expect.objectContaining({ id: 'node_1', type: 'asset', assetId: 'asset_99' }),
+      ]),
+    );
+    // Restoring never goes through the create path, which is what would mint
+    // a second Asset row — it only ever re-adds the placement that pointed at
+    // the existing one.
+    expect(actions.addNode).not.toHaveBeenCalled();
+  });
+
+  it('deletes a multi-selection as one step, and undoes it as one restore call rather than one per node', async () => {
+    const canvas = renderCanvas([
+      node({ id: 'node_1', x: 0, y: 0 }),
+      node({ id: 'node_2', x: 300, y: 0 }),
+    ]);
+
+    // A marquee sweeping both tiles selects them together, the same way the
+    // "selecting" suite above proves a marquee selection works.
+    drag(canvas, { x: -10, y: -10 }, { x: 600, y: 250 });
+    expect([...selected].sort()).toEqual(['node_1', 'node_2']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from board' }));
+    expect(actions.removeNodes).toHaveBeenCalledTimes(1);
+    expect(actions.removeNodes).toHaveBeenCalledWith(['node_1', 'node_2']);
+    await waitFor(() => expect(actions.removeNodes).toHaveBeenCalledTimes(1));
+
+    undo(canvas);
+    await waitFor(() => expect(actions.restoreNodes).toHaveBeenCalledTimes(1));
+    expect(actions.restoreNodes).toHaveBeenCalledWith([
+      expect.objectContaining({ id: 'node_1' }),
+      expect.objectContaining({ id: 'node_2' }),
+    ]);
+  });
+
+  it('interleaves create and delete with a layout undo/redo in the right order', async () => {
+    actions.addNode = vi.fn().mockResolvedValue(node({ id: 'node_new', type: 'text' }));
+    const canvas = renderCanvas([node({ id: 'node_1' })]);
+
+    drag(tile('node_1'), { x: 10, y: 10 }, { x: 90, y: 40 }); // 1: a layout patch
+    press('Text'); // 2: a create, settling asynchronously
+    await waitFor(() => expect(actions.addNode).toHaveBeenCalledTimes(1));
+
+    undo(canvas); // undoes 2 first
+    await waitFor(() => expect(actions.removeNodes).toHaveBeenCalledWith(['node_new']));
+    expect(calls()).toHaveLength(1); // the create's undo never touched updateNodes
+
+    undo(canvas); // now undoes 1
+    expect(calls()[1]).toEqual([expect.objectContaining({ id: 'node_1', x: 0, y: 0 })]);
+
+    redo(canvas); // replays 1
+    expect(calls()[2]).toEqual([expect.objectContaining({ id: 'node_1', x: 80, y: 30 })]);
+
+    redo(canvas); // replays 2
+    await waitFor(() => expect(actions.restoreNodes).toHaveBeenCalledTimes(1));
   });
 });
 

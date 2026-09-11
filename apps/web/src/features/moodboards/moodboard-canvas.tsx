@@ -6,6 +6,7 @@ import type {
   MoodboardConnector,
   MoodboardNode,
   MoodboardNodePatch,
+  MoodboardNodeType,
 } from '@level-zero/domain';
 import { CloseIcon } from '@level-zero/ui';
 import {
@@ -55,6 +56,7 @@ import {
   pushHistory,
   toSnapshot,
   type MoodboardHistory,
+  type MoodboardHistoryEntry,
   type MoodboardNodeSnapshot,
 } from './moodboard';
 
@@ -309,10 +311,70 @@ export function MoodboardCanvas({
     };
   }, []);
 
+  /**
+   * Applies the opposite of a settled entry — the undo direction.
+   *
+   * A patch's opposite is its inverse patches; a create's is removing the
+   * node it made; a delete's is re-adding what it took off the board. The
+   * re-add is the one case that hands back something new: the database
+   * assigns the restored node(s) a fresh id, so the entry now sitting on the
+   * redo stack has to be corrected to that id before a later redo tries to
+   * remove a row that no longer exists. Returning `null` means the entry
+   * needs no such correction.
+   */
+  function applyInverse(entry: MoodboardHistoryEntry): Promise<MoodboardHistoryEntry | null> {
+    switch (entry.kind) {
+      case 'patch':
+        return actionsRef.current.updateNodes(entry.inversePatches).then(() => null);
+      case 'create':
+        return actionsRef.current
+          .removeNodes(entry.nodes.map((node) => node.id))
+          .then(() => null);
+      case 'delete':
+        return actionsRef.current
+          .restoreNodes(entry.nodes)
+          .then((restored): MoodboardHistoryEntry => ({ kind: 'delete', nodes: restored }));
+    }
+  }
+
+  /** Applies an entry the way it originally settled — the redo direction. */
+  function applyForward(entry: MoodboardHistoryEntry): Promise<MoodboardHistoryEntry | null> {
+    switch (entry.kind) {
+      case 'patch':
+        return actionsRef.current.updateNodes(entry.patches).then(() => null);
+      case 'create':
+        return actionsRef.current
+          .restoreNodes(entry.nodes)
+          .then((restored): MoodboardHistoryEntry => ({ kind: 'create', nodes: restored }));
+      case 'delete':
+        return actionsRef.current
+          .removeNodes(entry.nodes.map((node) => node.id))
+          .then(() => null);
+    }
+  }
+
+  /**
+   * Swaps a corrected entry in for the one `applyInverse`/`applyForward` just
+   * settled — but only while it is still the entry sitting on top. Nothing
+   * has moved past it since is the same guard a failed save's rollback uses
+   * below: a create or delete that landed under someone else's changes is
+   * left alone rather than spliced into the middle of the stack.
+   */
+  function replaceIfStillOnTop(
+    side: 'undo' | 'redo',
+    oldEntry: MoodboardHistoryEntry,
+    newEntry: MoodboardHistoryEntry,
+  ) {
+    const stack = historyRef.current[side];
+    if (stack.at(-1) !== oldEntry) return;
+    historyRef.current = { ...historyRef.current, [side]: [...stack.slice(0, -1), newEntry] };
+  }
+
   // Ctrl+Z / Cmd+Z steps the history back one settled change; the shifted
-  // chord steps it forward again. Defined with `useCallback` so this effect
-  // can subscribe once: both read and write only through refs, so neither
-  // needs re-creating when the board's own state changes.
+  // chord steps it forward again. Defined as plain functions (via refs to
+  // stay stable across renders — see the keydown effect below) so both read
+  // and write only through refs, and neither needs re-creating when the
+  // board's own state changes.
   //
   // `popUndo`/`popRedo` move the entry to the opposite stack synchronously,
   // ahead of the save that is supposed to justify the move — undo/redo have
@@ -328,15 +390,19 @@ export function MoodboardCanvas({
     if (!popped) return;
     historyRef.current = popped.history;
     setSaveError(null);
-    actionsRef.current.updateNodes(popped.entry.inversePatches).catch((error: unknown) => {
-      if (historyRef.current.redo.at(-1) === popped.entry) {
-        historyRef.current = {
-          undo: [...historyRef.current.undo, popped.entry],
-          redo: historyRef.current.redo.slice(0, -1),
-        };
-      }
-      setSaveError(error);
-    });
+    applyInverse(popped.entry)
+      .then((corrected) => {
+        if (corrected) replaceIfStillOnTop('redo', popped.entry, corrected);
+      })
+      .catch((error: unknown) => {
+        if (historyRef.current.redo.at(-1) === popped.entry) {
+          historyRef.current = {
+            undo: [...historyRef.current.undo, popped.entry],
+            redo: historyRef.current.redo.slice(0, -1),
+          };
+        }
+        setSaveError(error);
+      });
   }, []);
 
   const redo = useCallback(() => {
@@ -344,15 +410,19 @@ export function MoodboardCanvas({
     if (!popped) return;
     historyRef.current = popped.history;
     setSaveError(null);
-    actionsRef.current.updateNodes(popped.entry.patches).catch((error: unknown) => {
-      if (historyRef.current.undo.at(-1) === popped.entry) {
-        historyRef.current = {
-          undo: historyRef.current.undo.slice(0, -1),
-          redo: [...historyRef.current.redo, popped.entry],
-        };
-      }
-      setSaveError(error);
-    });
+    applyForward(popped.entry)
+      .then((corrected) => {
+        if (corrected) replaceIfStillOnTop('undo', popped.entry, corrected);
+      })
+      .catch((error: unknown) => {
+        if (historyRef.current.undo.at(-1) === popped.entry) {
+          historyRef.current = {
+            undo: historyRef.current.undo.slice(0, -1),
+            redo: [...historyRef.current.redo, popped.entry],
+          };
+        }
+        setSaveError(error);
+      });
   }, []);
 
   useEffect(() => {
@@ -385,7 +455,11 @@ export function MoodboardCanvas({
    */
   function commitPatches(patches: readonly MoodboardNodePatch[]) {
     if (patches.length === 0) return;
-    const entry = { patches, inversePatches: invertPatches(nodesRef.current, patches) };
+    const entry: MoodboardHistoryEntry = {
+      kind: 'patch',
+      patches,
+      inversePatches: invertPatches(nodesRef.current, patches),
+    };
     historyRef.current = pushHistory(historyRef.current, entry);
 
     const affectedIds = new Set(patches.map((patch) => patch.id));
@@ -402,6 +476,57 @@ export function MoodboardCanvas({
           Object.entries(draftsRef.current).filter(([id]) => !affectedIds.has(id)),
         ),
       );
+      setSaveError(error);
+    });
+  }
+
+  /**
+   * Adds a node and records it as one step of history — issue #125's
+   * counterpart to `commitPatches`.
+   *
+   * There is nothing to record until the server hands back the id it
+   * assigned, so — unlike a layout commit, which already knows the values it
+   * is writing — this pushes the entry after the save resolves rather than
+   * ahead of it. A rejected save therefore never becomes a history entry in
+   * the first place, which is simpler than the push-then-roll-back a layout
+   * commit needs.
+   */
+  function commitCreate(type: MoodboardNodeType) {
+    setSaveError(null);
+    actionsRef.current.addNode(type).then(
+      (created) => {
+        historyRef.current = pushHistory(historyRef.current, { kind: 'create', nodes: [created] });
+      },
+      (error: unknown) => {
+        setSaveError(error);
+      },
+    );
+  }
+
+  /**
+   * Removes placements and records their full data as one step of history —
+   * a multi-selection is one request and one entry, never one per node.
+   *
+   * A node is a placement referencing an Asset or Entity, not a copy of it —
+   * see `MoodboardDeleteHistoryEntry` — so what is captured here, straight
+   * off the stored nodes before the remove call goes out, is exactly what
+   * undo needs to restore the same reference rather than invent a new one.
+   * Pushed ahead of the save, like a layout commit, and popped back off if
+   * the save is rejected and nothing has landed on top of it since.
+   */
+  function commitDelete(nodeIds: readonly string[]) {
+    const removingIds = new Set(nodeIds);
+    const removed = nodesRef.current.filter((node) => removingIds.has(node.id));
+    if (removed.length === 0) return;
+
+    const entry: MoodboardHistoryEntry = { kind: 'delete', nodes: removed };
+    historyRef.current = pushHistory(historyRef.current, entry);
+
+    setSaveError(null);
+    actionsRef.current.removeNodes(nodeIds).catch((error: unknown) => {
+      if (historyRef.current.undo.at(-1) === entry) {
+        historyRef.current = { ...historyRef.current, undo: historyRef.current.undo.slice(0, -1) };
+      }
       setSaveError(error);
     });
   }
@@ -749,6 +874,8 @@ export function MoodboardCanvas({
 
       <MoodboardToolbar
         actions={actions}
+        onAddNode={commitCreate}
+        onRemoveNodes={commitDelete}
         selectedNodeIds={selectedNodeIds}
         selectedGroupNodeIds={selectedGroupNodeIds}
         allLocked={
