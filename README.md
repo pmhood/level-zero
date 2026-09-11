@@ -541,6 +541,17 @@ resolves a version to the entity versions and build artifact it names, and
 `PATCH` on a version updates its status, notes or build artifact — never its
 pins.
 
+`GET …/versions/outcomes?from=&to=` reads the same two versions beside the
+playtests of each: the design changes (tuning included, as `120 s → 90 s`), the
+metrics each side measured with the sample behind every mean, and the feedback
+and observations grouped by the categories they were filed under. Everything it
+returns is recorded evidence, and nothing in it correlates or explains.
+`POST …/versions/outcomes/interpretation` asks a model to read that same
+comparison, answering in the request and recording a `Generation` — so an
+interpretation is visibly separate from the facts and keeps the provenance any
+other generated output has. Neither route claims that a change caused an
+outcome: two sets of playtests are not a controlled experiment.
+
 Documents live under `/api/projects/:projectId/documents`: `POST` creates one,
 `GET` lists the project's documents, `GET :documentId` loads the body with its
 current version and whether the working copy has moved on from it,

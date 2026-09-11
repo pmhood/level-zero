@@ -1,5 +1,7 @@
 import {
+  OutcomeComparisonService,
   PrototypeService,
+  type OutcomeComparison,
   type PrototypeContents,
   type PrototypeCreation,
   type PrototypeVersion,
@@ -27,7 +29,10 @@ import {
  */
 @Controller('projects/:projectId/prototypes')
 export class PrototypesController {
-  constructor(private readonly prototypes: PrototypeService) {}
+  constructor(
+    private readonly prototypes: PrototypeService,
+    private readonly outcomeComparisons: OutcomeComparisonService,
+  ) {}
 
   /** Creates the prototype entity and captures its first version. */
   @Post()
@@ -69,6 +74,20 @@ export class PrototypesController {
     @Query() query: ComparePrototypeVersionsQueryDto,
   ): Promise<PrototypeVersionComparison> {
     return this.prototypes.compare(projectId, query.from, query.to);
+  }
+
+  /**
+   * The same two versions, read beside what the playtests of each measured.
+   *
+   * Facts only — pinned versions, tuning values, measured numbers and the
+   * words people wrote. A model's reading of them is a separate request.
+   */
+  @Get(':prototypeId/versions/outcomes')
+  outcomes(
+    @Param('projectId') projectId: string,
+    @Query() query: ComparePrototypeVersionsQueryDto,
+  ): Promise<OutcomeComparison> {
+    return this.outcomeComparisons.compare(projectId, query.from, query.to);
   }
 
   @Get(':prototypeId/versions/:prototypeVersionId')

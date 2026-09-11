@@ -4,7 +4,10 @@ import {
   EntityRelationshipService,
   EntityService,
   EntityVersionService,
+  OutcomeComparisonService,
+  PlaytestService,
   PrototypeService,
+  TUNING_PARAMETERS_KEY,
   createProject,
   fixedClock,
   sequentialIdGenerator,
@@ -18,6 +21,7 @@ import {
   InMemoryEntityRepository,
   InMemoryEntityVersionRepository,
   InMemoryObjectStorageProvider,
+  InMemoryPlaytestRepository,
   InMemoryProjectRepository,
   InMemoryPrototypeVersionRepository,
 } from '@level-zero/domain/testing';
@@ -36,6 +40,7 @@ let app: INestApplication;
 let entities: EntityService;
 let versions: EntityVersionService;
 let assets: AssetService;
+let playtests: PlaytestService;
 let project: Project;
 let otherProject: Project;
 
@@ -55,8 +60,10 @@ beforeEach(async () => {
     entityRepo,
     deps,
   );
+  const prototypeRepo = new InMemoryPrototypeVersionRepository();
+  const playtestRepo = new InMemoryPlaytestRepository();
   const prototypeService = new PrototypeService(
-    new InMemoryPrototypeVersionRepository(),
+    prototypeRepo,
     entities,
     versionRepo,
     assetRepo,
@@ -65,10 +72,16 @@ beforeEach(async () => {
     deps,
   );
 
+  playtests = new PlaytestService(playtestRepo, prototypeRepo, entities, activity, deps);
+
   const moduleRef = await Test.createTestingModule({
     controllers: [PrototypesController],
     providers: [
       { provide: PrototypeService, useValue: prototypeService },
+      {
+        provide: OutcomeComparisonService,
+        useValue: new OutcomeComparisonService(prototypeService, playtestRepo),
+      },
       { provide: APP_FILTER, useClass: DomainExceptionFilter },
     ],
   }).compile();
@@ -265,5 +278,131 @@ describe('prototype versions', () => {
       .expect(409);
 
     expect(response.body).toMatchObject({ error: 'conflict' });
+  });
+});
+
+describe('changes against outcomes', () => {
+  const drain = (value: number) => ({
+    [TUNING_PARAMETERS_KEY]: [
+      {
+        id: 'oxygen-drain',
+        label: 'Oxygen drain',
+        type: 'range',
+        value,
+        min: 0,
+        max: 240,
+        step: 1,
+        units: 's',
+      },
+    ],
+  });
+
+  /** A prototype captured twice, with the mechanic retuned in between. */
+  async function twoVersions() {
+    const oxygen = await entities.create(project.id, {
+      type: 'mechanic',
+      name: 'Oxygen drain',
+      data: drain(120),
+    });
+    await versions.commit(project.id, oxygen.id);
+
+    const created = await http()
+      .post(prototypesUrl())
+      .send({ prototypeName: 'Vertical slice', members: [{ entityId: oxygen.id }] })
+      .expect(201);
+
+    await entities.update(project.id, oxygen.id, { data: drain(90) });
+    await versions.commit(project.id, oxygen.id);
+
+    const second = await http()
+      .post(`${prototypesUrl()}/${created.body.prototype.id}/versions`)
+      .send({ members: [{ entityId: oxygen.id }] })
+      .expect(201);
+
+    return {
+      prototypeId: created.body.prototype.id as string,
+      fromVersionId: created.body.version.id as string,
+      toVersionId: second.body.id as string,
+    };
+  }
+
+  it('answers with the design changes and the measured outcomes side by side', async () => {
+    const { prototypeId, fromVersionId, toVersionId } = await twoVersions();
+
+    const before = await playtests.create(project.id, {
+      prototypeVersionId: fromVersionId,
+      name: 'First look',
+    });
+    await playtests.recordMetric(project.id, before.id, {
+      label: 'Session duration',
+      value: 120,
+      unit: 's',
+    });
+    const after = await playtests.create(project.id, {
+      prototypeVersionId: toVersionId,
+      name: 'Second look',
+    });
+    await playtests.recordMetric(project.id, after.id, {
+      label: 'Session duration',
+      value: 90,
+      unit: 's',
+    });
+    await playtests.recordFeedback(project.id, after.id, {
+      body: 'Felt tighter.',
+      sentiment: 'positive',
+      tags: ['pacing'],
+    });
+
+    const response = await http()
+      .get(`${prototypesUrl()}/${prototypeId}/versions/outcomes`)
+      .query({ from: fromVersionId, to: toVersionId })
+      .expect(200);
+
+    expect(response.body.designChanges[0].groups[0].differences[0]).toMatchObject({
+      label: 'Oxygen drain',
+      from: '120 s',
+      to: '90 s',
+    });
+    expect(response.body.metricChanges[0].difference).toMatchObject({
+      label: 'Session duration',
+      from: '120 s',
+      to: '90 s',
+    });
+    expect(response.body.metricChanges[0].from.playtestIds).toEqual([before.id]);
+    expect(response.body.from.playtests[0].name).toBe('First look');
+    expect(response.body.feedbackThemes[0]).toMatchObject({ category: 'pacing' });
+    expect(response.body.feedbackThemes[0].to[0].body).toBe('Felt tighter.');
+  });
+
+  it('answers for a version nobody has played yet', async () => {
+    const { prototypeId, fromVersionId, toVersionId } = await twoVersions();
+
+    const response = await http()
+      .get(`${prototypesUrl()}/${prototypeId}/versions/outcomes`)
+      .query({ from: fromVersionId, to: toVersionId })
+      .expect(200);
+
+    expect(response.body.to.playtests).toEqual([]);
+    expect(response.body.metricChanges).toEqual([]);
+    expect(response.body.designChanges).toHaveLength(1);
+  });
+
+  it('returns 400 for two versions of different prototypes', async () => {
+    const first = await twoVersions();
+    const second = await twoVersions();
+
+    await http()
+      .get(`${prototypesUrl()}/${first.prototypeId}/versions/outcomes`)
+      .query({ from: first.fromVersionId, to: second.toVersionId })
+      .expect(400);
+  });
+
+  it('returns 404 for a version from another project', async () => {
+    const { prototypeId, fromVersionId, toVersionId } = await twoVersions();
+
+    await http()
+      .get(`/api/projects/${otherProject.id}/prototypes/${prototypeId}/versions/outcomes`)
+      .query({ from: fromVersionId, to: toVersionId })
+      .expect(404);
   });
 });

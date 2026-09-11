@@ -345,6 +345,22 @@ export {
 } from './playtest/playtest-service';
 
 export {
+  compareOutcomes,
+  type CategoryGroup,
+  type DesignChange,
+  type MetricChange,
+  type OutcomeComparison,
+  type OutcomeSide,
+  type PinnedEntityVersion,
+  type PlaytestEvidence,
+} from './outcome/outcome-comparison';
+export { OutcomeComparisonService } from './outcome/outcome-comparison-service';
+export {
+  INTERPRETATION_FORMAT_INSTRUCTION,
+  outcomeInterpretationPrompt,
+} from './outcome/outcome-interpretation';
+
+export {
   DEFAULT_MOODBOARD_NODE_SIZE,
   MOODBOARD_NODE_TYPES,
   createMoodboardNode,
@@ -575,3 +591,9 @@ export {
   UNAVAILABLE,
   prototypeVersionDifferences,
 } from './compare/prototype-differences';
+export {
+  formatMetricValue,
+  metricDifferences,
+  summarizeMetrics,
+  type MetricSummary,
+} from './compare/metric-differences';
