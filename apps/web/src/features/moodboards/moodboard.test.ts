@@ -16,6 +16,7 @@ import {
   toSnapshot,
   type MoodboardHistoryEntry,
   type MoodboardNodeSnapshot,
+  type MoodboardPatchHistoryEntry,
 } from './moodboard';
 
 function node(overrides: Partial<MoodboardNode> = {}): MoodboardNode {
@@ -286,12 +287,19 @@ describe('invertPatches', () => {
 });
 
 describe('the history stack', () => {
-  function entry(overrides: Partial<MoodboardHistoryEntry> = {}): MoodboardHistoryEntry {
+  function entry(overrides: Partial<MoodboardPatchHistoryEntry> = {}): MoodboardPatchHistoryEntry {
     return {
+      kind: 'patch',
       patches: [{ id: 'node-1', x: 80 }],
       inversePatches: [{ id: 'node-1', x: 10 }],
       ...overrides,
     };
+  }
+
+  /** These tests only ever push patch entries; the other kinds get their own suite below. */
+  function asPatch(given: MoodboardHistoryEntry): MoodboardPatchHistoryEntry {
+    if (given.kind !== 'patch') throw new Error(`Expected a patch entry, got ${given.kind}`);
+    return given;
   }
 
   it('starts empty', () => {
@@ -304,7 +312,7 @@ describe('the history stack', () => {
       entry({ patches: [{ id: 'node-2' }] }),
     );
 
-    expect(history.undo.map((given) => given.patches)).toEqual([
+    expect(history.undo.map((given) => asPatch(given).patches)).toEqual([
       [{ id: 'node-1', x: 80 }],
       [{ id: 'node-2' }],
     ]);
@@ -322,17 +330,36 @@ describe('the history stack', () => {
     const history = pushHistory(EMPTY_MOODBOARD_HISTORY, entry());
 
     const undone = popUndo(history);
-    expect(undone?.entry.inversePatches).toEqual([{ id: 'node-1', x: 10 }]);
+    expect(asPatch(undone!.entry).inversePatches).toEqual([{ id: 'node-1', x: 10 }]);
     expect(undone?.history).toEqual({ undo: [], redo: [entry()] });
 
     const redone = popRedo(undone!.history);
-    expect(redone?.entry.patches).toEqual([{ id: 'node-1', x: 80 }]);
+    expect(asPatch(redone!.entry).patches).toEqual([{ id: 'node-1', x: 80 }]);
     expect(redone?.history).toEqual({ undo: [entry()], redo: [] });
   });
 
   it('does nothing when a stack is empty', () => {
     expect(popUndo(EMPTY_MOODBOARD_HISTORY)).toBeNull();
     expect(popRedo(EMPTY_MOODBOARD_HISTORY)).toBeNull();
+  });
+
+  it('carries a create entry through undo and redo untouched by the patch-only helpers', () => {
+    const created = pushHistory(EMPTY_MOODBOARD_HISTORY, {
+      kind: 'create',
+      nodes: [node({ id: 'node-9' })],
+    });
+
+    const undone = popUndo(created);
+    expect(undone?.entry).toEqual({ kind: 'create', nodes: [node({ id: 'node-9' })] });
+    expect(undone?.history).toEqual({ undo: [], redo: [created.undo[0]] });
+  });
+
+  it('carries a delete entry with the full removed nodes, not just their ids', () => {
+    const removed = node({ id: 'node-9', x: 42, assetId: 'asset-1' });
+    const history = pushHistory(EMPTY_MOODBOARD_HISTORY, { kind: 'delete', nodes: [removed] });
+
+    const undone = popUndo(history);
+    expect(undone?.entry).toEqual({ kind: 'delete', nodes: [removed] });
   });
 });
 

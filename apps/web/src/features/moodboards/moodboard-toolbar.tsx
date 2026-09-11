@@ -1,20 +1,40 @@
 'use client';
 
-import type { MoodboardNodePatch, MoodboardNodeType } from '@level-zero/domain';
+import type { MoodboardNode, MoodboardNodePatch, MoodboardNodeType } from '@level-zero/domain';
 import { Button, PlusIcon } from '@level-zero/ui';
 
 import { MOODBOARD_AUTHORED_NODE_TYPES, MOODBOARD_NODE_LABEL } from './moodboard';
 
 /** Everything the canvas can ask the workspace to do to the stored board. */
 export interface MoodboardCanvasActions {
-  addNode: (type: MoodboardNodeType) => void;
+  /**
+   * Places a new node and hands back what the database actually stored —
+   * the canvas needs the assigned id before it can record a create as a step
+   * of history, so this is called through `commitCreate`, not straight from
+   * the toolbar; see `moodboard-canvas.tsx`.
+   */
+  addNode: (type: MoodboardNodeType) => Promise<MoodboardNode>;
   /**
    * Settles a layout change. Returns the save so the canvas can revert a
    * gesture's draft and drop its history entry when the write is rejected —
    * see the failure handling in `moodboard-canvas.tsx`.
    */
   updateNodes: (patches: readonly MoodboardNodePatch[]) => Promise<unknown>;
-  removeNodes: (nodeIds: readonly string[]) => void;
+  /**
+   * Removes placements. Resolves once the removal is confirmed, so a delete
+   * recorded ahead of the save (`commitDelete`) can be popped back off the
+   * undo stack if the save is rejected — the same guard `commitPatches` uses.
+   */
+  removeNodes: (nodeIds: readonly string[]) => Promise<void>;
+  /**
+   * Re-creates nodes that were previously removed — undo's inverse of a
+   * settled delete, and redo's replay of a settled create. Preserves layout,
+   * group membership, lock state and content, and re-points at the same
+   * `assetId`/`entityId` rather than creating a new Asset or Entity, but
+   * always under a fresh id: there is no way to ask the database for the old
+   * one back once the row is gone.
+   */
+  restoreNodes: (nodes: readonly MoodboardNode[]) => Promise<MoodboardNode[]>;
   duplicateNodes: (nodeIds: readonly string[]) => void;
   /**
    * Adds a `group` node and puts the given nodes in it. The canvas draws the
@@ -27,6 +47,14 @@ export interface MoodboardCanvasActions {
 
 export interface MoodboardToolbarProps {
   actions: MoodboardCanvasActions;
+  /**
+   * Adds a node as one step of history. A plain callback rather than
+   * `actions.addNode` directly, the same way locking and reordering already
+   * go through `onSetLocked`/`onReorder` instead of `actions.updateNodes`.
+   */
+  onAddNode: (type: MoodboardNodeType) => void;
+  /** Removes the given placements as one step of history. */
+  onRemoveNodes: (nodeIds: readonly string[]) => void;
   /** The selected tiles. A selected group contributes its id below, not here. */
   selectedNodeIds: readonly string[];
   selectedGroupNodeIds: readonly string[];
@@ -47,6 +75,8 @@ export interface MoodboardToolbarProps {
  */
 export function MoodboardToolbar({
   actions,
+  onAddNode,
+  onRemoveNodes,
   selectedNodeIds,
   selectedGroupNodeIds,
   allLocked,
@@ -66,7 +96,7 @@ export function MoodboardToolbar({
         className="absolute left-4 top-4 z-10 flex items-center gap-1 rounded-lg border border-border bg-surface/95 p-1 shadow-[var(--lz-shadow-floating)]"
       >
         {MOODBOARD_AUTHORED_NODE_TYPES.map((type) => (
-          <Button key={type} variant="ghost" size="sm" onClick={() => actions.addNode(type)}>
+          <Button key={type} variant="ghost" size="sm" onClick={() => onAddNode(type)}>
             <PlusIcon className="size-3.5" />
             {MOODBOARD_NODE_LABEL[type]}
           </Button>
@@ -126,7 +156,7 @@ export function MoodboardToolbar({
             size="sm"
             disabled={selectedNodeIds.length === 0}
             onClick={() => {
-              actions.removeNodes(selectedNodeIds);
+              onRemoveNodes(selectedNodeIds);
               onClearSelection();
             }}
           >

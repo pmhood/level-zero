@@ -2,13 +2,13 @@
 
 import type { Entity, MoodboardNodeType, RelationType } from '@level-zero/domain';
 import { EmptyState, WorkspacePage } from '@level-zero/ui';
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { GenerationPanel } from '@/features/generation/generation-panel';
 import { apiErrorMessage } from '@/lib/api';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 
-import { MoodboardCanvas } from './moodboard-canvas';
+import { MoodboardCanvas, type MoodboardCanvasHandle } from './moodboard-canvas';
 import { MoodboardInspector } from './moodboard-inspector';
 import { MoodboardRail } from './moodboard-rail';
 import { MOODBOARD_NODE_DEFAULT_SIZE, drawnInZOrder } from './moodboard';
@@ -26,6 +26,7 @@ import {
   usePromoteMoodboardConnector,
   usePromoteToVisualDirection,
   useRemoveMoodboardNodes,
+  useRestoreMoodboardNodes,
   useUpdateMoodboardNodes,
 } from './use-moodboards';
 import type { MoodboardCanvasActions } from './moodboard-toolbar';
@@ -48,6 +49,13 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
   const [selectedNodeIds, setSelectedNodeIds] = useState<readonly string[]>([]);
   const [librarySearch, setLibrarySearch] = useState('');
 
+  // The rail's placements and the generation panel's "Add to board" call
+  // `place` directly rather than through `actions.addNode`, so this is how
+  // they still reach the open canvas' history — see `recordCreate` on
+  // `MoodboardCanvasHandle`. `null` while no board is open, same as the
+  // canvas itself.
+  const canvasRef = useRef<MoodboardCanvasHandle>(null);
+
   const boardsQuery = useMoodboards(projectId);
   const boardQuery = useMoodboard(projectId, openBoardId);
   const library = useMoodboardLibrary(projectId);
@@ -59,6 +67,7 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
   const addNode = useAddMoodboardNode(projectId, boardId);
   const updateNodes = useUpdateMoodboardNodes(projectId, boardId);
   const removeNodes = useRemoveMoodboardNodes(projectId, boardId);
+  const restoreNodes = useRestoreMoodboardNodes(projectId, boardId);
   const duplicateNodes = useDuplicateMoodboardNodes(projectId, boardId);
   const groupNodes = useGroupMoodboardNodes(projectId, boardId);
   const connectNodes = useConnectMoodboardNodes(projectId, boardId);
@@ -85,7 +94,7 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
       const lastNode = drawn.at(-1);
       const maxZOrder = lastNode?.zOrder ?? -1;
       const offset = PLACEMENT_ORIGIN + nodes.length * PLACEMENT_STEP;
-      addNode.mutate({
+      return addNode.mutateAsync({
         type,
         ...reference,
         x: offset,
@@ -101,13 +110,14 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
     () => ({
       addNode: (type) => place(type),
       updateNodes: (patches) => updateNodes.mutateAsync(patches),
-      removeNodes: (nodeIds) => removeNodes.mutate(nodeIds),
+      removeNodes: (nodeIds) => removeNodes.mutateAsync(nodeIds),
+      restoreNodes: (nodesToRestore) => restoreNodes.mutateAsync(nodesToRestore),
       duplicateNodes: (nodeIds) => duplicateNodes.mutate(nodeIds),
       createGroup: (memberNodeIds) => groupNodes.mutate(memberNodeIds),
       removeGroup: (groupNodeId) => removeNodes.mutate([groupNodeId]),
       connect: (fromNodeId, toNodeId) => connectNodes.mutate({ fromNodeId, toNodeId }),
     }),
-    [place, updateNodes, removeNodes, duplicateNodes, groupNodes, connectNodes],
+    [place, updateNodes, removeNodes, restoreNodes, duplicateNodes, groupNodes, connectNodes],
   );
 
   const selectedNode =
@@ -155,7 +165,13 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
                 projectId={projectId}
                 contextEntities={selectedEntities}
                 referenceAssets={library.assets.data?.items ?? []}
-                onUseResult={(asset) => place('asset', { assetId: asset.id })}
+                onUseResult={(asset) => {
+                  // Not `canvasRef.current?.recordCreate(place(...))`: optional
+                  // chaining short-circuits the whole expression, `place(...)`
+                  // included, if the canvas ref is not attached yet.
+                  const created = place('asset', { assetId: asset.id });
+                  canvasRef.current?.recordCreate(created);
+                }}
                 useResultLabel="Add to board"
               />
             )
@@ -177,8 +193,14 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
         entities={librarySearchResults.entities.data?.items ?? []}
         librarySearch={librarySearch}
         onLibrarySearchChange={setLibrarySearch}
-        onPlaceAsset={(assetId) => place('asset', { assetId })}
-        onPlaceEntity={(entityId) => place('entity', { entityId })}
+        onPlaceAsset={(assetId) => {
+          const created = place('asset', { assetId });
+          canvasRef.current?.recordCreate(created);
+        }}
+        onPlaceEntity={(entityId) => {
+          const created = place('entity', { entityId });
+          canvasRef.current?.recordCreate(created);
+        }}
       />
 
       <BoardSurface
@@ -190,6 +212,7 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
         {boardQuery.data && (
           <MoodboardCanvas
             key={boardQuery.data.board.id}
+            ref={canvasRef}
             projectId={projectId}
             nodes={nodes}
             connectors={connectors}

@@ -194,11 +194,48 @@ function invertPatch(node: MoodboardNode, patch: MoodboardNodePatch): MoodboardN
   return inverse;
 }
 
-/** One settled change to the board, and what would undo it. */
-export interface MoodboardHistoryEntry {
+/** One settled layout change to the board, and what would undo it. */
+export interface MoodboardPatchHistoryEntry {
+  kind: 'patch';
   patches: readonly MoodboardNodePatch[];
   inversePatches: readonly MoodboardNodePatch[];
 }
+
+/**
+ * One or more nodes placed on the board in a single step.
+ *
+ * `nodes` starts as whatever the create call resolved with — the fields the
+ * database actually assigned, id included. A redo that re-creates them (or an
+ * undo that restores a deleted node back into this shape) is handed fresh ids
+ * of its own, since nothing can ask the database for the old ones back; see
+ * `MoodboardDeleteHistoryEntry`, and the canvas' undo/redo for how an entry's
+ * ids are kept current across repeated cycles.
+ */
+export interface MoodboardCreateHistoryEntry {
+  kind: 'create';
+  nodes: readonly MoodboardNode[];
+}
+
+/**
+ * One or more nodes taken off the board in a single step.
+ *
+ * `nodes` is the full stored row for each, captured *before* the remove call
+ * — a node is a placement referencing an Asset or Entity, never a copy of it,
+ * so restoring one from this snapshot re-points at the same `assetId`/
+ * `entityId` rather than creating a new row for either. What is deliberately
+ * not carried: the connectors touching these nodes, which the remove already
+ * took with them server-side and which restoring cannot get back.
+ */
+export interface MoodboardDeleteHistoryEntry {
+  kind: 'delete';
+  nodes: readonly MoodboardNode[];
+}
+
+/** One settled change to the board, and what would undo it. */
+export type MoodboardHistoryEntry =
+  | MoodboardPatchHistoryEntry
+  | MoodboardCreateHistoryEntry
+  | MoodboardDeleteHistoryEntry;
 
 /** The canvas' undo/redo stacks. Owned in memory only — see issue #124. */
 export interface MoodboardHistory {
