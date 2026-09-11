@@ -7,6 +7,7 @@ import type {
   MoodboardNode,
   MoodboardNodePatch,
 } from '@level-zero/domain';
+import { CloseIcon } from '@level-zero/ui';
 import {
   useCallback,
   useEffect,
@@ -17,7 +18,7 @@ import {
   type PointerEvent,
 } from 'react';
 
-import { assetContentUrl } from '@/lib/api';
+import { apiErrorMessage, assetContentUrl } from '@/lib/api';
 
 import { MoodboardCanvasProvider } from './moodboard-canvas-context';
 import { MoodboardConnectorLayer } from './moodboard-connector-layer';
@@ -126,6 +127,10 @@ export function MoodboardCanvas({
     draftsRef.current = next;
     setDraftsState(next);
   }
+
+  // The most recent save the canvas asked for that came back rejected. Reset
+  // on every fresh attempt, so the banner only ever names the latest failure.
+  const [saveError, setSaveError] = useState<unknown>(null);
 
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
@@ -308,18 +313,46 @@ export function MoodboardCanvas({
   // chord steps it forward again. Defined with `useCallback` so this effect
   // can subscribe once: both read and write only through refs, so neither
   // needs re-creating when the board's own state changes.
+  //
+  // `popUndo`/`popRedo` move the entry to the opposite stack synchronously,
+  // ahead of the save that is supposed to justify the move — undo/redo have
+  // no draft of their own, so nothing on screen changes while it is in
+  // flight. If that save is then rejected, the move never really happened:
+  // left on the opposite stack, a second same-direction press would target
+  // the *next* entry instead of retrying this one — undoing further than the
+  // user asked for while the failed change sits there un-retried. So a
+  // failure puts the entry back where it came from, as long as nothing has
+  // moved past it since (the same "still on top" guard `commitPatches` uses).
   const undo = useCallback(() => {
     const popped = popUndo(historyRef.current);
     if (!popped) return;
     historyRef.current = popped.history;
-    actionsRef.current.updateNodes(popped.entry.inversePatches);
+    setSaveError(null);
+    actionsRef.current.updateNodes(popped.entry.inversePatches).catch((error: unknown) => {
+      if (historyRef.current.redo.at(-1) === popped.entry) {
+        historyRef.current = {
+          undo: [...historyRef.current.undo, popped.entry],
+          redo: historyRef.current.redo.slice(0, -1),
+        };
+      }
+      setSaveError(error);
+    });
   }, []);
 
   const redo = useCallback(() => {
     const popped = popRedo(historyRef.current);
     if (!popped) return;
     historyRef.current = popped.history;
-    actionsRef.current.updateNodes(popped.entry.patches);
+    setSaveError(null);
+    actionsRef.current.updateNodes(popped.entry.patches).catch((error: unknown) => {
+      if (historyRef.current.undo.at(-1) === popped.entry) {
+        historyRef.current = {
+          undo: historyRef.current.undo.slice(0, -1),
+          redo: [...historyRef.current.redo, popped.entry],
+        };
+      }
+      setSaveError(error);
+    });
   }, []);
 
   useEffect(() => {
@@ -339,14 +372,38 @@ export function MoodboardCanvas({
    * Writes patches back and records their inverse, so the gesture that just
    * settled — or the lock toggle below, which never goes through `commit` — is
    * one step of history. Pushing a fresh entry always drops the redo stack.
+   *
+   * The entry is pushed before the save resolves, so undo is available the
+   * instant a gesture settles rather than waiting on the network. If the save
+   * then fails, that entry never happened as far as the server is concerned —
+   * left on the stack, a later undo would apply the *inverse* of a change
+   * that was never accepted, and a later redo would replay the rejected
+   * patches as if they were a fresh edit. So a failure pops the entry back
+   * off (as long as nothing has been pushed on top of it since) and drops any
+   * draft this gesture was still showing, so the tile snaps back to wherever
+   * the server actually has it.
    */
   function commitPatches(patches: readonly MoodboardNodePatch[]) {
     if (patches.length === 0) return;
-    historyRef.current = pushHistory(historyRef.current, {
-      patches,
-      inversePatches: invertPatches(nodesRef.current, patches),
+    const entry = { patches, inversePatches: invertPatches(nodesRef.current, patches) };
+    historyRef.current = pushHistory(historyRef.current, entry);
+
+    const affectedIds = new Set(patches.map((patch) => patch.id));
+    setSaveError(null);
+    actions.updateNodes(patches).catch((error: unknown) => {
+      if (historyRef.current.undo.at(-1) === entry) {
+        historyRef.current = {
+          ...historyRef.current,
+          undo: historyRef.current.undo.slice(0, -1),
+        };
+      }
+      setDrafts(
+        Object.fromEntries(
+          Object.entries(draftsRef.current).filter(([id]) => !affectedIds.has(id)),
+        ),
+      );
+      setSaveError(error);
     });
-    actions.updateNodes(patches);
   }
 
   /** Writes what the canvas is showing back as a change to the stored nodes. */
@@ -701,6 +758,25 @@ export function MoodboardCanvas({
         onReorder={reorder}
         onClearSelection={() => setSelection([])}
       />
+
+      {saveError != null && (
+        <div
+          onPointerDown={(event) => event.stopPropagation()}
+          className="absolute right-4 top-4 z-20 flex max-w-sm items-center gap-2 rounded-lg border border-border bg-surface/95 px-3 py-2 shadow-[var(--lz-shadow-floating)]"
+        >
+          <p className="text-xs text-error">
+            {apiErrorMessage(saveError, "Couldn't save that change.")}
+          </p>
+          <button
+            type="button"
+            onClick={() => setSaveError(null)}
+            aria-label="Dismiss"
+            className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-hover hover:text-foreground"
+          >
+            <CloseIcon className="size-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

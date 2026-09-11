@@ -8,7 +8,12 @@ import { MOODBOARD_AUTHORED_NODE_TYPES, MOODBOARD_NODE_LABEL } from './moodboard
 /** Everything the canvas can ask the workspace to do to the stored board. */
 export interface MoodboardCanvasActions {
   addNode: (type: MoodboardNodeType) => void;
-  updateNodes: (patches: readonly MoodboardNodePatch[]) => void;
+  /**
+   * Settles a layout change. Returns the save so the canvas can revert a
+   * gesture's draft and drop its history entry when the write is rejected —
+   * see the failure handling in `moodboard-canvas.tsx`.
+   */
+  updateNodes: (patches: readonly MoodboardNodePatch[]) => Promise<unknown>;
   removeNodes: (nodeIds: readonly string[]) => void;
   duplicateNodes: (nodeIds: readonly string[]) => void;
   /**

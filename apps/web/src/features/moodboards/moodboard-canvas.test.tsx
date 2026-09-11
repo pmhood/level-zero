@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { MoodboardNode, MoodboardNodePatch } from '@level-zero/domain';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MoodboardCanvas } from './moodboard-canvas';
@@ -8,6 +8,8 @@ import type { MoodboardCanvasActions } from './moodboard-toolbar';
 
 vi.mock('@/lib/api', () => ({
   assetContentUrl: (projectId: string, assetId: string) => `/api/${projectId}/${assetId}`,
+  apiErrorMessage: (error: unknown, fallback = 'Something went wrong talking to the API.') =>
+    error instanceof Error ? error.message : fallback,
 }));
 
 beforeAll(() => {
@@ -46,7 +48,7 @@ let selected: readonly string[];
 beforeEach(() => {
   actions = {
     addNode: vi.fn(),
-    updateNodes: vi.fn(),
+    updateNodes: vi.fn().mockResolvedValue(undefined),
     removeNodes: vi.fn(),
     duplicateNodes: vi.fn(),
     createGroup: vi.fn(),
@@ -580,6 +582,102 @@ describe('undo/redo', () => {
     // the space-pan modifier already leaves a focused control alone.
     expect(fireEvent.keyDown(input, { key: 'z', ctrlKey: true })).toBe(true);
     expect(calls()).toHaveLength(1); // only the drag's own commit
+  });
+});
+
+describe('a failed save', () => {
+  it('reverts the dragged tile and surfaces the error once the save is rejected', async () => {
+    actions.updateNodes = vi.fn().mockRejectedValue(new Error('Node was locked by another edit.'));
+    renderCanvas([node()]);
+
+    drag(tile('node_1'), { x: 10, y: 10 }, { x: 90, y: 40 });
+    expect(tile('node_1').style.left).toBe('80px'); // shown at once, ahead of the save
+
+    await waitFor(() => expect(tile('node_1').style.left).toBe('0px'));
+    expect(screen.getByText('Node was locked by another edit.')).toBeTruthy();
+  });
+
+  it('does not leave a bogus entry on the undo stack once a failed save has been reverted', async () => {
+    actions.updateNodes = vi.fn().mockRejectedValue(new Error('offline'));
+    const canvas = renderCanvas([node()]);
+
+    drag(tile('node_1'), { x: 10, y: 10 }, { x: 90, y: 40 });
+    await waitFor(() => expect(tile('node_1').style.left).toBe('0px'));
+
+    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
+
+    // The commit never landed, so it was never a history entry: undo finds
+    // nothing to do and never calls back in for a second, pointless save.
+    expect(actions.updateNodes).toHaveBeenCalledTimes(1);
+  });
+
+  it('dismisses the error banner on request', async () => {
+    actions.updateNodes = vi.fn().mockRejectedValue(new Error('offline'));
+    renderCanvas([node()]);
+
+    drag(tile('node_1'), { x: 10, y: 10 }, { x: 90, y: 40 });
+    await waitFor(() => expect(screen.getByText('offline')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+
+    expect(screen.queryByText('offline')).toBeNull();
+  });
+
+  it('retries the same entry on a second undo press rather than undoing the one before it', async () => {
+    actions.updateNodes = vi
+      .fn()
+      .mockResolvedValueOnce(undefined) // commit X: x 0 -> 50
+      .mockResolvedValueOnce(undefined) // commit Y: y 0 -> 80
+      .mockRejectedValueOnce(new Error('offline')) // undo Y — fails
+      .mockResolvedValueOnce(undefined); // undo Y — retried
+
+    const { rerender } = renderAndKeep([node()]);
+    const canvas = screen.getByTestId('moodboard-canvas');
+
+    drag(tile('node_1'), { x: 0, y: 0 }, { x: 50, y: 0 });
+    rerender([node({ x: 50 })]); // the save landed, so the store catches up
+    drag(tile('node_1'), { x: 0, y: 0 }, { x: 0, y: 80 });
+    rerender([node({ x: 50, y: 80 })]);
+
+    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true }); // undo Y — fails
+    await waitFor(() => expect(screen.getByText('offline')).toBeTruthy());
+
+    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true }); // retry
+    await waitFor(() => expect(calls()).toHaveLength(4));
+
+    // The retry undid Y again (back to y: 0, still at X's x: 50) — not X,
+    // which would have sent x: 0 instead.
+    expect(calls()[3]).toEqual([expect.objectContaining({ id: 'node_1', x: 50, y: 0 })]);
+  });
+
+  it('leaves a buried entry on the stack when an earlier commit rejects after a later one has already landed on top of it', async () => {
+    let rejectFirst: (error: unknown) => void = () => {};
+    actions.updateNodes = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectFirst = reject;
+          }),
+      ) // commit A — left pending
+      .mockResolvedValueOnce(undefined) // commit B — settles first, on top of A
+      .mockResolvedValue(undefined); // the two undos below
+
+    const canvas = renderCanvas([node()]);
+
+    drag(tile('node_1'), { x: 0, y: 0 }, { x: 50, y: 0 }); // commit A: still pending
+    drag(tile('node_1'), { x: 0, y: 0 }, { x: 0, y: 80 }); // commit B: pushed on top of A
+
+    rejectFirst(new Error('offline')); // A settles after B is already on the stack
+    await waitFor(() => expect(screen.getByText('offline')).toBeTruthy());
+
+    // The "still on top" guard only pops an entry sitting at the top of the
+    // stack, so A's — now buried under B's — is deliberately left in place
+    // rather than spliced out from the middle. A narrow, accepted gap: undoing
+    // twice replays A's failed commit instead of skipping over it.
+    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true }); // undoes B
+    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true }); // undoes the buried A
+    expect(actions.updateNodes).toHaveBeenCalledTimes(4);
   });
 });
 
