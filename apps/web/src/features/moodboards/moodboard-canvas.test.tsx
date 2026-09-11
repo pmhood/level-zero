@@ -622,6 +622,63 @@ describe('a failed save', () => {
 
     expect(screen.queryByText('offline')).toBeNull();
   });
+
+  it('retries the same entry on a second undo press rather than undoing the one before it', async () => {
+    actions.updateNodes = vi
+      .fn()
+      .mockResolvedValueOnce(undefined) // commit X: x 0 -> 50
+      .mockResolvedValueOnce(undefined) // commit Y: y 0 -> 80
+      .mockRejectedValueOnce(new Error('offline')) // undo Y — fails
+      .mockResolvedValueOnce(undefined); // undo Y — retried
+
+    const { rerender } = renderAndKeep([node()]);
+    const canvas = screen.getByTestId('moodboard-canvas');
+
+    drag(tile('node_1'), { x: 0, y: 0 }, { x: 50, y: 0 });
+    rerender([node({ x: 50 })]); // the save landed, so the store catches up
+    drag(tile('node_1'), { x: 0, y: 0 }, { x: 0, y: 80 });
+    rerender([node({ x: 50, y: 80 })]);
+
+    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true }); // undo Y — fails
+    await waitFor(() => expect(screen.getByText('offline')).toBeTruthy());
+
+    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true }); // retry
+    await waitFor(() => expect(calls()).toHaveLength(4));
+
+    // The retry undid Y again (back to y: 0, still at X's x: 50) — not X,
+    // which would have sent x: 0 instead.
+    expect(calls()[3]).toEqual([expect.objectContaining({ id: 'node_1', x: 50, y: 0 })]);
+  });
+
+  it('leaves a buried entry on the stack when an earlier commit rejects after a later one has already landed on top of it', async () => {
+    let rejectFirst: (error: unknown) => void = () => {};
+    actions.updateNodes = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectFirst = reject;
+          }),
+      ) // commit A — left pending
+      .mockResolvedValueOnce(undefined) // commit B — settles first, on top of A
+      .mockResolvedValue(undefined); // the two undos below
+
+    const canvas = renderCanvas([node()]);
+
+    drag(tile('node_1'), { x: 0, y: 0 }, { x: 50, y: 0 }); // commit A: still pending
+    drag(tile('node_1'), { x: 0, y: 0 }, { x: 0, y: 80 }); // commit B: pushed on top of A
+
+    rejectFirst(new Error('offline')); // A settles after B is already on the stack
+    await waitFor(() => expect(screen.getByText('offline')).toBeTruthy());
+
+    // The "still on top" guard only pops an entry sitting at the top of the
+    // stack, so A's — now buried under B's — is deliberately left in place
+    // rather than spliced out from the middle. A narrow, accepted gap: undoing
+    // twice replays A's failed commit instead of skipping over it.
+    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true }); // undoes B
+    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true }); // undoes the buried A
+    expect(actions.updateNodes).toHaveBeenCalledTimes(4);
+  });
 });
 
 /** Rendering with a way to hand the canvas a changed board, as a save would. */

@@ -313,12 +313,30 @@ export function MoodboardCanvas({
   // chord steps it forward again. Defined with `useCallback` so this effect
   // can subscribe once: both read and write only through refs, so neither
   // needs re-creating when the board's own state changes.
+  //
+  // `popUndo`/`popRedo` move the entry to the opposite stack synchronously,
+  // ahead of the save that is supposed to justify the move — undo/redo have
+  // no draft of their own, so nothing on screen changes while it is in
+  // flight. If that save is then rejected, the move never really happened:
+  // left on the opposite stack, a second same-direction press would target
+  // the *next* entry instead of retrying this one — undoing further than the
+  // user asked for while the failed change sits there un-retried. So a
+  // failure puts the entry back where it came from, as long as nothing has
+  // moved past it since (the same "still on top" guard `commitPatches` uses).
   const undo = useCallback(() => {
     const popped = popUndo(historyRef.current);
     if (!popped) return;
     historyRef.current = popped.history;
     setSaveError(null);
-    actionsRef.current.updateNodes(popped.entry.inversePatches).catch(setSaveError);
+    actionsRef.current.updateNodes(popped.entry.inversePatches).catch((error: unknown) => {
+      if (historyRef.current.redo.at(-1) === popped.entry) {
+        historyRef.current = {
+          undo: [...historyRef.current.undo, popped.entry],
+          redo: historyRef.current.redo.slice(0, -1),
+        };
+      }
+      setSaveError(error);
+    });
   }, []);
 
   const redo = useCallback(() => {
@@ -326,7 +344,15 @@ export function MoodboardCanvas({
     if (!popped) return;
     historyRef.current = popped.history;
     setSaveError(null);
-    actionsRef.current.updateNodes(popped.entry.patches).catch(setSaveError);
+    actionsRef.current.updateNodes(popped.entry.patches).catch((error: unknown) => {
+      if (historyRef.current.undo.at(-1) === popped.entry) {
+        historyRef.current = {
+          undo: historyRef.current.undo.slice(0, -1),
+          redo: [...historyRef.current.redo, popped.entry],
+        };
+      }
+      setSaveError(error);
+    });
   }, []);
 
   useEffect(() => {
