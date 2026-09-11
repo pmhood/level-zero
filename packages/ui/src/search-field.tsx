@@ -14,11 +14,14 @@ export interface SearchFieldProps extends Omit<
 }
 
 /** A search input with the leading magnifier every browser column uses. */
-export function SearchField({ label, className, ...props }: SearchFieldProps) {
+export const SearchField = React.forwardRef<HTMLInputElement, SearchFieldProps>(function SearchField(
+  { label, className, ...props },
+  ref,
+) {
   return (
     <div className={cn('relative', className)}>
       <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-faint-foreground" />
-      <Input type="search" aria-label={label} className="pl-9" {...props} />
+      <Input ref={ref} type="search" aria-label={label} className="pl-9" {...props} />
     </div>
   );
-}
+});

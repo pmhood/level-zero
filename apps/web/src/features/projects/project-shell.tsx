@@ -4,6 +4,7 @@ import { AppShell, Button, EmptyState, Topbar } from '@level-zero/ui';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
+import { CommandPalette } from '@/features/command-palette/command-palette';
 import { ApiRequestError } from '@/lib/api';
 
 import { ProjectSidebar } from './project-sidebar';
@@ -55,7 +56,12 @@ export function ProjectShell({ projectId, children }: { projectId: string; child
   return (
     <AppShell
       sidebar={<ProjectSidebar projectId={projectId} projectName={project.name} />}
-      topbar={<Topbar breadcrumb={project.name} />}
+      topbar={
+        <Topbar
+          breadcrumb={project.name}
+          actions={<CommandPalette projectId={projectId} projectName={project.name} />}
+        />
+      }
     >
       {children}
     </AppShell>
