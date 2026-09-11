@@ -6,6 +6,8 @@ import { useState, type FormEvent } from 'react';
 
 import { TagInput } from '@/components/tag-input';
 import { EntityVersionCompare } from '@/features/entities/entity-version-compare';
+import { EntityVisualDecisions } from '@/features/selection/entity-visual-decisions';
+import { WORLD_VISUAL_PURPOSES } from '@/features/selection/selection';
 import { apiErrorMessage } from '@/lib/api';
 
 import { WorldLore } from './world-lore';
@@ -21,7 +23,7 @@ import {
 } from './world';
 import { useUpdateWorldEntity } from './use-world';
 
-type DetailTab = 'canon' | 'lore' | 'compare';
+type DetailTab = 'canon' | 'lore' | 'visuals' | 'compare';
 
 interface WorldDraft {
   name: string;
@@ -102,6 +104,7 @@ export function WorldDetailBody({
           items={[
             { value: 'canon', label: 'Canon' },
             { value: 'lore', label: 'Lore' },
+            { value: 'visuals', label: 'Visuals' },
             { value: 'compare', label: 'Compare' },
           ]}
         />
@@ -120,6 +123,14 @@ export function WorldDetailBody({
       ) : tab === 'lore' ? (
         <div className="px-5 py-4">
           <WorldLore projectId={projectId} entity={entity} onOpenReference={onOpenReference} />
+        </div>
+      ) : tab === 'visuals' ? (
+        <div className="px-5 py-4">
+          <EntityVisualDecisions
+            projectId={projectId}
+            entity={entity}
+            purposes={WORLD_VISUAL_PURPOSES}
+          />
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="flex flex-col gap-4 px-5 py-4">

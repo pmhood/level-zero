@@ -121,3 +121,17 @@ export const RefreshIcon = createIcon(
     <path d="M18.5 8.5A7.5 7.5 0 1 0 19 15" />
   </>,
 );
+
+/** `assets/icons/check.svg` — the mark on an approval. */
+export const CheckIcon = createIcon(<path d="m5 12.5 4.2 4.2L19 7" />);
+
+/**
+ * A star, for favouriting.
+ *
+ * Drawn to the set's geometry rather than copied from it: `assets/icons/` has
+ * no star, and triage needed one. Pass `fill="currentColor"` for the filled,
+ * already-favourited state.
+ */
+export const StarIcon = createIcon(
+  <path d="M12 4.3l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L4.2 10l5.4-.8Z" />,
+);

@@ -69,6 +69,13 @@ export interface MoodboardInspectorProps {
    * there is one AI inspector in the product, and it is not built here.
    */
   contextualAi?: ReactNode;
+  /**
+   * Favourite, shortlist, approve and reject for the file a selected node
+   * shows, against this board. A slot for the same reason as the two above: the
+   * triage row is one component in the product, and the workspace knows which
+   * board and which file the decision would be about.
+   */
+  selection?: ReactNode;
 }
 
 /**
@@ -92,6 +99,7 @@ export function MoodboardInspector({
   onPromoteToVisualDirection,
   generator,
   contextualAi,
+  selection,
 }: MoodboardInspectorProps) {
   return (
     <Inspector
@@ -106,6 +114,7 @@ export function MoodboardInspector({
             assets={assets}
             onEdit={onEditContent}
             onPromoteToVisualDirection={onPromoteToVisualDirection}
+            selection={selection}
           />
         ) : (
           <div className="flex flex-col gap-3">
@@ -143,6 +152,7 @@ function NodeDetails({
   assets,
   onEdit,
   onPromoteToVisualDirection,
+  selection,
 }: {
   node: MoodboardNode;
   entities: ReadonlyMap<string, Entity>;
@@ -151,6 +161,7 @@ function NodeDetails({
   onPromoteToVisualDirection: (
     source: { entityId: string } | { asset: Asset },
   ) => Promise<{ promoted: Entity }>;
+  selection?: ReactNode;
 }) {
   const referenced = node.entityId ? entities.get(node.entityId) : undefined;
   const asset = node.assetId ? assets.get(node.assetId) : undefined;
@@ -183,6 +194,8 @@ function NodeDetails({
           />
         </Field>
       )}
+
+      {selection && <Field label="On this board">{selection}</Field>}
 
       {/* Keyed, so selecting another node builds a new form from that node's
           content instead of carrying the last one's draft — and unmounting the

@@ -461,6 +461,49 @@ entity, so reviewing one of its sections is an entity target with an `anchor`.
   `PrototypeVersionStatus` are lifecycle — being worked on, playable, archived —
   which is orthogonal to whether anyone has read the work and agreed to it.
 
+### Asset selection
+
+```text
+Project ──owns──> AssetSelection (asset, context, state, actor, note, decidedAt,
+                                  supersededBySelectionId)
+Project ──owns──> AssetMark (asset, kind, actor, markedAt)
+
+context = entity + purpose          e.g. Kael + "portrait", Kael + "costume"
+state   = approved | rejected | superseded
+kind    = favorite | shortlisted
+```
+
+Generating forty pictures produces forty assets and no opinion. This is where a
+project says which of them it actually chose, and what for.
+
+- **Approval answers "approved for what?".** A selection names an entity _and_ a
+  purpose, so the same file can be a character's approved portrait and an
+  approved costume exploration at once, and two files can be approved for two
+  purposes without competing. The purpose is a label the calling surface owns —
+  stored and matched exactly, never parsed — the same contract
+  `ReviewTarget.anchor` has.
+- **Selection is a history, not a column.** Rows are only ever inserted, like
+  `ReviewDecision`; what is current is the newest decision per asset per context.
+  An older approval never comes back into force once something newer has replaced
+  it.
+- **Supersession names its replacement.** Approving something in place of what
+  stands writes a `superseded` row per replaced asset pointing at the _replacing
+  selection_ — so "what took over?" is answerable from the superseded row itself,
+  and a check constraint stops a supersession that names nothing.
+- **Rejection is not deletion.** Nothing here writes to an asset, an entity or a
+  `Generation`: a rejected concept keeps its bytes, its status, its provenance
+  and its parent/variation lineage, stays in the library, and can still be
+  approved for something else.
+- **Marks are a set, not a history.** A favourite or a shortlist is triage —
+  added and removed freely, carrying no context — so it is a row keyed
+  `(project, asset, kind)` that a second click leaves alone and a delete removes.
+  Nobody needs the record of an unstarring; everybody needs the record of an
+  approval.
+- **Neither overloads an existing vocabulary.** `ASSET_STATUSES` stays
+  `active | archived` and `REVIEW_STATES` stays the four states one target moves
+  through: review state is one answer per target, while selection is one answer
+  per _(asset, context)_ pair and several at once.
+
 ### Search and retrieval
 
 ```text
@@ -641,6 +684,16 @@ was reading, so committing a new version leaves the state back at `draft` with
 the earlier approval reported as `staleDecision` rather than silently carried
 forward. A status reads even when its target has gone — `target` comes back
 null — while recording a decision about one is a 404.
+
+Creative selection lives under `/api/projects/:projectId/asset-selections`:
+`POST approve` records one asset as the choice for an entity and a purpose,
+superseding whatever the request names as replaced, `POST reject` turns one down,
+`GET ?entityId=&purpose=` answers what is approved for that purpose now plus the
+decisions behind it, and `GET entity/:entityId` and `GET asset/:assetId` read the
+history from either end. Favourites and the shortlist are the sibling
+`/asset-marks` collection: `POST` adds one (twice is once), `DELETE
+:assetId/:kind` takes it off, `GET` lists them. Nothing under either path writes
+to an asset, so no decision here changes, moves or deletes a file.
 
 Domain errors map to HTTP in one place: `NotFoundError` → 404,
 `ValidationError` → 400, `ForbiddenError` → 403, `ConflictError` → 409, each with

@@ -1,6 +1,8 @@
 import {
   DrizzleActivityRepository,
+  DrizzleAssetMarkRepository,
   DrizzleAssetRepository,
+  DrizzleAssetSelectionRepository,
   DrizzleCommentRepository,
   DrizzleEntityRelationshipRepository,
   DrizzleEntityRepository,
@@ -18,6 +20,7 @@ import {
 } from '@level-zero/database';
 import {
   ActivityService,
+  AssetSelectionService,
   AssetService,
   CommentService,
   ConsistencyScanService,
@@ -41,7 +44,9 @@ import {
   systemClock,
   uuidIdGenerator,
   type ActivityRepository,
+  type AssetMarkRepository,
   type AssetRepository,
+  type AssetSelectionRepository,
   type CommentRepository,
   type EntityRelationshipRepository,
   type EntityRepository,
@@ -85,6 +90,8 @@ export const SEARCH_DOCUMENT_REPOSITORY = Symbol('SEARCH_DOCUMENT_REPOSITORY');
 export const FINDING_REPOSITORY = Symbol('FINDING_REPOSITORY');
 export const COMMENT_REPOSITORY = Symbol('COMMENT_REPOSITORY');
 export const REVIEW_DECISION_REPOSITORY = Symbol('REVIEW_DECISION_REPOSITORY');
+export const ASSET_SELECTION_REPOSITORY = Symbol('ASSET_SELECTION_REPOSITORY');
+export const ASSET_MARK_REPOSITORY = Symbol('ASSET_MARK_REPOSITORY');
 export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
 
 /**
@@ -482,6 +489,33 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
         deps: EntityServiceDeps,
       ): ReviewService => new ReviewService(decisions, targets, deps),
     },
+    {
+      provide: ASSET_SELECTION_REPOSITORY,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: DatabaseClient): AssetSelectionRepository =>
+        new DrizzleAssetSelectionRepository(client.db),
+    },
+    {
+      provide: ASSET_MARK_REPOSITORY,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: DatabaseClient): AssetMarkRepository =>
+        new DrizzleAssetMarkRepository(client.db),
+    },
+    {
+      provide: AssetSelectionService,
+      inject: [
+        ASSET_SELECTION_REPOSITORY,
+        ASSET_MARK_REPOSITORY,
+        ReviewTargetResolver,
+        DOMAIN_DEPS,
+      ],
+      useFactory: (
+        selections: AssetSelectionRepository,
+        marks: AssetMarkRepository,
+        targets: ReviewTargetResolver,
+        deps: EntityServiceDeps,
+      ): AssetSelectionService => new AssetSelectionService(selections, marks, targets, deps),
+    },
     { provide: APP_FILTER, useClass: DomainExceptionFilter },
   ],
   exports: [
@@ -506,6 +540,7 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     CommentService,
     ReviewService,
     ReviewTargetResolver,
+    AssetSelectionService,
     PROJECT_REPOSITORY,
     ENTITY_REPOSITORY,
     RELATIONSHIP_REPOSITORY,
@@ -521,6 +556,8 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     FINDING_REPOSITORY,
     COMMENT_REPOSITORY,
     REVIEW_DECISION_REPOSITORY,
+    ASSET_SELECTION_REPOSITORY,
+    ASSET_MARK_REPOSITORY,
     DOMAIN_DEPS,
   ],
 })

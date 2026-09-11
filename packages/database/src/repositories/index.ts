@@ -1,5 +1,7 @@
 export { DrizzleActivityRepository } from './activity-repository';
+export { DrizzleAssetMarkRepository } from './asset-mark-repository';
 export { DrizzleAssetRepository } from './asset-repository';
+export { DrizzleAssetSelectionRepository } from './asset-selection-repository';
 export { DrizzleCommentRepository } from './comment-repository';
 export { DrizzleEntityRelationshipRepository } from './entity-relationship-repository';
 export { DrizzleEntityRepository } from './entity-repository';

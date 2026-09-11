@@ -76,6 +76,14 @@ import {
   type ProjectPage,
   type ProjectRepository,
 } from '../project/project-repository';
+import { type AssetMark, type AssetMarkKind } from '../selection/asset-mark';
+import { type AssetMarkRepository } from '../selection/asset-mark-repository';
+import {
+  type AssetSelection,
+  type AssetSelectionContext,
+  sameAssetSelectionContext,
+} from '../selection/asset-selection';
+import { type AssetSelectionRepository } from '../selection/asset-selection-repository';
 import { type EmbeddingProvider } from '../search/embedding';
 import { SEARCH_EXCERPT_LENGTH, type SearchDocument } from '../search/search-document';
 import {
@@ -1144,6 +1152,82 @@ function matchesTarget(
     row.target.id === filter.targetId &&
     row.target.anchor === filter.anchor
   );
+}
+
+/** In-memory `AssetSelectionRepository` for tests. Insert-only, newest first. */
+export class InMemoryAssetSelectionRepository implements AssetSelectionRepository {
+  private readonly rows = new Map<string, AssetSelection>();
+
+  constructor(seed: readonly AssetSelection[] = []) {
+    for (const selection of seed) this.rows.set(selection.id, structuredClone(selection));
+  }
+
+  async insertMany(selections: readonly AssetSelection[]): Promise<AssetSelection[]> {
+    for (const selection of selections) this.rows.set(selection.id, structuredClone(selection));
+    return selections.map((selection) => structuredClone(selection));
+  }
+
+  async listByContext(
+    projectId: string,
+    context: AssetSelectionContext,
+  ): Promise<AssetSelection[]> {
+    return this.list(projectId, (selection) =>
+      sameAssetSelectionContext(selection.context, context),
+    );
+  }
+
+  async listByAsset(projectId: string, assetId: string): Promise<AssetSelection[]> {
+    return this.list(projectId, (selection) => selection.assetId === assetId);
+  }
+
+  async listByContextEntity(projectId: string, entityId: string): Promise<AssetSelection[]> {
+    return this.list(projectId, (selection) => selection.context.entityId === entityId);
+  }
+
+  private list(
+    projectId: string,
+    matches: (selection: AssetSelection) => boolean,
+  ): AssetSelection[] {
+    return [...this.rows.values()]
+      .filter((selection) => selection.projectId === projectId && matches(selection))
+      .sort((a, b) => b.decidedAt.getTime() - a.decidedAt.getTime() || b.id.localeCompare(a.id))
+      .map((selection) => structuredClone(selection));
+  }
+}
+
+/** In-memory `AssetMarkRepository` for tests. A set, keyed like the unique constraint. */
+export class InMemoryAssetMarkRepository implements AssetMarkRepository {
+  private readonly rows = new Map<string, AssetMark>();
+
+  constructor(seed: readonly AssetMark[] = []) {
+    for (const mark of seed) this.rows.set(markKey(mark.projectId, mark.assetId, mark.kind), mark);
+  }
+
+  async add(mark: AssetMark): Promise<AssetMark> {
+    const key = markKey(mark.projectId, mark.assetId, mark.kind);
+    const existing = this.rows.get(key);
+    if (existing) return structuredClone(existing);
+
+    this.rows.set(key, structuredClone(mark));
+    return structuredClone(mark);
+  }
+
+  async remove(projectId: string, assetId: string, kind: AssetMarkKind): Promise<boolean> {
+    return this.rows.delete(markKey(projectId, assetId, kind));
+  }
+
+  async listByProject(projectId: string, kinds?: readonly AssetMarkKind[]): Promise<AssetMark[]> {
+    return [...this.rows.values()]
+      .filter(
+        (mark) => mark.projectId === projectId && (!kinds?.length || kinds.includes(mark.kind)),
+      )
+      .sort((a, b) => b.markedAt.getTime() - a.markedAt.getTime() || b.id.localeCompare(a.id))
+      .map((mark) => structuredClone(mark));
+  }
+}
+
+function markKey(projectId: string, assetId: string, kind: AssetMarkKind): string {
+  return `${projectId}:${assetId}:${kind}`;
 }
 
 /**

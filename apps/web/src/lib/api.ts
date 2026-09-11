@@ -1,7 +1,13 @@
 import type { AiCapability, ResolvedContext } from '@level-zero/ai';
 import type {
+  ApproveAssetResult,
   Asset,
   AssetKind,
+  AssetMark,
+  AssetMarkKind,
+  AssetSelection,
+  AssetSelectionContext,
+  AssetSelectionSummary,
   Comment,
   CommentThread,
   AssetPage,
@@ -1034,4 +1040,84 @@ export function recordReviewDecision(
   input: RecordReviewDecisionInput,
 ): Promise<ReviewDecision> {
   return post(`/api/projects/${projectId}/reviews`, input);
+}
+
+// --- Asset selection ------------------------------------------------------
+
+/** What is approved for one purpose now, and every decision behind it. */
+export function getAssetSelectionSummary(
+  projectId: string,
+  context: AssetSelectionContext,
+): Promise<AssetSelectionSummary> {
+  return apiFetch(`/api/projects/${projectId}/asset-selections${toQueryString(context)}`);
+}
+
+/**
+ * Every decision made for one entity, across all of its purposes — which is
+ * how a character or a location says what it currently stands behind.
+ */
+export function listEntityAssetSelections(
+  projectId: string,
+  entityId: string,
+): Promise<AssetSelection[]> {
+  return apiFetch(`/api/projects/${projectId}/asset-selections/entity/${entityId}`);
+}
+
+/** Every decision about one asset, so a rejected concept stays traceable. */
+export function listAssetSelectionsForAsset(
+  projectId: string,
+  assetId: string,
+): Promise<AssetSelection[]> {
+  return apiFetch(`/api/projects/${projectId}/asset-selections/asset/${assetId}`);
+}
+
+export interface DecideAssetSelectionInput extends AssetSelectionContext {
+  assetId: string;
+  /** Free text until authentication lands; then the session's user. */
+  actor: string;
+  note?: string;
+}
+
+export interface ApproveAssetSelectionInput extends DecideAssetSelectionInput {
+  /** Assets this approval replaces, each currently approved for this purpose. */
+  supersedes?: string[];
+}
+
+export function approveAssetSelection(
+  projectId: string,
+  input: ApproveAssetSelectionInput,
+): Promise<ApproveAssetResult> {
+  return post(`/api/projects/${projectId}/asset-selections/approve`, input);
+}
+
+export function rejectAssetSelection(
+  projectId: string,
+  input: DecideAssetSelectionInput,
+): Promise<AssetSelection> {
+  return post(`/api/projects/${projectId}/asset-selections/reject`, input);
+}
+
+/** The project's favourites and shortlist. A grid reads them all in one call. */
+export function listAssetMarks(
+  projectId: string,
+  kinds?: readonly AssetMarkKind[],
+): Promise<AssetMark[]> {
+  return apiFetch(`/api/projects/${projectId}/asset-marks${toQueryString({ kind: kinds })}`);
+}
+
+export function markAsset(
+  projectId: string,
+  input: { assetId: string; kind: AssetMarkKind; actor: string },
+): Promise<AssetMark> {
+  return post(`/api/projects/${projectId}/asset-marks`, input);
+}
+
+export function unmarkAsset(
+  projectId: string,
+  assetId: string,
+  kind: AssetMarkKind,
+): Promise<void> {
+  return apiFetch(`/api/projects/${projectId}/asset-marks/${assetId}/${kind}`, {
+    method: 'DELETE',
+  });
 }

@@ -1,9 +1,17 @@
 'use client';
 
-import { assetDifferences, type Asset, type Generation } from '@level-zero/domain';
+import {
+  assetDifferences,
+  type Asset,
+  type AssetSelectionContext,
+  type Generation,
+} from '@level-zero/domain';
 import { Button, CompareView, Field, Select, Tag, type CompareSide } from '@level-zero/ui';
 import { useState } from 'react';
 
+import { AssetSelectionActions } from '@/features/selection/asset-selection-actions';
+import { purposeLabel } from '@/features/selection/selection';
+import { useAssetSelectionSummary } from '@/features/selection/use-selection';
 import { assetContentUrl } from '@/lib/api';
 
 import { useAssetProvenance } from './use-characters';
@@ -17,18 +25,25 @@ import { useAssetProvenance } from './use-characters';
  * pictures are the comparison; the differences are what a viewer cannot see —
  * shape, size, and the prompt, model and seed behind anything generated.
  *
- * Read only, and deliberately without a "choose this one" action: an asset has
- * no version history to restore and no promotion to make, so offering one
- * would be a button that does nothing the data supports.
+ * The comparison itself writes nothing. The selection actions in each pane do,
+ * and only to the selection history: approving a side records who chose it and
+ * what for, and supersedes the side it replaces where the purpose holds one
+ * visual. Neither file is touched, moved or renamed by any of it.
  */
 export function VisualCompare({
   projectId,
   images,
+  context,
+  replaceCurrent,
   onClose,
 }: {
   projectId: string;
   /** The character's pictures that actually resolve to a file. */
   images: readonly Asset[];
+  /** What choosing a side would decide: the character, and what for. */
+  context: AssetSelectionContext;
+  /** True where the purpose holds one visual, so choosing supersedes the other. */
+  replaceCurrent: boolean;
   onClose: () => void;
 }) {
   const [aId, setAId] = useState<string | null>(null);
@@ -39,6 +54,8 @@ export function VisualCompare({
 
   const provenanceA = useAssetProvenance(projectId, a?.id ?? null);
   const provenanceB = useAssetProvenance(projectId, b?.id ?? null);
+  const summary = useAssetSelectionSummary(projectId, context);
+  const approvedIds = new Set((summary.data?.current ?? []).map((selection) => selection.assetId));
 
   if (!a || !b) return null;
 
@@ -50,6 +67,15 @@ export function VisualCompare({
   const side = (asset: Asset, generation: Generation | null): CompareSide => ({
     label: asset.filename,
     meta: generation ? `Generated · ${generation.model ?? generation.capability}` : 'Uploaded',
+    current: approvedIds.has(asset.id),
+    actions: (
+      <AssetSelectionActions
+        projectId={projectId}
+        asset={asset}
+        context={context}
+        replaceCurrent={replaceCurrent}
+      />
+    ),
     children: (
       <div className="flex flex-col gap-3">
         <div className="flex aspect-[4/5] items-center justify-center overflow-hidden rounded-md bg-raised">
@@ -112,6 +138,10 @@ export function VisualCompare({
             >
               Swap sides
             </Button>
+
+            <p className="text-xs text-faint-foreground">
+              Deciding as {purposeLabel(context.purpose).toLowerCase()}
+            </p>
 
             <Button variant="ghost" size="sm" onClick={onClose}>
               Back to visuals

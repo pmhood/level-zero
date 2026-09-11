@@ -11,6 +11,12 @@ vi.mock('@/lib/api', () => ({
     error instanceof Error ? error.message : fallback,
   assetContentUrl: (projectId: string, assetId: string) => `/assets/${projectId}/${assetId}`,
   listGenerationsForAsset: vi.fn(),
+  getAssetSelectionSummary: vi.fn(),
+  listAssetMarks: vi.fn(),
+  approveAssetSelection: vi.fn(),
+  rejectAssetSelection: vi.fn(),
+  markAsset: vi.fn(),
+  unmarkAsset: vi.fn(),
   listAssets: vi.fn(),
   getEntityNeighborhood: vi.fn(),
   createRelationship: vi.fn(),
@@ -94,7 +100,13 @@ function renderCompare(images: Asset[] = [portrait, variant]) {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <VisualCompare projectId="prj_1" images={images} onClose={() => undefined} />
+      <VisualCompare
+        projectId="prj_1"
+        images={images}
+        context={{ entityId: 'ent_1', purpose: 'portrait' }}
+        replaceCurrent
+        onClose={() => undefined}
+      />
     </QueryClientProvider>,
   );
 }
@@ -103,6 +115,12 @@ describe('Visual compare', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(api.listGenerationsForAsset).mockResolvedValue(page([]));
+    vi.mocked(api.getAssetSelectionSummary).mockResolvedValue({
+      context: { entityId: 'ent_1', purpose: 'portrait' },
+      current: [],
+      history: [],
+    });
+    vi.mocked(api.listAssetMarks).mockResolvedValue([]);
   });
 
   afterEach(cleanup);

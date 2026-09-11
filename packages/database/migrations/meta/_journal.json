@@ -141,6 +141,13 @@
       "when": 1789157174403,
       "tag": "0019_flowery_dragon_lord",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1789160527008,
+      "tag": "0020_faulty_king_bedlam",
+      "breakpoints": true
     }
   ]
 }

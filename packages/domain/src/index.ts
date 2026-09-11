@@ -614,6 +614,42 @@ export {
 } from './review/comment-service';
 
 export {
+  ASSET_SELECTION_STATES,
+  MAX_ASSET_SELECTION_ACTOR_LENGTH,
+  MAX_ASSET_SELECTION_NOTE_LENGTH,
+  MAX_ASSET_SELECTION_PURPOSE_LENGTH,
+  createAssetSelection,
+  currentAssetSelections,
+  currentAssetSelectionsByPurpose,
+  latestSelectionByAsset,
+  requireAssetSelectionContext,
+  sameAssetSelectionContext,
+  type AssetSelection,
+  type AssetSelectionContext,
+  type AssetSelectionState,
+  type AssetSelectionSummary,
+  type CreateAssetSelectionInput,
+} from './selection/asset-selection';
+export { type AssetSelectionRepository } from './selection/asset-selection-repository';
+export {
+  ASSET_MARK_KINDS,
+  MAX_ASSET_MARK_ACTOR_LENGTH,
+  createAssetMark,
+  type AssetMark,
+  type AssetMarkKind,
+  type CreateAssetMarkInput,
+} from './selection/asset-mark';
+export { type AssetMarkRepository } from './selection/asset-mark-repository';
+export {
+  AssetSelectionService,
+  type ApproveAssetInput,
+  type ApproveAssetResult,
+  type AssetSelectionServiceDeps,
+  type MarkAssetInput,
+  type RejectAssetInput,
+} from './selection/asset-selection-service';
+
+export {
   MAX_DIFFERENCE_VALUE_LENGTH,
   changeOf,
   compactDifferences,
