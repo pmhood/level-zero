@@ -284,11 +284,23 @@ export function MoodboardCanvas({
       setSpaceHeld(false);
     }
 
+    // Cmd-Tabbing away, or switching tabs, mid-hold means the keyup never
+    // arrives — the window loses focus, or the page goes hidden, without one —
+    // so the modifier would otherwise stay down until the next Space press.
+    function release() {
+      spaceRef.current = false;
+      setSpaceHeld(false);
+    }
+
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', release);
+    document.addEventListener('visibilitychange', release);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', release);
+      document.removeEventListener('visibilitychange', release);
     };
   }, []);
 

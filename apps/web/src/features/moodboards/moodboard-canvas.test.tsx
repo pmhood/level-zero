@@ -170,11 +170,36 @@ describe('the space pan modifier', () => {
     expect(fireEvent.keyDown(button, { code: 'Space' })).toBe(true);
   });
 
-  it('lets go of the modifier even when the key is released elsewhere', () => {
+  it('lets go of the modifier even when the key is released on a focused control', () => {
+    // document.body matches no selector in the guard, so releasing there would
+    // pass even if the guard were wrongly applied to keyup too. An input is
+    // exactly what the guard exempts, so this is the case that tells them apart.
     const canvas = renderCanvas([node()]);
     fireEvent.keyDown(canvas, { code: 'Space' });
 
-    fireEvent.keyUp(document.body, { code: 'Space' });
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    fireEvent.keyUp(input, { code: 'Space' });
+    drag(tile('node_1'), { x: 0, y: 0 }, { x: 50, y: 20 });
+
+    expect(patches()).toEqual([expect.objectContaining({ id: 'node_1', x: 50, y: 20 })]);
+  });
+
+  it('clears the modifier when the window loses focus mid-hold', () => {
+    const canvas = renderCanvas([node()]);
+    fireEvent.keyDown(canvas, { code: 'Space' });
+
+    fireEvent.blur(window);
+    drag(tile('node_1'), { x: 0, y: 0 }, { x: 50, y: 20 });
+
+    expect(patches()).toEqual([expect.objectContaining({ id: 'node_1', x: 50, y: 20 })]);
+  });
+
+  it('clears the modifier when the page is hidden mid-hold', () => {
+    const canvas = renderCanvas([node()]);
+    fireEvent.keyDown(canvas, { code: 'Space' });
+
+    fireEvent(document, new Event('visibilitychange'));
     drag(tile('node_1'), { x: 0, y: 0 }, { x: 50, y: 20 });
 
     expect(patches()).toEqual([expect.objectContaining({ id: 'node_1', x: 50, y: 20 })]);
