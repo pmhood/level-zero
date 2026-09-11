@@ -1,6 +1,6 @@
 'use client';
 
-import type { Entity } from '@level-zero/domain';
+import { promotionsFor, type Entity } from '@level-zero/domain';
 import {
   Button,
   HistoryIcon,
@@ -18,7 +18,6 @@ import { ApiRequestError } from '@/lib/api';
 
 import { IdeaLineageList } from './idea-lineage';
 import { IdeaNotes } from './idea-notes';
-import { IDEA_PROMOTION_TARGETS } from './promotion';
 import {
   useArchiveIdea,
   useEntityNeighborhood,
@@ -114,17 +113,20 @@ function IdeaDetailsForm({ projectId, idea }: { projectId: string; idea: Entity 
           Creates a new entity and keeps this idea exactly as it is.
         </p>
         <div className="flex flex-wrap gap-2">
-          {IDEA_PROMOTION_TARGETS.map((target) => (
+          {promotionsFor('idea').map((promotion) => (
             <PromoteAction
-              key={target.type}
+              key={promotion.targetType}
               from="idea"
-              to={target.type}
-              label={target.label}
+              to={promotion.targetType}
+              label={promotion.label}
               size="sm"
-              pending={promoteIdea.isPending && promoteIdea.variables?.input.type === target.type}
+              pending={
+                promoteIdea.isPending &&
+                promoteIdea.variables?.input.type === promotion.targetType
+              }
               onPromote={() =>
                 promoteIdea.mutate(
-                  { entityId: idea.id, input: { type: target.type } },
+                  { entityId: idea.id, input: { type: promotion.targetType } },
                   { onSuccess: (result) => setPromoted(result.promoted.name) },
                 )
               }
