@@ -57,8 +57,8 @@ beforeEach(() => {
         Promise.resolve(nodes.map((given, index) => ({ ...given, id: `restored_${index}` }))),
       ),
     duplicateNodes: vi.fn(),
-    createGroup: vi.fn(),
-    removeGroup: vi.fn(),
+    createGroup: vi.fn().mockResolvedValue(node({ id: 'group_new', type: 'group' })),
+    removeGroup: vi.fn().mockResolvedValue(undefined),
     connect: vi.fn(),
   };
   selected = [];
@@ -721,6 +721,190 @@ describe('creating and deleting (issue #125)', () => {
     undo(canvas); // undoes the drag: must target the id the node actually has now
     await waitFor(() => expect(calls()).toHaveLength(2)); // 1: the drag's own commit, 2: this undo
     expect(calls()[1]).toEqual([expect.objectContaining({ id: 'node_restored', x: 0, y: 0 })]);
+  });
+});
+
+describe('grouping and ungrouping (issue #126)', () => {
+  function select(nodeId: string) {
+    drag(tile(nodeId), { x: 0, y: 0 }, { x: 0, y: 0 });
+  }
+
+  function undo(target: HTMLElement) {
+    fireEvent.keyDown(target, { key: 'z', ctrlKey: true });
+  }
+
+  function redo(target: HTMLElement) {
+    fireEvent.keyDown(target, { key: 'z', ctrlKey: true, shiftKey: true });
+  }
+
+  it('groups a multi-selection as one step, regardless of how many nodes were involved', async () => {
+    actions.createGroup = vi.fn().mockResolvedValue(node({ id: 'group_new', type: 'group' }));
+    const canvas = renderCanvas([
+      node({ id: 'node_1', x: 0 }),
+      node({ id: 'node_2', x: 300 }),
+      node({ id: 'node_3', x: 600 }),
+    ]);
+
+    drag(canvas, { x: -10, y: -10 }, { x: 900, y: 250 }); // marquee selects all three
+    expect([...selected].sort()).toEqual(['node_1', 'node_2', 'node_3']);
+
+    press('Group');
+    await waitFor(() =>
+      expect(actions.createGroup).toHaveBeenCalledWith(['node_1', 'node_2', 'node_3']),
+    );
+
+    // Undoing removes the group row and returns every member to no group, in
+    // one step: one call to each action, not one per member.
+    undo(canvas);
+    await waitFor(() => expect(actions.removeGroup).toHaveBeenCalledWith('group_new'));
+    expect(actions.updateNodes).toHaveBeenCalledTimes(1);
+    expect(actions.updateNodes).toHaveBeenCalledWith([
+      { id: 'node_1', groupId: null },
+      { id: 'node_2', groupId: null },
+      { id: 'node_3', groupId: null },
+    ]);
+    // The members themselves are never touched as placements — only the group
+    // row and their membership change.
+    expect(actions.removeNodes).not.toHaveBeenCalled();
+    expect(actions.restoreNodes).not.toHaveBeenCalled();
+  });
+
+  it('redoes a group by recreating the row and rejoining the same members', async () => {
+    actions.createGroup = vi.fn().mockResolvedValue(node({ id: 'group_new', type: 'group' }));
+    actions.restoreNodes = vi
+      .fn()
+      .mockResolvedValue([node({ id: 'group_redone', type: 'group' })]);
+    const canvas = renderCanvas([node({ id: 'node_1', x: 0 }), node({ id: 'node_2', x: 300 })]);
+
+    drag(canvas, { x: -10, y: -10 }, { x: 600, y: 250 });
+    press('Group');
+    await waitFor(() => expect(actions.createGroup).toHaveBeenCalledTimes(1));
+
+    undo(canvas);
+    await waitFor(() => expect(actions.removeGroup).toHaveBeenCalledWith('group_new'));
+
+    redo(canvas);
+    await waitFor(() =>
+      expect(actions.restoreNodes).toHaveBeenCalledWith([
+        expect.objectContaining({ id: 'group_new', type: 'group' }),
+      ]),
+    );
+    await waitFor(() =>
+      expect(actions.updateNodes).toHaveBeenLastCalledWith([
+        { id: 'node_1', groupId: 'group_redone' },
+        { id: 'node_2', groupId: 'group_redone' },
+      ]),
+    );
+  });
+
+  it('ungroups as one step, and undo restores the group row with the same members', async () => {
+    actions.restoreNodes = vi.fn().mockResolvedValue([node({ id: 'group_restored', type: 'group' })]);
+    const canvas = renderCanvas([
+      node({ id: 'group_1', type: 'group' }),
+      node({ id: 'node_1', groupId: 'group_1', x: 0, zOrder: 0 }),
+      node({ id: 'node_2', groupId: 'group_1', x: 300, zOrder: 1 }),
+    ]);
+
+    select('node_1'); // selects the group, per the "selecting" suite above
+    press('Ungroup');
+    await waitFor(() => expect(actions.removeGroup).toHaveBeenCalledWith('group_1'));
+
+    undo(canvas);
+    await waitFor(() =>
+      expect(actions.restoreNodes).toHaveBeenCalledWith([
+        expect.objectContaining({ id: 'group_1', type: 'group' }),
+      ]),
+    );
+    expect(actions.updateNodes).toHaveBeenCalledWith([
+      { id: 'node_1', groupId: 'group_restored' },
+      { id: 'node_2', groupId: 'group_restored' },
+    ]);
+    // The row comes back through a restore, never a fresh create.
+    expect(actions.addNode).not.toHaveBeenCalled();
+  });
+
+  it('redoes an ungroup by detaching the members and removing the row again', async () => {
+    actions.restoreNodes = vi.fn().mockResolvedValue([node({ id: 'group_restored', type: 'group' })]);
+    const canvas = renderCanvas([
+      node({ id: 'group_1', type: 'group' }),
+      node({ id: 'node_1', groupId: 'group_1', x: 0, zOrder: 0 }),
+      node({ id: 'node_2', groupId: 'group_1', x: 300, zOrder: 1 }),
+    ]);
+
+    select('node_1');
+    press('Ungroup');
+    await waitFor(() => expect(actions.removeGroup).toHaveBeenCalledWith('group_1'));
+
+    undo(canvas);
+    await waitFor(() => expect(actions.restoreNodes).toHaveBeenCalledTimes(1));
+
+    redo(canvas);
+    await waitFor(() =>
+      expect(actions.updateNodes).toHaveBeenLastCalledWith([
+        { id: 'node_1', groupId: null },
+        { id: 'node_2', groupId: null },
+      ]),
+    );
+    await waitFor(() => expect(actions.removeGroup).toHaveBeenLastCalledWith('group_restored'));
+  });
+
+  it('interleaves grouping with a layout undo/redo in the right order', async () => {
+    actions.createGroup = vi.fn().mockResolvedValue(node({ id: 'group_new', type: 'group' }));
+    const canvas = renderCanvas([
+      node({ id: 'node_1', x: 0, zOrder: 0 }),
+      node({ id: 'node_2', x: 300, zOrder: 1 }),
+      node({ id: 'node_3', x: 600, zOrder: 2 }),
+    ]);
+
+    drag(tile('node_3'), { x: 600, y: 0 }, { x: 650, y: 0 }); // 1: a layout patch
+    drag(canvas, { x: -10, y: -10 }, { x: 350, y: 250 }); // select node_1 and node_2
+    press('Group'); // 2: a group
+    await waitFor(() => expect(actions.createGroup).toHaveBeenCalledTimes(1));
+
+    undo(canvas); // undoes 2 first
+    await waitFor(() => expect(actions.removeGroup).toHaveBeenCalledWith('group_new'));
+
+    undo(canvas); // now undoes 1
+    expect(calls().at(-1)).toEqual([expect.objectContaining({ id: 'node_3', x: 600 })]);
+  });
+
+  it('remaps a stale group id in an older group entry once its ungroup-undo restores the row under a new id', async () => {
+    actions.createGroup = vi.fn().mockResolvedValue(node({ id: 'group_a', type: 'group' }));
+    actions.restoreNodes = vi.fn().mockResolvedValue([node({ id: 'group_b', type: 'group' })]);
+    const { rerender } = renderAndKeep([
+      node({ id: 'node_1', x: 0, zOrder: 0 }),
+      node({ id: 'node_2', x: 300, zOrder: 1 }),
+    ]);
+    const canvas = screen.getByTestId('moodboard-canvas');
+
+    drag(canvas, { x: -10, y: -10 }, { x: 600, y: 250 });
+    press('Group');
+    await waitFor(() => expect(actions.createGroup).toHaveBeenCalledWith(['node_1', 'node_2']));
+
+    // The board comes back with the new group and its members joined to it —
+    // the same round trip the workspace's invalidate-and-refetch produces.
+    rerender([
+      node({ id: 'group_a', type: 'group' }),
+      node({ id: 'node_1', groupId: 'group_a', x: 0, zOrder: 0 }),
+      node({ id: 'node_2', groupId: 'group_a', x: 300, zOrder: 1 }),
+    ]);
+
+    select('node_1'); // selects group_a
+    press('Ungroup'); // pushes a second entry on top of the first
+    await waitFor(() => expect(actions.removeGroup).toHaveBeenCalledWith('group_a'));
+
+    undo(canvas); // undoes the ungroup: the row comes back under a new id
+    await waitFor(() =>
+      expect(actions.restoreNodes).toHaveBeenCalledWith([
+        expect.objectContaining({ id: 'group_a' }),
+      ]),
+    );
+
+    // Undoing the original grouping must target the id the group actually
+    // has now (group_b) — the stale group_a would 404 server-side, the exact
+    // bug class issue #125's `remapHistory` exists to prevent.
+    undo(canvas);
+    await waitFor(() => expect(actions.removeGroup).toHaveBeenCalledWith('group_b'));
   });
 });
 

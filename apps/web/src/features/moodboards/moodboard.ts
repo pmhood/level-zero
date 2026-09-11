@@ -231,11 +231,49 @@ export interface MoodboardDeleteHistoryEntry {
   nodes: readonly MoodboardNode[];
 }
 
+/**
+ * A selection folded into a new group, in one settled step.
+ *
+ * `group` is the row the create call resolved with, id included — the same
+ * "id changes on every redo" caveat as {@link MoodboardCreateHistoryEntry}
+ * applies: a redo (or an undo of the matching {@link MoodboardUngroupHistoryEntry})
+ * restores it under a fresh id, kept current the same way. `memberIds` is
+ * who moved into it. The board does not support nested groups (see
+ * `moodboard-service.ts`'s `requireGroup`), and a node already in a group is
+ * only ever selectable as that group, never as itself — so a member can only
+ * reach this entry ungrouped, and undoing it always returns them to no
+ * group, never to an outer one.
+ */
+export interface MoodboardGroupHistoryEntry {
+  kind: 'group';
+  group: MoodboardNode;
+  memberIds: readonly string[];
+}
+
+/**
+ * A group row taken off the board, its members detached rather than removed.
+ *
+ * `group` is the full stored row, captured before the remove call — the same
+ * reason {@link MoodboardDeleteHistoryEntry} keeps one — and `memberIds` is
+ * who was in it. Detaching them is not something the client has to do: the
+ * `group_id` foreign key is `ON DELETE SET NULL`, so removing the row is
+ * enough. Undoing this restores the group under a fresh id, the same
+ * "database can't hand back the old one" caveat as a delete's restore, and
+ * rejoins the same members to it.
+ */
+export interface MoodboardUngroupHistoryEntry {
+  kind: 'ungroup';
+  group: MoodboardNode;
+  memberIds: readonly string[];
+}
+
 /** One settled change to the board, and what would undo it. */
 export type MoodboardHistoryEntry =
   | MoodboardPatchHistoryEntry
   | MoodboardCreateHistoryEntry
-  | MoodboardDeleteHistoryEntry;
+  | MoodboardDeleteHistoryEntry
+  | MoodboardGroupHistoryEntry
+  | MoodboardUngroupHistoryEntry;
 
 /** The canvas' undo/redo stacks. Owned in memory only — see issue #124. */
 export interface MoodboardHistory {
