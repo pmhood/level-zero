@@ -6,23 +6,26 @@ import { useState } from 'react';
 
 import { apiErrorMessage } from '@/lib/api';
 
+import { ChangesVsOutcomes } from './changes-vs-outcomes';
 import { PrototypeOverview } from './prototype-overview';
 import { PrototypePlaytests } from './prototype-playtests';
 import { PrototypeVersionCompare } from './prototype-version-compare';
 import { PrototypeVersionStrip } from './prototype-version-strip';
 import { usePrototypeVersions } from './use-prototypes';
 
-type DetailTab = 'overview' | 'playtests' | 'compare';
+type DetailTab = 'overview' | 'playtests' | 'compare' | 'outcomes';
 
 const TABS: { value: DetailTab; label: string }[] = [
   { value: 'overview', label: 'Overview' },
   { value: 'playtests', label: 'Playtests' },
   { value: 'compare', label: 'Compare' },
+  { value: 'outcomes', label: 'Changes vs Outcomes' },
 ];
 
 /**
  * The tabs and panels beneath a prototype's header: the version selector,
- * the playable surface, what it pins, what changed, and its playtests.
+ * the playable surface, what it pins, what changed, its playtests, and what
+ * changed read against what those playtests found.
  *
  * Version selection lives here rather than in a parent, so this body is
  * self-contained the way `docs/decisions/canonical-entity-routes.md` §6
@@ -87,6 +90,18 @@ export function PrototypeDetailBody({ projectId, entity }: { projectId: string; 
           projectId={projectId}
           prototypeId={entity.id}
           versions={versions}
+        />
+      )}
+
+      {tab === 'outcomes' && (
+        <ChangesVsOutcomes
+          projectId={projectId}
+          prototypeId={entity.id}
+          versions={versions}
+          onOpenPlaytests={(prototypeVersionId) => {
+            setVersionId(prototypeVersionId);
+            setTab('playtests');
+          }}
         />
       )}
     </div>

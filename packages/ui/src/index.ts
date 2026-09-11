@@ -11,6 +11,7 @@ export { EmptyState, type EmptyStateProps } from './empty-state';
 export { Inspector, type InspectorProps } from './inspector';
 export { EntityCard, EntityCardSkeleton, type EntityCardProps } from './entity-card';
 export { CompareView, type CompareSide, type CompareViewProps } from './compare-view';
+export { DifferenceList, type DifferenceListProps } from './difference-list';
 export { PromoteAction, type PromoteActionProps } from './promote-action';
 export {
   AppShell,

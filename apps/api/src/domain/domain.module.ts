@@ -27,6 +27,7 @@ import {
   JobService,
   LineageService,
   MoodboardService,
+  OutcomeComparisonService,
   PlaytestService,
   ProjectService,
   PrototypeService,
@@ -314,6 +315,14 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
         new PlaytestService(playtests, prototypeVersions, entities, activity, deps),
     },
     {
+      provide: OutcomeComparisonService,
+      inject: [PrototypeService, PLAYTEST_REPOSITORY],
+      useFactory: (
+        prototypes: PrototypeService,
+        playtests: PlaytestRepository,
+      ): OutcomeComparisonService => new OutcomeComparisonService(prototypes, playtests),
+    },
+    {
       provide: MOODBOARD_REPOSITORY,
       inject: [DATABASE_CLIENT],
       useFactory: (client: DatabaseClient): MoodboardRepository =>
@@ -425,6 +434,7 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     GenerationService,
     PrototypeService,
     PlaytestService,
+    OutcomeComparisonService,
     MoodboardService,
     JobService,
     ActivityService,

@@ -1,9 +1,9 @@
-import type { Difference, DifferenceGroup } from '@level-zero/domain';
+import type { DifferenceGroup } from '@level-zero/domain';
 import * as React from 'react';
 
 import { cn } from './cn';
+import { DifferenceList } from './difference-list';
 import { StatusBadge } from './status-badge';
-import { Tag } from './tag';
 
 /** One side of a comparison: what it is, and what it looks like. */
 export interface CompareSide {
@@ -30,8 +30,6 @@ export interface CompareViewProps {
   className?: string;
 }
 
-const CHANGE_LABELS = { added: 'Added', removed: 'Removed', changed: 'Changed' } as const;
-
 /**
  * Two things of the same kind, side by side, and what separates them
  * (spec section 61).
@@ -57,23 +55,7 @@ export function CompareView({ a, b, toolbar, groups, sameLabel, className }: Com
 
       <section aria-label="Differences" className="flex flex-col gap-3">
         <h3 className="text-[15px] font-semibold text-foreground">Differences</h3>
-
-        {groups.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {sameLabel ?? 'These two are the same in every way this view can read.'}
-          </p>
-        ) : (
-          groups.map((group) => (
-            <div key={group.title} className="flex flex-col gap-1">
-              <p className="text-xs font-medium text-faint-foreground uppercase">{group.title}</p>
-              <dl className="flex flex-col">
-                {group.differences.map((difference) => (
-                  <DifferenceRow key={`${group.title}:${difference.key}`} difference={difference} />
-                ))}
-              </dl>
-            </div>
-          ))
-        )}
+        <DifferenceList groups={groups} emptyLabel={sameLabel} />
       </section>
     </div>
   );
@@ -102,28 +84,5 @@ function ComparePane({ side, name }: { side: CompareSide; name: 'A' | 'B' }) {
         </footer>
       )}
     </section>
-  );
-}
-
-function DifferenceRow({ difference }: { difference: Difference }) {
-  const { label, change, from, to } = difference;
-
-  return (
-    <div className="flex flex-col gap-1 border-b border-border-subtle py-2 last:border-b-0 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-      <dt className="min-w-0 text-sm text-muted-foreground">{label}</dt>
-      <dd className="flex min-w-0 flex-wrap items-baseline gap-1.5 text-sm sm:justify-end sm:text-right">
-        {change !== 'changed' && <Tag>{CHANGE_LABELS[change]}</Tag>}
-        {from !== null && <span className="text-faint-foreground">{from}</span>}
-        {from !== null && to !== null && (
-          <>
-            <span className="sr-only">changed to</span>
-            <span aria-hidden="true" className="text-faint-foreground">
-              →
-            </span>
-          </>
-        )}
-        {to !== null && <span className="font-medium text-foreground">{to}</span>}
-      </dd>
-    </div>
   );
 }

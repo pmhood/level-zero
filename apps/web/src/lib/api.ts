@@ -34,6 +34,7 @@ import type {
   MoodboardConnectorPromotion,
   MoodboardNode,
   MoodboardNodePatch,
+  OutcomeComparison,
   Playtest,
   PlaytestPage,
   PlaytestStatus,
@@ -784,6 +785,43 @@ export function annotatePrototypeVersion(
 ): Promise<PrototypeVersion> {
   return patch(
     `/api/projects/${projectId}/prototypes/${prototypeId}/versions/${prototypeVersionId}`,
+    input,
+  );
+}
+
+/**
+ * Two versions read beside the playtests of each: design changes, measured
+ * metrics and the categorised words people wrote. Facts only — a model's
+ * reading of them is `interpretOutcomes` below.
+ */
+export function compareOutcomes(
+  projectId: string,
+  prototypeId: string,
+  from: string,
+  to: string,
+): Promise<OutcomeComparison> {
+  return apiFetch(
+    `/api/projects/${projectId}/prototypes/${prototypeId}/versions/outcomes${toQueryString({ from, to })}`,
+  );
+}
+
+/** An interpretation, and the `Generation` that says where it came from. */
+export interface OutcomeInterpretation {
+  generationId: string;
+  interpretation: string;
+}
+
+/**
+ * One model's reading of that comparison. The facts are re-read server-side,
+ * so an interpretation can only ever be of what is recorded.
+ */
+export function interpretOutcomes(
+  projectId: string,
+  prototypeId: string,
+  input: { from: string; to: string; createdBy?: string },
+): Promise<OutcomeInterpretation> {
+  return post(
+    `/api/projects/${projectId}/prototypes/${prototypeId}/versions/outcomes/interpretation`,
     input,
   );
 }
