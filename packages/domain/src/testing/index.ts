@@ -5,6 +5,7 @@ export {
   InMemoryEntityRelationshipRepository,
   InMemoryEntityRepository,
   InMemoryEntityVersionRepository,
+  InMemoryFindingRepository,
   InMemoryGenerationRepository,
   InMemoryJobEvents,
   InMemoryJobQueue,

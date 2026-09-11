@@ -159,6 +159,29 @@ describe('prototype versions', () => {
     expect(annotated).toMatchObject({ status: 'playable', notes: 'ten minutes of play' });
     expect(annotated.members).toEqual(version.members);
   });
+
+  it('lists every prototype version in the project, across prototypes, scoped away from another project', async () => {
+    const diver = await committed('character', 'The Diver');
+    const { version: first } = await prototypes.create(project.id, {
+      prototypeName: 'Vertical slice',
+      members: [{ entityId: diver.id }],
+    });
+    const { version: second } = await prototypes.create(project.id, {
+      prototypeName: 'Combat slice',
+      members: [{ entityId: diver.id }],
+    });
+
+    const foreignDiver = await committed('character', 'Someone else', otherProject.id);
+    await prototypes.create(otherProject.id, {
+      prototypeName: 'Foreign slice',
+      members: [{ entityId: foreignDiver.id }],
+    });
+
+    const page = await prototypeRepo.listByProject(project.id, {});
+
+    expect(page.total).toBe(2);
+    expect(page.items.map((item) => item.id).sort()).toEqual([first.id, second.id].sort());
+  });
 });
 
 describe('history is protected by the database', () => {

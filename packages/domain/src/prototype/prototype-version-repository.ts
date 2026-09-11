@@ -26,6 +26,11 @@ export interface PrototypeVersionRepository {
     prototypeId: string,
     filter: PrototypeVersionListFilter,
   ): Promise<PrototypeVersionPage>;
+  /**
+   * Every prototype version in the project, across every prototype, in no
+   * guaranteed order — for building a consistency scan's `ProjectFacts`.
+   */
+  listByProject(projectId: string, filter: PrototypeVersionListFilter): Promise<PrototypeVersionPage>;
   /** Highest `versionNumber` recorded for the prototype, or 0 when it has none. */
   latestVersionNumber(projectId: string, prototypeId: string): Promise<number>;
   /** Persists annotation changes only. */

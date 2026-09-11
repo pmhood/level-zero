@@ -6,6 +6,7 @@ import { sequentialIdGenerator } from '../shared/id';
 import {
   createFinding,
   dismissFinding,
+  resolveFinding,
   type CreateFindingInput,
   type Finding,
   type FindingEvidence,
@@ -98,5 +99,27 @@ describe('dismissFinding', () => {
   it('leaves the reason null when none is given', () => {
     const dismissed = dismissFinding(finding(), { dismissedBy: 'pete' }, { clock: laterClock });
     expect(dismissed.dismissedReason).toBeNull();
+  });
+});
+
+describe('resolveFinding', () => {
+  it('closes an open finding, recording when the scan stopped seeing it', () => {
+    const resolved = resolveFinding(finding(), { clock: laterClock });
+
+    expect(resolved).toMatchObject({ status: 'resolved', resolvedAt: laterClock.now() });
+  });
+
+  it('leaves a dismissed finding dismissed', () => {
+    const dismissed = dismissFinding(finding(), { dismissedBy: 'pete' }, { clock: laterClock });
+
+    const resolved = resolveFinding(dismissed, { clock: laterClock });
+
+    expect(resolved).toBe(dismissed);
+  });
+
+  it('is a no-op on an already-resolved finding', () => {
+    const resolved = resolveFinding(finding(), { clock: laterClock });
+
+    expect(resolveFinding(resolved, { clock: laterClock })).toBe(resolved);
   });
 });

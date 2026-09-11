@@ -23,6 +23,12 @@ import {
   type EntityRepository,
   type FindOrCreateAssetReferenceResult,
 } from '../entity/entity-repository';
+import { type Finding } from '../finding/finding';
+import {
+  type FindingListFilter,
+  type FindingPage,
+  type FindingRepository,
+} from '../finding/finding-repository';
 import { type Generation } from '../generation/generation';
 import {
   type GenerationListFilter,
@@ -573,6 +579,23 @@ export class InMemoryPrototypeVersionRepository implements PrototypeVersionRepos
     };
   }
 
+  async listByProject(
+    projectId: string,
+    filter: PrototypeVersionListFilter,
+  ): Promise<PrototypeVersionPage> {
+    const matches = [...this.rows.values()]
+      .filter((version) => version.projectId === projectId)
+      .sort(byNewest);
+
+    const offset = filter.offset ?? 0;
+    const limit = filter.limit ?? matches.length;
+
+    return {
+      items: matches.slice(offset, offset + limit).map((version) => structuredClone(version)),
+      total: matches.length,
+    };
+  }
+
   async latestVersionNumber(projectId: string, prototypeId: string): Promise<number> {
     return this.forPrototype(projectId, prototypeId).reduce(
       (highest, version) => Math.max(highest, version.versionNumber),
@@ -593,6 +616,75 @@ export class InMemoryPrototypeVersionRepository implements PrototypeVersionRepos
     return [...this.rows.values()].filter(
       (version) => version.projectId === projectId && version.prototypeId === prototypeId,
     );
+  }
+}
+
+/**
+ * In-memory `FindingRepository` for tests.
+ *
+ * `upsert` mirrors the Postgres adapter's `(projectId, fingerprint)` key: it
+ * overwrites derived content but never the lifecycle fields a check has no
+ * way to touch (docs/decisions/consistency-findings.md §3.2, §4.4).
+ */
+export class InMemoryFindingRepository implements FindingRepository {
+  private readonly rows = new Map<string, Finding>();
+
+  constructor(seed: readonly Finding[] = []) {
+    for (const finding of seed) this.rows.set(finding.id, structuredClone(finding));
+  }
+
+  async upsert(finding: Finding): Promise<Finding> {
+    const existing = [...this.rows.values()].find(
+      (row) => row.projectId === finding.projectId && row.fingerprint === finding.fingerprint,
+    );
+
+    const stored: Finding = existing
+      ? {
+          ...finding,
+          id: existing.id,
+          status: existing.status,
+          firstSeenAt: existing.firstSeenAt,
+          resolvedAt: existing.resolvedAt,
+          dismissedAt: existing.dismissedAt,
+          dismissedBy: existing.dismissedBy,
+          dismissedReason: existing.dismissedReason,
+        }
+      : finding;
+
+    this.rows.set(stored.id, structuredClone(stored));
+    return structuredClone(stored);
+  }
+
+  async findById(projectId: string, findingId: string): Promise<Finding | null> {
+    const finding = this.rows.get(findingId);
+    // A mismatched project reads as missing, never as another project's row.
+    if (!finding || finding.projectId !== projectId) return null;
+    return structuredClone(finding);
+  }
+
+  async listByProject(projectId: string, filter: FindingListFilter = {}): Promise<FindingPage> {
+    const matches = [...this.rows.values()]
+      .filter((finding) => finding.projectId === projectId)
+      .filter((finding) => !filter.statuses?.length || filter.statuses.includes(finding.status))
+      .filter((finding) => !filter.checkId || finding.checkId === filter.checkId)
+      .sort((a, b) => b.lastSeenAt.getTime() - a.lastSeenAt.getTime() || b.id.localeCompare(a.id));
+
+    const offset = filter.offset ?? 0;
+    const limit = filter.limit ?? matches.length;
+
+    return {
+      items: matches.slice(offset, offset + limit).map((finding) => structuredClone(finding)),
+      total: matches.length,
+    };
+  }
+
+  async save(finding: Finding): Promise<Finding> {
+    const existing = this.rows.get(finding.id);
+    if (!existing || existing.projectId !== finding.projectId) {
+      throw new NotFoundError('Finding', finding.id);
+    }
+    this.rows.set(finding.id, structuredClone(finding));
+    return structuredClone(finding);
   }
 }
 

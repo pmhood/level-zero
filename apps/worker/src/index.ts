@@ -11,8 +11,10 @@ import {
   DrizzleAssetRepository,
   DrizzleEntityRelationshipRepository,
   DrizzleEntityRepository,
+  DrizzleFindingRepository,
   DrizzleGenerationRepository,
   DrizzleJobRepository,
+  DrizzlePrototypeVersionRepository,
   DrizzleProjectRepository,
   DrizzleSearchDocumentRepository,
   checkPostgres,
@@ -28,6 +30,7 @@ import {
 import {
   ActivityService,
   AssetService,
+  ConsistencyScanService,
   EntityRelationshipService,
   EntityService,
   GenerationService,
@@ -40,6 +43,7 @@ import {
 } from '@level-zero/domain';
 import { LocalObjectStorageProvider } from '@level-zero/storage';
 
+import { createConsistencyScanJobHandler } from './consistency-scan-job';
 import { createGenerationJobHandler } from './generation-job';
 import { createWorkerRuntime, type WorkerProbe } from './runtime';
 import { createSearchIndexJobHandler } from './search-index-job';
@@ -62,6 +66,8 @@ async function main(): Promise<void> {
   const entities = new DrizzleEntityRepository(database.db);
   const relationships = new DrizzleEntityRelationshipRepository(database.db);
   const assets = new DrizzleAssetRepository(database.db);
+  const prototypeVersions = new DrizzlePrototypeVersionRepository(database.db);
+  const findings = new DrizzleFindingRepository(database.db);
 
   const generationRepository = new DrizzleGenerationRepository(database.db);
   const activity = new ActivityService(new DrizzleActivityRepository(database.db), deps);
@@ -81,6 +87,7 @@ async function main(): Promise<void> {
     jobs,
     deps,
   );
+  const consistency = new ConsistencyScanService(entities, prototypeVersions, findings, jobs, deps);
 
   const entityService = new EntityService(entities, projects, activity, deps, search);
   const lineage = new LineageService(
@@ -132,6 +139,7 @@ async function main(): Promise<void> {
       logger: console,
     }),
     search_index: createSearchIndexJobHandler({ jobs, search, logger: console }),
+    consistency_scan: createConsistencyScanJobHandler({ jobs, consistency, logger: console }),
   };
 
   const consumer = createJobConsumer({
