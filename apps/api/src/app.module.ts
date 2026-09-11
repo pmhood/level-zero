@@ -15,6 +15,7 @@ import { EmbeddingModule } from './infrastructure/embedding.module';
 import { QueueModule } from './infrastructure/queue.module';
 import { RedisModule } from './infrastructure/redis.module';
 import { StorageModule } from './infrastructure/storage.module';
+import { InspectorModule } from './inspector/inspector.module';
 import { JobsModule } from './jobs/jobs.module';
 import { MoodboardsModule } from './moodboards/moodboards.module';
 import { PlaytestsModule } from './playtests/playtests.module';
@@ -56,6 +57,7 @@ import { VersionsModule } from './versions/versions.module';
     ActivityModule,
     SearchModule,
     FindingsModule,
+    InspectorModule,
   ],
 })
 export class AppModule {}

@@ -3,6 +3,7 @@
 import type { Entity } from '@level-zero/domain';
 import { Button, HistoryIcon, Inspector, StatusBadge, Tag } from '@level-zero/ui';
 
+import { AiInspector } from '@/features/ai-inspector/ai-inspector';
 import { entityStatusBadge } from '@/features/entities/entity-presentation';
 
 import { readCharacter } from './character';
@@ -14,8 +15,10 @@ import { useArchiveCharacter, useCharacterLinks, useRestoreCharacter } from './u
  * the project, see what they are made of, and read what they have been
  * (spec sections 21 and 56).
  *
- * Deliberately not an AI chat panel. The generative actions belong on the
- * Visuals tab, next to the thing they would produce.
+ * Deliberately not an AI chat panel. Image generation belongs on the Visuals
+ * tab, next to the thing it would produce; the contextual AI section is the
+ * shared `AiInspector`, which asks about the character rather than holding a
+ * transcript, and whose answers only reach the project if they are kept.
  */
 export function CharacterInspector({
   projectId,
@@ -61,6 +64,10 @@ export function CharacterInspector({
       </div>
 
       <AtAGlance projectId={projectId} character={character} />
+
+      <div className="mt-5 border-t border-border-subtle pt-4">
+        <AiInspector projectId={projectId} subject={{ kind: 'entity', entity: character }} />
+      </div>
 
       <section className="mt-5 border-t border-border-subtle pt-4">
         <h3 className="mb-2 text-xs font-medium text-muted-foreground">History</h3>

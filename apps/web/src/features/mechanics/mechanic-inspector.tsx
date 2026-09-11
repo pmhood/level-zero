@@ -4,17 +4,21 @@ import type { Entity } from '@level-zero/domain';
 import { Button, HistoryIcon, Inspector, Tabs } from '@level-zero/ui';
 import { useState } from 'react';
 
+import { AiInspector } from '@/features/ai-inspector/ai-inspector';
 import { entityTypeLabel } from '@/features/entities/entity-presentation';
 
 import { MechanicHistory } from './mechanic-history';
 import { MechanicLinks } from './mechanic-links';
 import { useArchiveMechanic, useRestoreMechanic } from './use-mechanics';
 
-type InspectorTab = 'links' | 'history';
+type InspectorTab = 'links' | 'ai' | 'history';
 
 /**
  * What can I do with the mechanic I have selected: how it connects, what it
  * has been, and whether it is still part of the design (spec section 21).
+ *
+ * The AI tab is the shared `AiInspector`, so the questions worth asking about
+ * a mechanic sit beside the mechanic rather than in a panel of their own.
  */
 export function MechanicInspector({
   projectId,
@@ -43,6 +47,7 @@ export function MechanicInspector({
           onChange={(value) => setTab(value as InspectorTab)}
           items={[
             { value: 'links', label: 'Links' },
+            { value: 'ai', label: 'AI' },
             { value: 'history', label: 'History' },
           ]}
         />
@@ -69,6 +74,9 @@ export function MechanicInspector({
       </div>
 
       {tab === 'links' && <MechanicLinks projectId={projectId} mechanic={mechanic} />}
+      {tab === 'ai' && (
+        <AiInspector projectId={projectId} subject={{ kind: 'entity', entity: mechanic }} />
+      )}
       {tab === 'history' && <MechanicHistory projectId={projectId} mechanic={mechanic} />}
     </Inspector>
   );

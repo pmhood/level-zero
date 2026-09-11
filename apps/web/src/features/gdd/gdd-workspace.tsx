@@ -4,8 +4,10 @@ import type { Document, Entity } from '@level-zero/domain';
 import {
   Button,
   EmptyState,
+  Inspector,
   RichTextEditor,
   SaveStatusLabel,
+  SparklesIcon,
   WorkspaceHeader,
   useEditorAutosave,
   type AcceptedAiEdit,
@@ -14,6 +16,7 @@ import {
 } from '@level-zero/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { AiInspector } from '@/features/ai-inspector/ai-inspector';
 import { matchEntities, referencedEntityIds } from '@/features/entities/entity-reference';
 import { EntityVersionCompare } from '@/features/entities/entity-version-compare';
 import { EntityReferenceProvider } from '@/features/entities/entity-reference-context';
@@ -93,6 +96,10 @@ function GddDocumentEditor({
   // the writer stays where they were writing, and the outline steps aside so
   // two versions get the full width.
   const [comparing, setComparing] = useState(false);
+  // The contextual AI is about the whole document — the passage-level actions
+  // are the editor's own inline layer — so it is a panel the writer opens
+  // rather than something docked beside every sentence.
+  const [askingAi, setAskingAi] = useState(false);
 
   const entitiesQuery = useReferenceableEntities(projectId);
   const entities = useMemo(() => entitiesQuery.data?.items ?? [], [entitiesQuery.data]);
@@ -101,7 +108,10 @@ function GddDocumentEditor({
   // shows the entity as it is now rather than as it was when it was opened.
   const [openEntityId, setOpenEntityId] = useState<string | null>(null);
   const openEntity = entities.find((entity) => entity.id === openEntityId) ?? null;
-  const openReference = useCallback((entity: Entity) => setOpenEntityId(entity.id), []);
+  const openReference = useCallback((entity: Entity) => {
+    setOpenEntityId(entity.id);
+    setAskingAi(false);
+  }, []);
 
   // The `@` menu is built once with the editor, but has to search the entities
   // as they are now — so it reads the list through a ref, the same way the
@@ -196,9 +206,22 @@ function GddDocumentEditor({
             title="GDD"
             description="The canonical written design. Reference entities instead of restating them."
             actions={
-              <Button variant="secondary" size="sm" onClick={() => setComparing(!comparing)}>
-                {comparing ? 'Back to writing' : 'Compare versions'}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" size="sm" onClick={() => setComparing(!comparing)}>
+                  {comparing ? 'Back to writing' : 'Compare versions'}
+                </Button>
+                <Button
+                  variant="ai"
+                  size="sm"
+                  onClick={() => {
+                    setAskingAi(!askingAi);
+                    setOpenEntityId(null);
+                  }}
+                >
+                  <SparklesIcon className="size-4" />
+                  Ask AI
+                </Button>
+              </div>
             }
           />
 
@@ -252,6 +275,19 @@ function GddDocumentEditor({
 
         {openEntity && !comparing && (
           <EntityReferenceInspector entity={openEntity} onClose={() => setOpenEntityId(null)} />
+        )}
+
+        {!openEntity && askingAi && !comparing && (
+          <Inspector
+            title={designDocument.entity.name}
+            description="Design document"
+            onClose={() => setAskingAi(false)}
+          >
+            <AiInspector
+              projectId={projectId}
+              subject={{ kind: 'entity', entity: designDocument.entity }}
+            />
+          </Inspector>
         )}
       </div>
     </EntityReferenceProvider>

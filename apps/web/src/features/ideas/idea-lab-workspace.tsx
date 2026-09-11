@@ -4,6 +4,7 @@ import type { Entity } from '@level-zero/domain';
 import { Button, EmptyState, Inspector, PlusIcon, WorkspaceHeader } from '@level-zero/ui';
 import { useMemo, useState } from 'react';
 
+import { AiInspector } from '@/features/ai-inspector/ai-inspector';
 import { ApiRequestError } from '@/lib/api';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 
@@ -121,6 +122,12 @@ export function IdeaLabWorkspace({ projectId }: { projectId: string }) {
       ) : (
         <Inspector title="New idea" description="Idea Lab">
           <IdeaComposer projectId={projectId} onCreated={setSelected} />
+
+          {/* Nothing is selected, so the contextual AI is about the project
+              itself — and an answer kept from here lands in this very grid. */}
+          <div className="mt-5 border-t border-border-subtle pt-4">
+            <AiInspector projectId={projectId} subject={{ kind: 'project' }} />
+          </div>
         </Inspector>
       )}
     </div>
