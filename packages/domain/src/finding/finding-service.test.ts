@@ -4,7 +4,7 @@ import { NotFoundError } from '../shared/errors';
 import { fixedClock } from '../shared/clock';
 import { sequentialIdGenerator } from '../shared/id';
 import { InMemoryFindingRepository } from '../testing';
-import { createFinding, type CreateFindingInput, type Finding, type FindingEvidence } from './finding';
+import { createFinding, type CheckFinding, type Finding, type FindingEvidence } from './finding';
 import { FindingService } from './finding-service';
 
 const clock = fixedClock('2026-03-01T09:00:00.000Z');
@@ -16,21 +16,18 @@ const evidence: FindingEvidence[] = [
   { entityId: 'entity-1', where: 'The Diver', states: 'has a newer current version' },
 ];
 
-function input(overrides: Partial<CreateFindingInput> = {}): CreateFindingInput {
-  return {
-    projectId: 'project-1',
-    checkId: 'stale-prototype-pin',
-    fingerprint: 'fingerprint-1',
-    origin: 'deterministic',
-    severity: 'warning',
-    summary: 'The Diver has changed since this prototype version pinned it.',
-    evidence,
-    ...overrides,
-  };
-}
+/** Everything a check reports, before the runner says what kind of claim it is. */
+const reported: CheckFinding & { projectId: string; checkId: string } = {
+  projectId: 'project-1',
+  checkId: 'stale-prototype-pin',
+  fingerprint: 'fingerprint-1',
+  severity: 'warning',
+  summary: 'The Diver has changed since this prototype version pinned it.',
+  evidence,
+};
 
-function seedFinding(overrides: Partial<CreateFindingInput> = {}): Finding {
-  return createFinding(input(overrides), { clock, ids });
+function seedFinding(overrides: Partial<typeof reported> = {}): Finding {
+  return createFinding({ ...reported, ...overrides, origin: 'deterministic' }, { clock, ids });
 }
 
 let repo: InMemoryFindingRepository;

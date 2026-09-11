@@ -92,8 +92,26 @@ export function isScanActive(job: Job | null): boolean {
   return Boolean(job && ACTIVE_STATUSES.has(job.status));
 }
 
-/** A check's id, humanized — `duplicate-name` reads as `Duplicate name`. */
+/**
+ * The registered checks' own `title` (docs/decisions/consistency-findings.md
+ * §6.2: "shown as the finding's category on the surface"), for the ones this
+ * doesn't read correctly off the id alone — `near-duplicate` humanizes to
+ * "Near duplicate", not the check's actual "Near-duplicate concept".
+ *
+ * Kept as a small, literal map rather than importing `CONSISTENCY_CHECKS` /
+ * `AI_CONSISTENCY_CHECKS` from `@level-zero/domain`: those registries carry
+ * `run` functions built for the worker, and a browser bundle has no reason to
+ * pull them in for four title strings.
+ */
+const CHECK_TITLES: Record<string, string> = {
+  'near-duplicate': 'Near-duplicate concept',
+};
+
+/** A check's title — the registered one where known, else the id humanized. */
 export function checkTitle(checkId: string): string {
+  const known = CHECK_TITLES[checkId];
+  if (known) return known;
+
   const words = checkId.split('-').join(' ');
   return words.charAt(0).toUpperCase() + words.slice(1);
 }

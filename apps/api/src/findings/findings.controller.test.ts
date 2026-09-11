@@ -6,7 +6,7 @@ import {
   createProject,
   fixedClock,
   sequentialIdGenerator,
-  type CreateFindingInput,
+  type CheckFinding,
   type Finding,
   type Project,
 } from '@level-zero/domain';
@@ -44,12 +44,13 @@ const evidence = [
   { entityId: 'entity-b', where: 'the diver', states: 'also named The Diver' },
 ];
 
-function input(overrides: Partial<CreateFindingInput> = {}): CreateFindingInput {
+function input(
+  overrides: Partial<CheckFinding & { projectId: string; checkId: string }> = {},
+): CheckFinding & { projectId: string; checkId: string } {
   return {
     projectId: project.id,
     checkId: 'duplicate-name',
     fingerprint: `duplicate-name::${overrides.projectId ?? project.id}`,
-    origin: 'deterministic',
     severity: 'conflict',
     summary: 'The Diver and the diver look like the same character.',
     evidence,
@@ -57,8 +58,10 @@ function input(overrides: Partial<CreateFindingInput> = {}): CreateFindingInput 
   };
 }
 
-async function seedFinding(overrides: Partial<CreateFindingInput> = {}): Promise<Finding> {
-  return findingRepo.upsert(createFinding(input(overrides), deps));
+async function seedFinding(
+  overrides: Partial<CheckFinding & { projectId: string; checkId: string }> = {},
+): Promise<Finding> {
+  return findingRepo.upsert(createFinding({ ...input(overrides), origin: 'deterministic' }, deps));
 }
 
 beforeEach(async () => {

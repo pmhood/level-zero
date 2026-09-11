@@ -66,6 +66,15 @@ describe('checkTitle', () => {
   it('humanizes a kebab-case check id', () => {
     expect(checkTitle('duplicate-name')).toBe('Duplicate name');
     expect(checkTitle('stale-prototype-pin')).toBe('Stale prototype pin');
+    expect(checkTitle('lore-contradiction')).toBe('Lore contradiction');
+  });
+
+  it('uses the registered title where humanizing the id would get it wrong', () => {
+    expect(checkTitle('near-duplicate')).toBe('Near-duplicate concept');
+  });
+
+  it('falls back to humanizing for a check this map does not know about yet', () => {
+    expect(checkTitle('some-future-check')).toBe('Some future check');
   });
 });
 
