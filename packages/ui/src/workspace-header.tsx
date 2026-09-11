@@ -37,8 +37,8 @@ export function WorkspaceHeader({ title, description, actions, image }: Workspac
   return (
     <header
       className={cn(
-        'flex justify-between gap-4 px-4 py-5 xl:px-5 2xl:px-6',
-        image ? 'min-h-[180px] items-end bg-cover bg-center' : 'items-start',
+        'flex items-start justify-between gap-4 px-4 py-5 xl:px-5 2xl:px-6',
+        image && 'min-h-[180px] bg-cover bg-center',
       )}
       style={image ? { backgroundImage: `${CINEMATIC_SCRIM}, url("${image}")` } : undefined}
     >
