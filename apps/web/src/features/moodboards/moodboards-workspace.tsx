@@ -98,7 +98,7 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
   const actions = useMemo<MoodboardCanvasActions>(
     () => ({
       addNode: (type) => place(type),
-      updateNodes: (patches) => updateNodes.mutate(patches),
+      updateNodes: (patches) => updateNodes.mutateAsync(patches),
       removeNodes: (nodeIds) => removeNodes.mutate(nodeIds),
       duplicateNodes: (nodeIds) => duplicateNodes.mutate(nodeIds),
       createGroup: (memberNodeIds) => groupNodes.mutate(memberNodeIds),

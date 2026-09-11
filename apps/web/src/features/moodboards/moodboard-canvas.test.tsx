@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { MoodboardNode, MoodboardNodePatch } from '@level-zero/domain';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MoodboardCanvas } from './moodboard-canvas';
@@ -8,6 +8,8 @@ import type { MoodboardCanvasActions } from './moodboard-toolbar';
 
 vi.mock('@/lib/api', () => ({
   assetContentUrl: (projectId: string, assetId: string) => `/api/${projectId}/${assetId}`,
+  apiErrorMessage: (error: unknown, fallback = 'Something went wrong talking to the API.') =>
+    error instanceof Error ? error.message : fallback,
 }));
 
 beforeAll(() => {
@@ -46,7 +48,7 @@ let selected: readonly string[];
 beforeEach(() => {
   actions = {
     addNode: vi.fn(),
-    updateNodes: vi.fn(),
+    updateNodes: vi.fn().mockResolvedValue(undefined),
     removeNodes: vi.fn(),
     duplicateNodes: vi.fn(),
     createGroup: vi.fn(),
@@ -580,6 +582,45 @@ describe('undo/redo', () => {
     // the space-pan modifier already leaves a focused control alone.
     expect(fireEvent.keyDown(input, { key: 'z', ctrlKey: true })).toBe(true);
     expect(calls()).toHaveLength(1); // only the drag's own commit
+  });
+});
+
+describe('a failed save', () => {
+  it('reverts the dragged tile and surfaces the error once the save is rejected', async () => {
+    actions.updateNodes = vi.fn().mockRejectedValue(new Error('Node was locked by another edit.'));
+    renderCanvas([node()]);
+
+    drag(tile('node_1'), { x: 10, y: 10 }, { x: 90, y: 40 });
+    expect(tile('node_1').style.left).toBe('80px'); // shown at once, ahead of the save
+
+    await waitFor(() => expect(tile('node_1').style.left).toBe('0px'));
+    expect(screen.getByText('Node was locked by another edit.')).toBeTruthy();
+  });
+
+  it('does not leave a bogus entry on the undo stack once a failed save has been reverted', async () => {
+    actions.updateNodes = vi.fn().mockRejectedValue(new Error('offline'));
+    const canvas = renderCanvas([node()]);
+
+    drag(tile('node_1'), { x: 10, y: 10 }, { x: 90, y: 40 });
+    await waitFor(() => expect(tile('node_1').style.left).toBe('0px'));
+
+    fireEvent.keyDown(canvas, { key: 'z', ctrlKey: true });
+
+    // The commit never landed, so it was never a history entry: undo finds
+    // nothing to do and never calls back in for a second, pointless save.
+    expect(actions.updateNodes).toHaveBeenCalledTimes(1);
+  });
+
+  it('dismisses the error banner on request', async () => {
+    actions.updateNodes = vi.fn().mockRejectedValue(new Error('offline'));
+    renderCanvas([node()]);
+
+    drag(tile('node_1'), { x: 10, y: 10 }, { x: 90, y: 40 });
+    await waitFor(() => expect(screen.getByText('offline')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+
+    expect(screen.queryByText('offline')).toBeNull();
   });
 });
 
