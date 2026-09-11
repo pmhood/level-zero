@@ -282,13 +282,21 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     },
     {
       provide: PlaytestService,
-      inject: [PLAYTEST_REPOSITORY, PROTOTYPE_VERSION_REPOSITORY, EntityService, DOMAIN_DEPS],
+      inject: [
+        PLAYTEST_REPOSITORY,
+        PROTOTYPE_VERSION_REPOSITORY,
+        EntityService,
+        ActivityService,
+        DOMAIN_DEPS,
+      ],
       useFactory: (
         playtests: PlaytestRepository,
         prototypeVersions: PrototypeVersionRepository,
         entities: EntityService,
+        activity: ActivityService,
         deps: EntityServiceDeps,
-      ): PlaytestService => new PlaytestService(playtests, prototypeVersions, entities, deps),
+      ): PlaytestService =>
+        new PlaytestService(playtests, prototypeVersions, entities, activity, deps),
     },
     {
       provide: MOODBOARD_REPOSITORY,

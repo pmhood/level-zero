@@ -21,6 +21,7 @@ const deps = { clock, ids: sequentialIdGenerator('id') };
 
 let entities: EntityService;
 let prototypeVersionRepo: InMemoryPrototypeVersionRepository;
+let activityRepo: InMemoryActivityRepository;
 let playtests: PlaytestService;
 let project: Project;
 let otherProject: Project;
@@ -29,7 +30,8 @@ let version: PrototypeVersion;
 beforeEach(async () => {
   const projectRepo = new InMemoryProjectRepository();
   const entityRepo = new InMemoryEntityRepository();
-  const activity = new ActivityService(new InMemoryActivityRepository(), deps);
+  activityRepo = new InMemoryActivityRepository();
+  const activity = new ActivityService(activityRepo, deps);
   entities = new EntityService(entityRepo, projectRepo, activity, deps);
 
   prototypeVersionRepo = new InMemoryPrototypeVersionRepository();
@@ -37,6 +39,7 @@ beforeEach(async () => {
     new InMemoryPlaytestRepository(),
     prototypeVersionRepo,
     entities,
+    activity,
     deps,
   );
 
@@ -99,6 +102,57 @@ describe('updating a playtest', () => {
       summary: 'Players finished in under ten minutes.',
       prototypeVersionId: version.id,
     });
+  });
+
+  it('records a playtest_completed activity naming the playtest, scoped to its project', async () => {
+    const playtest = await playtests.create(project.id, {
+      prototypeVersionId: version.id,
+      name: 'Vertical slice',
+      createdBy: 'Alex',
+    });
+
+    const completed = await playtests.update(project.id, playtest.id, { status: 'complete' });
+
+    const feed = await activityRepo.listByProject(project.id, {});
+    expect(feed.items).toMatchObject([
+      {
+        projectId: project.id,
+        type: 'playtest_completed',
+        summary: 'Vertical slice completed',
+        subjectType: 'playtest',
+        subjectId: completed.id,
+        metadata: { prototypeVersionId: version.id },
+        actor: 'Alex',
+      },
+    ]);
+
+    const otherFeed = await activityRepo.listByProject(otherProject.id, {});
+    expect(otherFeed.items).toEqual([]);
+  });
+
+  it('does not record another activity when an already-complete playtest is updated again', async () => {
+    const playtest = await playtests.create(project.id, {
+      prototypeVersionId: version.id,
+      name: 'Vertical slice',
+    });
+    await playtests.update(project.id, playtest.id, { status: 'complete' });
+
+    await playtests.update(project.id, playtest.id, { summary: 'Wrapped up' });
+
+    const feed = await activityRepo.listByProject(project.id, {});
+    expect(feed.items.filter((item) => item.type === 'playtest_completed')).toHaveLength(1);
+  });
+
+  it('does not record an activity for updates that leave status untouched', async () => {
+    const playtest = await playtests.create(project.id, {
+      prototypeVersionId: version.id,
+      name: 'Vertical slice',
+    });
+
+    await playtests.update(project.id, playtest.id, { summary: 'Still running' });
+
+    const feed = await activityRepo.listByProject(project.id, {});
+    expect(feed.items).toEqual([]);
   });
 });
 

@@ -61,7 +61,13 @@ beforeEach(async () => {
     activity,
     deps,
   );
-  const playtestService = new PlaytestService(playtestRepo, prototypeVersionRepo, entities, deps);
+  const playtestService = new PlaytestService(
+    playtestRepo,
+    prototypeVersionRepo,
+    entities,
+    activity,
+    deps,
+  );
 
   const moduleRef = await Test.createTestingModule({
     controllers: [PlaytestsController],
