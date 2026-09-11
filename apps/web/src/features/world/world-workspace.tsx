@@ -79,6 +79,7 @@ export function WorldWorkspace({ projectId }: { projectId: string }) {
     <WorkspacePage
       title="World"
       description="Places, people and history — the setting as connected canon rather than one long wiki."
+      image="/headers/world.jpg"
       actions={
         <Button onClick={() => compose(composerType)}>
           <PlusIcon className="size-4" />

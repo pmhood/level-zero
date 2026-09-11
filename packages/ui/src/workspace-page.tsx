@@ -6,6 +6,9 @@ export interface WorkspacePageProps {
   title: React.ReactNode;
   description?: React.ReactNode;
   actions?: React.ReactNode;
+  /** Environment artwork for the header; see `WorkspaceHeader`. Passing it
+   * switches this page from the compact header to the cinematic one. */
+  image?: string;
   /** Sub-navigation and filters for this tool. The sidebar carries
    * project-level destinations only, so a tool's own tabs live here. */
   toolbar?: React.ReactNode;
@@ -28,6 +31,7 @@ export function WorkspacePage({
   title,
   description,
   actions,
+  image,
   toolbar,
   inspector,
   children,
@@ -35,7 +39,7 @@ export function WorkspacePage({
   return (
     <div className="flex h-full min-h-0">
       <div className="flex min-w-0 flex-1 flex-col">
-        <WorkspaceHeader title={title} description={description} actions={actions} />
+        <WorkspaceHeader title={title} description={description} actions={actions} image={image} />
         {toolbar && <div className="shrink-0 px-4 xl:px-5 2xl:px-6">{toolbar}</div>}
         <div className="flex min-h-0 flex-1">{children}</div>
       </div>
