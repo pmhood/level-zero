@@ -4,6 +4,8 @@ import type { Entity, MoodboardNodeType, RelationType } from '@level-zero/domain
 import { EmptyState, WorkspacePage } from '@level-zero/ui';
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 
+import { AiInspector } from '@/features/ai-inspector/ai-inspector';
+import type { AiSubject } from '@/features/ai-inspector/ai-subject';
 import { GenerationPanel } from '@/features/generation/generation-panel';
 import { apiErrorMessage } from '@/lib/api';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
@@ -136,6 +138,17 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
     [nodes, selectedNodeIds, entities],
   );
 
+  // What the contextual AI inspector is about: the file a selected node shows,
+  // or the canonical entity behind it. The entity wins where a node has both,
+  // because that is the object the rest of the project is connected to.
+  const aiSubject = useMemo((): AiSubject | null => {
+    const referenced = selectedNode?.entityId ? entities.get(selectedNode.entityId) : undefined;
+    if (referenced) return { kind: 'entity', entity: referenced };
+
+    const asset = selectedNode?.assetId ? assets.get(selectedNode.assetId) : undefined;
+    return asset ? { kind: 'asset', asset } : null;
+  }, [selectedNode, entities, assets]);
+
   function openBoard(nextBoardId: string) {
     setOpenBoardId(nextBoardId);
     setSelectedNodeIds([]);
@@ -176,6 +189,7 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
               />
             )
           }
+          contextualAi={aiSubject && <AiInspector projectId={projectId} subject={aiSubject} />}
         />
       }
     >

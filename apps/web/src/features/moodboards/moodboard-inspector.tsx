@@ -63,6 +63,12 @@ export interface MoodboardInspectorProps {
    * presentational and there is still only one generator in the product.
    */
   generator?: ReactNode;
+  /**
+   * The shared contextual AI surface, composed by the workspace for whatever
+   * the selected node points at. A slot for the same reason as `generator`:
+   * there is one AI inspector in the product, and it is not built here.
+   */
+  contextualAi?: ReactNode;
 }
 
 /**
@@ -85,6 +91,7 @@ export function MoodboardInspector({
   onDisconnect,
   onPromoteToVisualDirection,
   generator,
+  contextualAi,
 }: MoodboardInspectorProps) {
   return (
     <Inspector
@@ -115,6 +122,8 @@ export function MoodboardInspector({
         )}
 
         {generator}
+
+        {contextualAi}
 
         <ConnectorList
           connectors={connectors}

@@ -1,12 +1,17 @@
 'use client';
 
-import type { Entity } from '@level-zero/domain';
+import type { Entity, Playtest, PrototypeVersion } from '@level-zero/domain';
 import { Button, HistoryIcon, Inspector, StatusBadge, Tag } from '@level-zero/ui';
 
+import { AiInspector } from '@/features/ai-inspector/ai-inspector';
 import { entityStatusBadge } from '@/features/entities/entity-presentation';
 
 import { prototypeVersionStatusBadge } from './prototype-presentation';
+import { usePlaytestsForVersion } from './use-playtests';
 import { useArchivePrototype, usePrototypeVersions, useRestorePrototype } from './use-prototypes';
+
+/** As much history as one ask carries; the API refuses a longer excerpt outright. */
+const MAX_EXCERPT_LENGTH = 8000;
 
 /**
  * What can be done with the prototype in hand: change its standing in the
@@ -34,6 +39,7 @@ export function PrototypeInspector({
 
   const versions = versionsQuery.data?.items ?? [];
   const latest = versions[0] ?? null;
+  const playtestsQuery = usePlaytestsForVersion(projectId, latest?.id ?? null);
 
   return (
     <Inspector key={prototype.id} title={prototype.name} description="Prototype" onClose={onClose}>
@@ -82,8 +88,57 @@ export function PrototypeInspector({
           />
         </dl>
       </section>
+
+      <div className="mt-5 border-t border-border-subtle pt-4">
+        <AiInspector
+          projectId={projectId}
+          subject={{
+            kind: 'entity',
+            entity: prototype,
+            excerpt: prototypeExcerpt(versions, playtestsQuery.data?.items ?? []),
+          }}
+        />
+      </div>
     </Inspector>
   );
+}
+
+/**
+ * The version history and the playtests against the newest version, written
+ * out for a prompt.
+ *
+ * Versions and playtests are rows of their own rather than entities, so the
+ * relationship walk behind a resolved context cannot reach them. This is the
+ * one thing the prototype inspector has to hand over itself — and it hands
+ * over what the panel beside it already shows, not an analysis of it.
+ */
+function prototypeExcerpt(
+  versions: readonly PrototypeVersion[],
+  playtests: readonly Playtest[],
+): string | null {
+  const newest = versions[0];
+  if (!newest) return null;
+
+  const history = versions.map(
+    (version) =>
+      `- v${version.versionNumber} · ${prototypeVersionStatusBadge(version.status).label}${
+        version.notes ? ` — ${version.notes}` : ''
+      }`,
+  );
+
+  const recorded = playtests.map(
+    (playtest) =>
+      `- ${playtest.name} · ${playtest.status}${playtest.goal ? ` — ${playtest.goal}` : ''}`,
+  );
+
+  return [
+    ['Version history, newest first:', ...history].join('\n'),
+    ...(recorded.length > 0
+      ? [[`Playtests of v${newest.versionNumber}:`, ...recorded].join('\n')]
+      : []),
+  ]
+    .join('\n\n')
+    .slice(0, MAX_EXCERPT_LENGTH);
 }
 
 function Row({ label, value }: { label: string; value: string }) {

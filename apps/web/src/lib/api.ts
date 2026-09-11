@@ -1,4 +1,4 @@
-import type { AiCapability } from '@level-zero/ai';
+import type { AiCapability, ResolvedContext } from '@level-zero/ai';
 import type {
   Asset,
   AssetKind,
@@ -817,4 +817,75 @@ export interface CreatePlaytestParams {
 
 export function createPlaytest(projectId: string, input: CreatePlaytestParams): Promise<Playtest> {
   return post(`/api/projects/${projectId}/playtests`, input);
+}
+
+// --- Contextual AI inspector ---------------------------------------------
+
+/** The capabilities this deployment can serve inline, so unavailable actions can say so. */
+export function listAiCapabilities(projectId: string): Promise<{ capabilities: AiCapability[] }> {
+  return apiFetch(`/api/projects/${projectId}/ai/capabilities`);
+}
+
+export interface RunAiActionInput {
+  /** Which inspector action asked, recorded on the generation. */
+  action: string;
+  capability: AiCapability;
+  instruction: string;
+  /** The selected entity, for an entity subject. Empty for a project-level ask. */
+  selectedEntityIds?: string[];
+  mentionedEntityIds?: string[];
+  /** The selected file, for an asset subject. */
+  assetIds?: string[];
+  /** Workspace material the relationship graph does not hold. */
+  excerpt?: string;
+  /** Hops to follow out from the subject. `0` asks about the subject alone. */
+  relatedDepth?: number;
+  createdBy?: string;
+}
+
+export interface AiActionResult {
+  generationId: string;
+  action: string;
+  capability: AiCapability;
+  /** The recommendation. Nothing is written to the project until it is accepted. */
+  output: string;
+  /** The project material the request carried, for the inspector's disclosure. */
+  context: ResolvedContext;
+}
+
+/**
+ * Runs one contextual AI action. Answers in the request rather than through a
+ * job: the user is watching a spinner in a 320px panel, and nothing reaches
+ * the project either way until they accept the result.
+ */
+export function runAiAction(
+  projectId: string,
+  input: RunAiActionInput,
+  signal?: AbortSignal,
+): Promise<AiActionResult> {
+  return apiFetch(`/api/projects/${projectId}/ai/actions`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+    ...(signal ? { signal } : {}),
+  });
+}
+
+export interface AcceptAiActionInput {
+  name: string;
+  text: string;
+  tags?: string[];
+}
+
+/**
+ * Accepts one recommendation, as a draft `idea` carrying `generated_from`
+ * edges back to everything the request went in with. The subject is untouched:
+ * this is the only call in the flow that writes to the project, and it only
+ * ever adds.
+ */
+export function acceptAiActionResult(
+  projectId: string,
+  generationId: string,
+  input: AcceptAiActionInput,
+): Promise<Entity> {
+  return post(`/api/projects/${projectId}/ai/actions/${generationId}/apply`, input);
 }
