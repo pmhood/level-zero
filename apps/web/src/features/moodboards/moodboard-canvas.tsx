@@ -10,12 +10,15 @@ import type {
 } from '@level-zero/domain';
 import { CloseIcon } from '@level-zero/ui';
 import {
+  forwardRef,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type ForwardedRef,
   type PointerEvent,
 } from 'react';
 
@@ -75,7 +78,11 @@ type Gesture =
   | { kind: 'rotate'; pointerId: number; nodeId: string; box: Box }
   // A second touch landing mid-gesture, screen points keyed by pointer id so
   // either finger can move while the other holds still.
-  | { kind: 'pinch'; pointerIds: readonly [number, number]; points: Readonly<Record<number, Point>> };
+  | {
+      kind: 'pinch';
+      pointerIds: readonly [number, number];
+      points: Readonly<Record<number, Point>>;
+    };
 
 export interface MoodboardCanvasProps {
   projectId: string;
@@ -88,6 +95,21 @@ export interface MoodboardCanvasProps {
 }
 
 /**
+ * What the workspace can reach into this canvas for, from outside it.
+ *
+ * The history stack (issue #124) is owned entirely by this component and
+ * reset with it — see the ref below. The rail's placements and the
+ * generation panel's "Add to board" call the same `useAddMoodboardNode`
+ * mutation the toolbar's own create buttons do, but from sibling components
+ * that have no other route into that stack, so `recordCreate` is the one
+ * door open to them: it records a create the same way `commitCreate` does,
+ * without giving either the ability to reach in and rewrite it.
+ */
+export interface MoodboardCanvasHandle {
+  recordCreate: (created: Promise<MoodboardNode>) => void;
+}
+
+/**
  * The freeform board surface (design system spec §30).
  *
  * There is no canvas library under this: the board is one transformed container
@@ -97,15 +119,22 @@ export interface MoodboardCanvasProps {
  * nothing of its own — a gesture in flight is a draft box, and the moment it
  * settles it is read back out as a patch to the stored node's named fields.
  */
-export function MoodboardCanvas({
-  projectId,
-  nodes,
-  connectors,
-  entities,
-  assets,
-  actions,
-  onSelectionChange,
-}: MoodboardCanvasProps) {
+export const MoodboardCanvas = forwardRef<MoodboardCanvasHandle, MoodboardCanvasProps>(
+  MoodboardCanvasImpl,
+);
+
+function MoodboardCanvasImpl(
+  {
+    projectId,
+    nodes,
+    connectors,
+    entities,
+    assets,
+    actions,
+    onSelectionChange,
+  }: MoodboardCanvasProps,
+  handleRef: ForwardedRef<MoodboardCanvasHandle>,
+) {
   const containerRef = useRef<HTMLDivElement>(null);
   const gestureRef = useRef<Gesture | null>(null);
   const spaceRef = useRef(false);
@@ -317,57 +346,56 @@ export function MoodboardCanvas({
    * A patch's opposite is its inverse patches; a create's is removing the
    * node it made; a delete's is re-adding what it took off the board. The
    * re-add is the one case that hands back something new: the database
-   * assigns the restored node(s) a fresh id, so the entry now sitting on the
-   * redo stack has to be corrected to that id before a later redo tries to
-   * remove a row that no longer exists. Returning `null` means the entry
-   * needs no such correction.
+   * assigns the restored node(s) a fresh id, so this resolves with the
+   * old-id-to-new-id mapping the caller needs to bring the *rest* of the
+   * history up to date — every entry in either stack can hold that same old
+   * id, not only the one this entry itself becomes. `null` means nothing
+   * needs remapping.
    */
-  function applyInverse(entry: MoodboardHistoryEntry): Promise<MoodboardHistoryEntry | null> {
+  function applyInverse(entry: MoodboardHistoryEntry): Promise<ReadonlyMap<string, string> | null> {
     switch (entry.kind) {
       case 'patch':
         return actionsRef.current.updateNodes(entry.inversePatches).then(() => null);
       case 'create':
-        return actionsRef.current
-          .removeNodes(entry.nodes.map((node) => node.id))
-          .then(() => null);
+        return actionsRef.current.removeNodes(entry.nodes.map((node) => node.id)).then(() => null);
       case 'delete':
         return actionsRef.current
           .restoreNodes(entry.nodes)
-          .then((restored): MoodboardHistoryEntry => ({ kind: 'delete', nodes: restored }));
+          .then((restored) => idMapOf(entry.nodes, restored));
     }
   }
 
   /** Applies an entry the way it originally settled — the redo direction. */
-  function applyForward(entry: MoodboardHistoryEntry): Promise<MoodboardHistoryEntry | null> {
+  function applyForward(entry: MoodboardHistoryEntry): Promise<ReadonlyMap<string, string> | null> {
     switch (entry.kind) {
       case 'patch':
         return actionsRef.current.updateNodes(entry.patches).then(() => null);
       case 'create':
         return actionsRef.current
           .restoreNodes(entry.nodes)
-          .then((restored): MoodboardHistoryEntry => ({ kind: 'create', nodes: restored }));
+          .then((restored) => idMapOf(entry.nodes, restored));
       case 'delete':
-        return actionsRef.current
-          .removeNodes(entry.nodes.map((node) => node.id))
-          .then(() => null);
+        return actionsRef.current.removeNodes(entry.nodes.map((node) => node.id)).then(() => null);
     }
   }
 
   /**
-   * Swaps a corrected entry in for the one `applyInverse`/`applyForward` just
-   * settled — but only while it is still the entry sitting on top. Nothing
-   * has moved past it since is the same guard a failed save's rollback uses
-   * below: a create or delete that landed under someone else's changes is
-   * left alone rather than spliced into the middle of the stack.
+   * Rewrites every entry in *both* stacks that referenced one of these old
+   * ids to the new one the database just assigned it on restore.
+   *
+   * A restore is not only ever the top of the opposite stack's business: a
+   * patch or a group membership settled before the node was ever deleted can
+   * sit deeper in either stack, still keyed to the id that row no longer has
+   * — drag a node, delete it, undo twice, and that second undo is exactly
+   * this case. Rewriting the whole history rather than just the adjacent
+   * entry is what keeps every later undo/redo pointed at a row that still
+   * exists, however many delete/restore cycles it has been through.
    */
-  function replaceIfStillOnTop(
-    side: 'undo' | 'redo',
-    oldEntry: MoodboardHistoryEntry,
-    newEntry: MoodboardHistoryEntry,
-  ) {
-    const stack = historyRef.current[side];
-    if (stack.at(-1) !== oldEntry) return;
-    historyRef.current = { ...historyRef.current, [side]: [...stack.slice(0, -1), newEntry] };
+  function remapHistory(idMap: ReadonlyMap<string, string>) {
+    historyRef.current = {
+      undo: historyRef.current.undo.map((entry) => remapEntry(entry, idMap)),
+      redo: historyRef.current.redo.map((entry) => remapEntry(entry, idMap)),
+    };
   }
 
   // Ctrl+Z / Cmd+Z steps the history back one settled change; the shifted
@@ -391,8 +419,8 @@ export function MoodboardCanvas({
     historyRef.current = popped.history;
     setSaveError(null);
     applyInverse(popped.entry)
-      .then((corrected) => {
-        if (corrected) replaceIfStillOnTop('redo', popped.entry, corrected);
+      .then((idMap) => {
+        if (idMap) remapHistory(idMap);
       })
       .catch((error: unknown) => {
         if (historyRef.current.redo.at(-1) === popped.entry) {
@@ -411,8 +439,8 @@ export function MoodboardCanvas({
     historyRef.current = popped.history;
     setSaveError(null);
     applyForward(popped.entry)
-      .then((corrected) => {
-        if (corrected) replaceIfStillOnTop('undo', popped.entry, corrected);
+      .then((idMap) => {
+        if (idMap) remapHistory(idMap);
       })
       .catch((error: unknown) => {
         if (historyRef.current.undo.at(-1) === popped.entry) {
@@ -481,8 +509,8 @@ export function MoodboardCanvas({
   }
 
   /**
-   * Adds a node and records it as one step of history — issue #125's
-   * counterpart to `commitPatches`.
+   * Records a create as one step of history once it actually settles —
+   * issue #125's counterpart to `commitPatches`.
    *
    * There is nothing to record until the server hands back the id it
    * assigned, so — unlike a layout commit, which already knows the values it
@@ -490,18 +518,32 @@ export function MoodboardCanvas({
    * ahead of it. A rejected save therefore never becomes a history entry in
    * the first place, which is simpler than the push-then-roll-back a layout
    * commit needs.
+   *
+   * Takes an already-in-flight save rather than starting one itself, so it
+   * can record a create this canvas did not start: `commitCreate` below
+   * calls `actions.addNode` and hands the result here for the toolbar's own
+   * buttons, and the imperative handle hands this straight to the workspace
+   * for the rail's placements and the generation panel's "Add to board" —
+   * both call the same `useAddMoodboardNode` mutation, just from outside
+   * this component.
    */
-  function commitCreate(type: MoodboardNodeType) {
+  function trackCreate(created: Promise<MoodboardNode>) {
     setSaveError(null);
-    actionsRef.current.addNode(type).then(
-      (created) => {
-        historyRef.current = pushHistory(historyRef.current, { kind: 'create', nodes: [created] });
+    created.then(
+      (node) => {
+        historyRef.current = pushHistory(historyRef.current, { kind: 'create', nodes: [node] });
       },
       (error: unknown) => {
         setSaveError(error);
       },
     );
   }
+
+  function commitCreate(type: MoodboardNodeType) {
+    trackCreate(actionsRef.current.addNode(type));
+  }
+
+  useImperativeHandle(handleRef, () => ({ recordCreate: trackCreate }));
 
   /**
    * Removes placements and records their full data as one step of history —
@@ -956,6 +998,56 @@ function MoodboardGrid({ viewport }: { viewport: Viewport }) {
       <rect width="100%" height="100%" fill="url(#lz-moodboard-grid)" />
     </svg>
   );
+}
+
+/** The old-id-to-new-id mapping a restore produces, in the order it was asked for both in. */
+function idMapOf(
+  before: readonly MoodboardNode[],
+  after: readonly MoodboardNode[],
+): ReadonlyMap<string, string> {
+  return new Map(before.map((node, index) => [node.id, after[index]!.id]));
+}
+
+/** Rewrites the ids and group memberships one entry holds, wherever this map touches them. */
+function remapEntry(
+  entry: MoodboardHistoryEntry,
+  idMap: ReadonlyMap<string, string>,
+): MoodboardHistoryEntry {
+  switch (entry.kind) {
+    case 'patch':
+      return {
+        kind: 'patch',
+        patches: entry.patches.map((patch) => remapPatch(patch, idMap)),
+        inversePatches: entry.inversePatches.map((patch) => remapPatch(patch, idMap)),
+      };
+    case 'create':
+      return { kind: 'create', nodes: entry.nodes.map((node) => remapNode(node, idMap)) };
+    case 'delete':
+      return { kind: 'delete', nodes: entry.nodes.map((node) => remapNode(node, idMap)) };
+  }
+}
+
+/**
+ * A patch keyed to a since-restored id, or grouping into a since-restored
+ * group, rewritten to whichever of those the map actually touches — an
+ * untouched patch is returned as-is rather than cloned.
+ */
+function remapPatch(
+  patch: MoodboardNodePatch,
+  idMap: ReadonlyMap<string, string>,
+): MoodboardNodePatch {
+  const id = idMap.get(patch.id);
+  const groupId = patch.groupId ? idMap.get(patch.groupId) : undefined;
+  if (!id && !groupId) return patch;
+  return { ...patch, ...(id ? { id } : {}), ...(groupId ? { groupId } : {}) };
+}
+
+/** The same rewrite as `remapPatch`, for a full node a create or delete entry is holding. */
+function remapNode(node: MoodboardNode, idMap: ReadonlyMap<string, string>): MoodboardNode {
+  const id = idMap.get(node.id);
+  const groupId = node.groupId ? idMap.get(node.groupId) : undefined;
+  if (!id && !groupId) return node;
+  return { ...node, ...(id ? { id } : {}), ...(groupId ? { groupId } : {}) };
 }
 
 /** The tile as it is being drawn, which mid-gesture is not what is stored. */

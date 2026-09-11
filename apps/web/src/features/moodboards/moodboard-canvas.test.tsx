@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import type { MoodboardNode, MoodboardNodePatch } from '@level-zero/domain';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { createRef } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { MoodboardCanvas } from './moodboard-canvas';
+import { MoodboardCanvas, type MoodboardCanvasHandle } from './moodboard-canvas';
 import type { MoodboardCanvasActions } from './moodboard-toolbar';
 
 vi.mock('@/lib/api', () => ({
@@ -50,9 +51,11 @@ beforeEach(() => {
     addNode: vi.fn().mockResolvedValue(node({ id: 'node_new' })),
     updateNodes: vi.fn().mockResolvedValue(undefined),
     removeNodes: vi.fn().mockResolvedValue(undefined),
-    restoreNodes: vi.fn().mockImplementation((nodes: readonly MoodboardNode[]) =>
-      Promise.resolve(nodes.map((given, index) => ({ ...given, id: `restored_${index}` }))),
-    ),
+    restoreNodes: vi
+      .fn()
+      .mockImplementation((nodes: readonly MoodboardNode[]) =>
+        Promise.resolve(nodes.map((given, index) => ({ ...given, id: `restored_${index}` }))),
+      ),
     duplicateNodes: vi.fn(),
     createGroup: vi.fn(),
     removeGroup: vi.fn(),
@@ -698,6 +701,80 @@ describe('creating and deleting (issue #125)', () => {
 
     redo(canvas); // replays 2
     await waitFor(() => expect(actions.restoreNodes).toHaveBeenCalledTimes(1));
+  });
+
+  it('remaps a stale id in an older patch entry once a delete-undo restores the same node under a new one', async () => {
+    actions.restoreNodes = vi.fn().mockResolvedValue([node({ id: 'node_restored', x: 80, y: 30 })]);
+    const canvas = renderCanvas([node({ id: 'node_1' })]);
+
+    // A drag pushes a patch entry keyed to node_1 (forward x:0,y:0 -> x:80,y:30,
+    // inverse back to x:0,y:0), then deleting that same node pushes a delete
+    // entry on top of it — this is the case the two-different-nodes
+    // interleaving test above never exercises.
+    drag(tile('node_1'), { x: 10, y: 10 }, { x: 90, y: 40 });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from board' }));
+    await waitFor(() => expect(actions.removeNodes).toHaveBeenCalledWith(['node_1']));
+
+    undo(canvas); // undoes the delete: restores under a new id
+    await waitFor(() => expect(actions.restoreNodes).toHaveBeenCalledTimes(1));
+
+    undo(canvas); // undoes the drag: must target the id the node actually has now
+    await waitFor(() => expect(calls()).toHaveLength(2)); // 1: the drag's own commit, 2: this undo
+    expect(calls()[1]).toEqual([expect.objectContaining({ id: 'node_restored', x: 0, y: 0 })]);
+  });
+});
+
+describe('creating from outside the canvas (rail and generator placements)', () => {
+  function undo(target: HTMLElement) {
+    fireEvent.keyDown(target, { key: 'z', ctrlKey: true });
+  }
+
+  it('records a placement made through the imperative handle the same way a toolbar create would', async () => {
+    const ref = createRef<MoodboardCanvasHandle>();
+    render(
+      <MoodboardCanvas
+        ref={ref}
+        projectId="prj_1"
+        nodes={[]}
+        connectors={[]}
+        entities={new Map()}
+        assets={new Map()}
+        actions={actions}
+        onSelectionChange={() => {}}
+      />,
+    );
+    const canvas = screen.getByTestId('moodboard-canvas');
+
+    // The rail and the generation panel call `place` themselves — this is
+    // the promise that call already produced, handed in from outside.
+    const created = Promise.resolve(node({ id: 'node_placed', type: 'asset', assetId: 'asset_1' }));
+    ref.current!.recordCreate(created);
+    await created; // let the internal handler settle before checking history
+
+    undo(canvas);
+    await waitFor(() => expect(actions.removeNodes).toHaveBeenCalledWith(['node_placed']));
+  });
+
+  it('surfaces a rejected external placement the same way a failed toolbar create would', async () => {
+    const ref = createRef<MoodboardCanvasHandle>();
+    render(
+      <MoodboardCanvas
+        ref={ref}
+        projectId="prj_1"
+        nodes={[]}
+        connectors={[]}
+        entities={new Map()}
+        assets={new Map()}
+        actions={actions}
+        onSelectionChange={() => {}}
+      />,
+    );
+
+    const failed = Promise.reject(new Error('offline'));
+    ref.current!.recordCreate(failed);
+
+    await waitFor(() => expect(screen.getByText('offline')).toBeTruthy());
+    expect(actions.removeNodes).not.toHaveBeenCalled(); // nothing was ever recorded to undo
   });
 });
 

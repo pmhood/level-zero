@@ -2,13 +2,13 @@
 
 import type { Entity, MoodboardNodeType, RelationType } from '@level-zero/domain';
 import { EmptyState, WorkspacePage } from '@level-zero/ui';
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { GenerationPanel } from '@/features/generation/generation-panel';
 import { apiErrorMessage } from '@/lib/api';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 
-import { MoodboardCanvas } from './moodboard-canvas';
+import { MoodboardCanvas, type MoodboardCanvasHandle } from './moodboard-canvas';
 import { MoodboardInspector } from './moodboard-inspector';
 import { MoodboardRail } from './moodboard-rail';
 import { MOODBOARD_NODE_DEFAULT_SIZE, drawnInZOrder } from './moodboard';
@@ -47,6 +47,13 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
   const [openBoardId, setOpenBoardId] = useState<string | null>(null);
   const [selectedNodeIds, setSelectedNodeIds] = useState<readonly string[]>([]);
   const [librarySearch, setLibrarySearch] = useState('');
+
+  // The rail's placements and the generation panel's "Add to board" call
+  // `place` directly rather than through `actions.addNode`, so this is how
+  // they still reach the open canvas' history — see `recordCreate` on
+  // `MoodboardCanvasHandle`. `null` while no board is open, same as the
+  // canvas itself.
+  const canvasRef = useRef<MoodboardCanvasHandle>(null);
 
   const boardsQuery = useMoodboards(projectId);
   const boardQuery = useMoodboard(projectId, openBoardId);
@@ -154,7 +161,13 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
                 projectId={projectId}
                 contextEntities={selectedEntities}
                 referenceAssets={library.assets.data?.items ?? []}
-                onUseResult={(asset) => place('asset', { assetId: asset.id })}
+                onUseResult={(asset) => {
+                  // Not `canvasRef.current?.recordCreate(place(...))`: optional
+                  // chaining short-circuits the whole expression, `place(...)`
+                  // included, if the canvas ref is not attached yet.
+                  const created = place('asset', { assetId: asset.id });
+                  canvasRef.current?.recordCreate(created);
+                }}
                 useResultLabel="Add to board"
               />
             )
@@ -176,8 +189,14 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
         entities={librarySearchResults.entities.data?.items ?? []}
         librarySearch={librarySearch}
         onLibrarySearchChange={setLibrarySearch}
-        onPlaceAsset={(assetId) => place('asset', { assetId })}
-        onPlaceEntity={(entityId) => place('entity', { entityId })}
+        onPlaceAsset={(assetId) => {
+          const created = place('asset', { assetId });
+          canvasRef.current?.recordCreate(created);
+        }}
+        onPlaceEntity={(entityId) => {
+          const created = place('entity', { entityId });
+          canvasRef.current?.recordCreate(created);
+        }}
       />
 
       <BoardSurface
@@ -189,6 +208,7 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
         {boardQuery.data && (
           <MoodboardCanvas
             key={boardQuery.data.board.id}
+            ref={canvasRef}
             projectId={projectId}
             nodes={nodes}
             connectors={connectors}
