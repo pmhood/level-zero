@@ -25,6 +25,7 @@ export const ACTIVITY_TYPES = [
   'generation_completed',
   'generation_failed',
   'prototype_version_created',
+  'playtest_completed',
 ] as const;
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];
 
@@ -34,6 +35,7 @@ export const ACTIVITY_SUBJECT_TYPES = [
   'entity_version',
   'generation',
   'prototype_version',
+  'playtest',
 ] as const;
 export type ActivitySubjectType = (typeof ACTIVITY_SUBJECT_TYPES)[number];
 

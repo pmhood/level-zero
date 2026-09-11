@@ -1,3 +1,4 @@
+import { type ActivityService } from '../activity/activity-service';
 import { type EntityService } from '../entity/entity-service';
 import { type PrototypeVersionRepository } from '../prototype/prototype-version-repository';
 import { type Clock } from '../shared/clock';
@@ -93,6 +94,7 @@ export class PlaytestService {
     private readonly playtests: PlaytestRepository,
     private readonly prototypeVersions: PrototypeVersionRepository,
     private readonly entities: EntityService,
+    private readonly activity: ActivityService,
     private readonly deps: PlaytestServiceDeps,
   ) {}
 
@@ -122,13 +124,33 @@ export class PlaytestService {
     return this.playtests.listByProject(projectId, { ...filter, limit, offset });
   }
 
+  /**
+   * Applying a patch is the only way a playtest reaches `complete`, so that
+   * transition — and only that transition — records a `playtest_completed`
+   * activity, the way `EntityService.archive` records its own. Updating an
+   * already-complete playtest's summary or tags does not fire it again.
+   */
   async update(
     projectId: string,
     playtestId: string,
     patch: UpdatePlaytestInput,
   ): Promise<Playtest> {
     const playtest = await this.getById(projectId, playtestId);
-    return this.playtests.save(applyPlaytestUpdate(playtest, patch, this.deps));
+    const updated = await this.playtests.save(applyPlaytestUpdate(playtest, patch, this.deps));
+
+    if (updated.status === 'complete' && playtest.status !== 'complete') {
+      await this.activity.record({
+        projectId,
+        type: 'playtest_completed',
+        summary: `${updated.name} completed`,
+        subjectType: 'playtest',
+        subjectId: updated.id,
+        metadata: { prototypeVersionId: updated.prototypeVersionId },
+        actor: updated.createdBy,
+      });
+    }
+
+    return updated;
   }
 
   /** Numbers the session monotonically within the playtest, starting at 1. */

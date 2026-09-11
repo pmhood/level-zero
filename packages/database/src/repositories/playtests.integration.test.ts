@@ -27,6 +27,7 @@ const deps = { clock: systemClock, ids: uuidIdGenerator };
 
 let client: DatabaseClient;
 let playtestRepo: DrizzlePlaytestRepository;
+let activityRepo: DrizzleActivityRepository;
 let projects: ProjectService;
 let entities: EntityService;
 let prototypes: PrototypeService;
@@ -42,8 +43,9 @@ beforeAll(async () => {
   const assetRepo = new DrizzleAssetRepository(client.db);
   const prototypeVersionRepo = new DrizzlePrototypeVersionRepository(client.db);
   playtestRepo = new DrizzlePlaytestRepository(client.db);
+  activityRepo = new DrizzleActivityRepository(client.db);
 
-  const activity = new ActivityService(new DrizzleActivityRepository(client.db), deps);
+  const activity = new ActivityService(activityRepo, deps);
 
   projects = new ProjectService(projectRepo, deps);
   entities = new EntityService(entityRepo, projectRepo, activity, deps);
@@ -55,7 +57,7 @@ beforeAll(async () => {
     activity,
     deps,
   );
-  playtests = new PlaytestService(playtestRepo, prototypeVersionRepo, entities, deps);
+  playtests = new PlaytestService(playtestRepo, prototypeVersionRepo, entities, activity, deps);
 });
 
 afterAll(async () => {
@@ -149,6 +151,42 @@ describe('recording a playtest', () => {
     await expect(
       playtestRepo.insertMetric({ ...metric, id: uuidIdGenerator.next() }),
     ).rejects.toThrow(ConflictError);
+  });
+});
+
+describe('completing a playtest', () => {
+  it('records a playtest_completed activity scoped to its own project', async () => {
+    const { version } = await prototypedVersion();
+    const playtest = await createPlaytest(project.id, version.id);
+    const { version: otherVersion } = await prototypedVersion(otherProject.id);
+    await createPlaytest(otherProject.id, otherVersion.id);
+
+    const completed = await playtests.update(project.id, playtest.id, { status: 'complete' });
+
+    const feed = await activityRepo.listByProject(project.id, {});
+    const recorded = feed.items.find((item) => item.type === 'playtest_completed');
+    expect(recorded).toMatchObject({
+      projectId: project.id,
+      summary: `${completed.name} completed`,
+      subjectType: 'playtest',
+      subjectId: completed.id,
+      metadata: { prototypeVersionId: version.id },
+    });
+
+    const otherFeed = await activityRepo.listByProject(otherProject.id, {});
+    expect(otherFeed.items.find((item) => item.type === 'playtest_completed')).toBeUndefined();
+  });
+
+  it('does not record a second activity when an already-complete playtest is updated again', async () => {
+    const { version } = await prototypedVersion();
+    const playtest = await createPlaytest(project.id, version.id);
+    await playtests.update(project.id, playtest.id, { status: 'complete' });
+
+    await playtests.update(project.id, playtest.id, { summary: 'Final write-up' });
+
+    const feed = await activityRepo.listByProject(project.id, {});
+    const recorded = feed.items.filter((item) => item.type === 'playtest_completed');
+    expect(recorded).toHaveLength(1);
   });
 });
 
