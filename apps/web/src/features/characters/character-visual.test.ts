@@ -3,6 +3,10 @@ import { describe, expect, it } from 'vitest';
 
 import { resolveVisuals, unlinkedAssets } from './character-visual';
 
+// Fixed so a builder called twice — once for the input, once for the expectation —
+// produces equal timestamps. These tests assert on pairing, never on time.
+const FIXED_TIME = new Date('2026-01-01T00:00:00.000Z');
+
 function entity(overrides: Partial<Entity>): Entity {
   return {
     id: 'ent_ref',
@@ -14,8 +18,8 @@ function entity(overrides: Partial<Entity>): Entity {
     tags: [],
     data: {},
     currentVersionId: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    createdAt: FIXED_TIME,
+    updatedAt: FIXED_TIME,
     archivedAt: null,
     ...overrides,
   };
@@ -30,8 +34,8 @@ function edge(relationshipId: string, target: Entity): NeighborEdge {
       targetEntityId: target.id,
       relation: 'references',
       metadata: {},
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: FIXED_TIME,
+      updatedAt: FIXED_TIME,
     },
     direction: 'outgoing',
     entity: target,
@@ -54,8 +58,8 @@ function asset(overrides: Partial<Asset> = {}): Asset {
     variant: 'source',
     sourceAssetId: null,
     status: 'active',
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    createdAt: FIXED_TIME,
+    updatedAt: FIXED_TIME,
     archivedAt: null,
     createdBy: null,
     ...overrides,
