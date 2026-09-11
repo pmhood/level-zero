@@ -60,8 +60,11 @@ ENV NODE_ENV=production \
 # apps/web/server.js and its dependencies at /app/node_modules.
 COPY --from=build /app/apps/web/.next/standalone ./
 # Static assets are deliberately excluded from the trace (nothing imports them),
-# so they are copied separately or every page 404s its own CSS and JS.
+# so they are copied separately or every page 404s its own CSS and JS. The same
+# goes for public/, which the server reads from disk at request time — without
+# it the header artwork 404s.
 COPY --from=build /app/apps/web/.next/static apps/web/.next/static
+COPY --from=build /app/apps/web/public apps/web/public
 
 USER node
 EXPOSE 3000

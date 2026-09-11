@@ -31,6 +31,38 @@ describe('WorkspacePage', () => {
     expect(screen.getByRole('heading', { name: 'Selection' })).toBeDefined();
   });
 
+  it('keeps the compact header when a tool passes no artwork', () => {
+    const { container } = render(
+      <WorkspacePage title="Mechanics" description="Systems that can be tuned.">
+        <p>Workspace body</p>
+      </WorkspacePage>,
+    );
+
+    const header = container.querySelector('header');
+    expect(header?.style.backgroundImage).toBe('');
+    expect(header?.className).not.toContain('min-h-[180px]');
+  });
+
+  it('renders the cinematic header over the artwork, with the scrim above it', () => {
+    const { container } = render(
+      <WorkspacePage title="World" description="The setting." image="/headers/world.jpg">
+        <p>Workspace body</p>
+      </WorkspacePage>,
+    );
+
+    const header = container.querySelector('header');
+    // The scrim is listed first so it stacks above the artwork, and the
+    // artwork is a background rather than an <img> because it is decorative.
+    expect(header?.style.backgroundImage).toMatch(
+      /^linear-gradient\(.*\).*url\(.*\/headers\/world\.jpg.*\)$/,
+    );
+    expect(header?.className).toContain('min-h-[180px]');
+    expect(container.querySelector('img')).toBeNull();
+
+    expect(screen.getByRole('heading', { name: 'World' })).toBeDefined();
+    expect(screen.getByText('The setting.')).toBeDefined();
+  });
+
   it('leaves out the toolbar and inspector rows when a tool has neither', () => {
     const { container } = render(
       <WorkspacePage title="Mechanics">
