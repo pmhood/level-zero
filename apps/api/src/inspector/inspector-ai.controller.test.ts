@@ -35,6 +35,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { DomainExceptionFilter } from '../common/domain-exception.filter';
 import { AI_PROVIDERS } from '../infrastructure/ai.module';
+import { InlineAiRequestService } from '../infrastructure/inline-ai-request.service';
 import { InspectorAiController } from './inspector-ai.controller';
 
 const clock = fixedClock('2026-03-01T09:00:00.000Z');
@@ -84,6 +85,7 @@ async function startApp(registry: AiProviderRegistry): Promise<INestApplication>
       { provide: LineageService, useValue: lineage },
       { provide: ContextResolver, useValue: resolver },
       { provide: AI_PROVIDERS, useValue: registry },
+      InlineAiRequestService,
       { provide: APP_FILTER, useClass: DomainExceptionFilter },
     ],
   }).compile();

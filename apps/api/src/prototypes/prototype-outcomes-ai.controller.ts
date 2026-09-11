@@ -1,18 +1,8 @@
-import {
-  ContextResolver,
-  type AiCapability,
-  type AiProviderRegistry,
-  type ResolvedContext,
-} from '@level-zero/ai';
-import {
-  GenerationService,
-  OutcomeComparisonService,
-  isDomainError,
-  outcomeInterpretationPrompt,
-} from '@level-zero/domain';
-import { BadGatewayException, Body, Controller, Inject, Param, Post } from '@nestjs/common';
+import { ContextResolver, type AiCapability } from '@level-zero/ai';
+import { OutcomeComparisonService, outcomeInterpretationPrompt } from '@level-zero/domain';
+import { BadGatewayException, Body, Controller, Param, Post } from '@nestjs/common';
 
-import { AI_PROVIDERS } from '../infrastructure/ai.module';
+import { InlineAiRequestService } from '../infrastructure/inline-ai-request.service';
 import { InterpretOutcomesDto } from './dto/prototype-outcomes.dto';
 
 /** Reading a briefing and writing prose about it is a plain text generation. */
@@ -48,9 +38,8 @@ export interface OutcomeInterpretation {
 export class PrototypeOutcomesAiController {
   constructor(
     private readonly outcomes: OutcomeComparisonService,
-    private readonly generations: GenerationService,
     private readonly context: ContextResolver,
-    @Inject(AI_PROVIDERS) private readonly providers: AiProviderRegistry,
+    private readonly inlineAiRequests: InlineAiRequestService,
   ) {}
 
   @Post('interpretation')
@@ -63,10 +52,6 @@ export class PrototypeOutcomesAiController {
     // interpretation is always of what is recorded.
     const comparison = await this.outcomes.compare(projectId, body.from, body.to);
 
-    // Fail before anything is recorded if nothing can serve the capability.
-    const candidates = this.providers.candidatesFor(INTERPRETATION_CAPABILITY);
-    const firstChoice = this.providers.resolve(INTERPRETATION_CAPABILITY);
-
     // The prototype and everything whose pin moved are named context, so the
     // walk brings in what those entities are actually connected to.
     const context = await this.context.resolve(projectId, {
@@ -76,91 +61,26 @@ export class PrototypeOutcomesAiController {
         ...comparison.designChanges.map((change) => change.entityId),
       ],
     });
-    const prompt = outcomeInterpretationPrompt(comparison);
 
-    const generation = await this.generations.record(projectId, {
-      capability: INTERPRETATION_CAPABILITY,
-      prompt,
-      parameters: {
-        fromPrototypeVersionId: comparison.from.version.id,
-        toPrototypeVersionId: comparison.to.version.id,
-      },
-      inputEntityIds: namedEntityIds(context),
-      contextEntityIds: ambientEntityIds(context),
-      resolvedContext: { ...context },
-      createdBy: body.createdBy,
-    });
-
-    await this.generations.dispatch(projectId, generation.id, {
-      provider: firstChoice.id,
-      model: firstChoice.defaultModel,
-    });
-
-    try {
-      const result = await this.providers.execute({
+    return this.inlineAiRequests.run(
+      projectId,
+      {
         capability: INTERPRETATION_CAPABILITY,
-        prompt,
-        parameters: generation.parameters,
+        prompt: outcomeInterpretationPrompt(comparison),
+        parameters: {
+          fromPrototypeVersionId: comparison.from.version.id,
+          toPrototypeVersionId: comparison.to.version.id,
+        },
         context,
-      });
-
-      // `execute` may have fallen through to a later candidate; correct the
-      // record so it never names a provider that did not produce the result.
-      const actual = candidates.find((candidate) => candidate.id === result.providerId);
-      if (actual && actual.id !== firstChoice.id) {
-        await this.generations.redispatch(projectId, generation.id, {
-          provider: actual.id,
-          model: actual.defaultModel,
-        });
-      }
-
-      const interpretation = result.output?.trim();
-      if (!interpretation) {
-        throw new BadGatewayException('The model returned nothing to read.');
-      }
-
-      await this.generations.complete(projectId, generation.id, {
-        outputAssetIds: [],
-        providerRequestId: result.requestId ?? null,
-      });
-
-      return { generationId: generation.id, interpretation };
-    } catch (error) {
-      await this.generations.fail(projectId, generation.id, failure(error));
-      // A domain failure keeps its own status; anything the provider threw is
-      // an upstream problem, not the caller's.
-      throw isDomainError(error) ? error : toBadGateway(error);
-    }
+        createdBy: body.createdBy,
+      },
+      (result, generation) => {
+        const interpretation = result.output?.trim();
+        if (!interpretation) {
+          throw new BadGatewayException('The model returned nothing to read.');
+        }
+        return { generationId: generation.id, interpretation };
+      },
+    );
   }
-}
-
-/** Entities the request pointed at: the prototype, and everything whose pin moved. */
-function namedEntityIds(context: ResolvedContext): string[] {
-  return context.entities
-    .filter((entity) => entity.source !== 'related')
-    .map((entity) => entity.id);
-}
-
-/** Entities the relationship walk brought in around them. */
-function ambientEntityIds(context: ResolvedContext): string[] {
-  return context.entities
-    .filter((entity) => entity.source === 'related')
-    .map((entity) => entity.id);
-}
-
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function failure(error: unknown): { code: string; message: string } {
-  return {
-    code: isDomainError(error) ? error.code : 'provider_error',
-    message: message(error),
-  };
-}
-
-function toBadGateway(error: unknown): BadGatewayException {
-  return error instanceof BadGatewayException
-    ? error
-    : new BadGatewayException(`The AI provider could not answer: ${message(error)}`);
 }

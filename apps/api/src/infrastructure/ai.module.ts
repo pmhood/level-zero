@@ -3,11 +3,14 @@ import { type ApiEnv } from '@level-zero/config';
 import { Global, Module } from '@nestjs/common';
 
 import { API_ENV } from '../config/config.module';
+import { AI_PROVIDERS, InlineAiRequestService } from './inline-ai-request.service';
 
-export const AI_PROVIDERS = Symbol('AI_PROVIDERS');
+export { AI_PROVIDERS };
 
 /**
- * Registers the text providers the API answers inline requests with.
+ * Registers the text providers the API answers inline requests with, and the
+ * shared flow — `InlineAiRequestService` — that runs an inline request
+ * against them.
  *
  * Long-running generations still belong to the worker; what runs here is the
  * short, request-shaped work a writer is waiting on — an editor rewrite the
@@ -33,7 +36,8 @@ export const AI_PROVIDERS = Symbol('AI_PROVIDERS');
               new EchoAiProvider(['text.generate', 'text.rewrite']),
         ),
     },
+    InlineAiRequestService,
   ],
-  exports: [AI_PROVIDERS],
+  exports: [AI_PROVIDERS, InlineAiRequestService],
 })
 export class AiModule {}

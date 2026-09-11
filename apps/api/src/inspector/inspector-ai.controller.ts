@@ -10,12 +10,11 @@ import {
   EntityService,
   GenerationService,
   LineageService,
-  isDomainError,
   type Entity,
 } from '@level-zero/domain';
 import { BadGatewayException, Body, Controller, Get, Inject, Param, Post } from '@nestjs/common';
 
-import { AI_PROVIDERS } from '../infrastructure/ai.module';
+import { AI_PROVIDERS, InlineAiRequestService } from '../infrastructure/inline-ai-request.service';
 import { ApplyInspectorResultDto, RunInspectorActionDto } from './dto/inspector-ai.dto';
 
 /** What the inspector can offer: the capabilities something here can actually serve. */
@@ -58,6 +57,7 @@ export class InspectorAiController {
     private readonly lineage: LineageService,
     private readonly context: ContextResolver,
     @Inject(AI_PROVIDERS) private readonly providers: AiProviderRegistry,
+    private readonly inlineAiRequests: InlineAiRequestService,
   ) {}
 
   /**
@@ -80,10 +80,6 @@ export class InspectorAiController {
     @Param('projectId') projectId: string,
     @Body() body: RunInspectorActionDto,
   ): Promise<InspectorActionResult> {
-    // Fail before anything is recorded if nothing can serve the capability.
-    const candidates = this.providers.candidatesFor(body.capability);
-    const firstChoice = this.providers.resolve(body.capability);
-
     const context = await this.context.resolve(projectId, {
       instruction: body.instruction,
       selectedEntityIds: body.selectedEntityIds ?? [],
@@ -91,65 +87,30 @@ export class InspectorAiController {
       assetIds: body.assetIds ?? [],
       ...(body.relatedDepth === undefined ? {} : { relatedDepth: body.relatedDepth }),
     });
-    const prompt = actionPrompt(body);
 
-    const generation = await this.generations.record(projectId, {
-      capability: body.capability,
-      prompt,
-      parameters: { action: body.action },
-      inputEntityIds: namedEntityIds(context),
-      contextEntityIds: ambientEntityIds(context),
-      inputAssetIds: context.assets.map((asset) => asset.id),
-      resolvedContext: { ...context },
-      createdBy: body.createdBy,
-    });
-
-    await this.generations.dispatch(projectId, generation.id, {
-      provider: firstChoice.id,
-      model: firstChoice.defaultModel,
-    });
-
-    try {
-      const result = await this.providers.execute({
+    return this.inlineAiRequests.run(
+      projectId,
+      {
         capability: body.capability,
-        prompt,
-        parameters: generation.parameters,
+        prompt: actionPrompt(body),
+        parameters: { action: body.action },
         context,
-      });
-
-      // `execute` may have fallen through to a later candidate; correct the
-      // record so it never names a provider that did not produce the result.
-      const actual = candidates.find((candidate) => candidate.id === result.providerId);
-      if (actual && actual.id !== firstChoice.id) {
-        await this.generations.redispatch(projectId, generation.id, {
-          provider: actual.id,
-          model: actual.defaultModel,
-        });
-      }
-
-      const output = result.output?.trim();
-      if (!output) {
-        throw new BadGatewayException('The model returned nothing.');
-      }
-
-      await this.generations.complete(projectId, generation.id, {
-        outputAssetIds: [],
-        providerRequestId: result.requestId ?? null,
-      });
-
-      return {
-        generationId: generation.id,
-        action: body.action,
-        capability: body.capability,
-        output,
-        context,
-      };
-    } catch (error) {
-      await this.generations.fail(projectId, generation.id, failure(error));
-      // A domain failure keeps its own status; anything the provider threw is
-      // an upstream problem, not the caller's.
-      throw isDomainError(error) ? error : toBadGateway(error);
-    }
+        createdBy: body.createdBy,
+      },
+      (result, generation) => {
+        const output = result.output?.trim();
+        if (!output) {
+          throw new BadGatewayException('The model returned nothing.');
+        }
+        return {
+          generationId: generation.id,
+          action: body.action,
+          capability: body.capability,
+          output,
+          context,
+        };
+      },
+    );
   }
 
   /**
@@ -221,35 +182,4 @@ function actionPrompt(request: RunInspectorActionDto): string {
       '- Plain prose or a short list. No Markdown fences.',
     ].join('\n'),
   ].join('\n\n');
-}
-
-/** Entities the user pointed at: the subject, and anything named in the ask. */
-function namedEntityIds(context: ResolvedContext): string[] {
-  return context.entities
-    .filter((entity) => entity.source !== 'related')
-    .map((entity) => entity.id);
-}
-
-/** Entities the relationship walk brought in around them. */
-function ambientEntityIds(context: ResolvedContext): string[] {
-  return context.entities
-    .filter((entity) => entity.source === 'related')
-    .map((entity) => entity.id);
-}
-
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function failure(error: unknown): { code: string; message: string } {
-  return {
-    code: isDomainError(error) ? error.code : 'provider_error',
-    message: message(error),
-  };
-}
-
-function toBadGateway(error: unknown): BadGatewayException {
-  return error instanceof BadGatewayException
-    ? error
-    : new BadGatewayException(`The AI provider could not answer: ${message(error)}`);
 }

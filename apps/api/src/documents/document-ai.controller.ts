@@ -1,13 +1,8 @@
-import {
-  ContextResolver,
-  type AiCapability,
-  type AiProviderRegistry,
-  type ResolvedContext,
-} from '@level-zero/ai';
-import { DocumentService, GenerationService, isDomainError } from '@level-zero/domain';
-import { BadGatewayException, Body, Controller, Inject, Param, Post } from '@nestjs/common';
+import { ContextResolver, type AiCapability } from '@level-zero/ai';
+import { DocumentService } from '@level-zero/domain';
+import { BadGatewayException, Body, Controller, Param, Post } from '@nestjs/common';
 
-import { AI_PROVIDERS } from '../infrastructure/ai.module';
+import { InlineAiRequestService } from '../infrastructure/inline-ai-request.service';
 import { SuggestDocumentEditDto } from './dto/document-ai.dto';
 
 /** Rewriting a passage of a document, whatever the writer called the action. */
@@ -40,9 +35,8 @@ export interface DocumentSuggestion {
 export class DocumentAiController {
   constructor(
     private readonly documents: DocumentService,
-    private readonly generations: GenerationService,
     private readonly context: ContextResolver,
-    @Inject(AI_PROVIDERS) private readonly providers: AiProviderRegistry,
+    private readonly inlineAiRequests: InlineAiRequestService,
   ) {}
 
   @Post('suggestions')
@@ -54,10 +48,6 @@ export class DocumentAiController {
     // Reads as the document it claims to be, in the project it claims to be in.
     await this.documents.getById(projectId, documentId);
 
-    // Fail before anything is recorded if nothing can serve the capability.
-    const candidates = this.providers.candidatesFor(SUGGESTION_CAPABILITY);
-    const firstChoice = this.providers.resolve(SUGGESTION_CAPABILITY);
-
     // The document itself is named context, so the model reads the section it
     // is editing, and the walk brings in what the passage points at.
     const context = await this.context.resolve(projectId, {
@@ -65,58 +55,24 @@ export class DocumentAiController {
       selectedEntityIds: [documentId],
       mentionedEntityIds: body.mentionedEntityIds ?? [],
     });
-    const prompt = suggestionPrompt(body);
 
-    const generation = await this.generations.record(projectId, {
-      capability: SUGGESTION_CAPABILITY,
-      prompt,
-      parameters: { action: body.action },
-      inputEntityIds: namedEntityIds(context),
-      contextEntityIds: ambientEntityIds(context),
-      resolvedContext: { ...context },
-      createdBy: body.createdBy,
-    });
-
-    await this.generations.dispatch(projectId, generation.id, {
-      provider: firstChoice.id,
-      model: firstChoice.defaultModel,
-    });
-
-    try {
-      const result = await this.providers.execute({
+    return this.inlineAiRequests.run(
+      projectId,
+      {
         capability: SUGGESTION_CAPABILITY,
-        prompt,
-        parameters: generation.parameters,
+        prompt: suggestionPrompt(body),
+        parameters: { action: body.action },
         context,
-      });
-
-      // `execute` may have fallen through to a later candidate; correct the
-      // record so it never names a provider that did not produce the result.
-      const actual = candidates.find((candidate) => candidate.id === result.providerId);
-      if (actual && actual.id !== firstChoice.id) {
-        await this.generations.redispatch(projectId, generation.id, {
-          provider: actual.id,
-          model: actual.defaultModel,
-        });
-      }
-
-      const suggestion = result.output?.trim();
-      if (!suggestion) {
-        throw new BadGatewayException('The model returned nothing to suggest.');
-      }
-
-      await this.generations.complete(projectId, generation.id, {
-        outputAssetIds: [],
-        providerRequestId: result.requestId ?? null,
-      });
-
-      return { generationId: generation.id, suggestion };
-    } catch (error) {
-      await this.generations.fail(projectId, generation.id, failure(error));
-      // A domain failure keeps its own status; anything the provider threw is
-      // an upstream problem, not the caller's.
-      throw isDomainError(error) ? error : toBadGateway(error);
-    }
+        createdBy: body.createdBy,
+      },
+      (result, generation) => {
+        const suggestion = result.output?.trim();
+        if (!suggestion) {
+          throw new BadGatewayException('The model returned nothing to suggest.');
+        }
+        return { generationId: generation.id, suggestion };
+      },
+    );
   }
 }
 
@@ -143,35 +99,4 @@ function suggestionPrompt(request: SuggestDocumentEditDto): string {
       '- Write in the voice of the surrounding document.',
     ].join('\n'),
   ].join('\n\n');
-}
-
-/** Entities the writer pointed at: the document, and anything mentioned in the passage. */
-function namedEntityIds(context: ResolvedContext): string[] {
-  return context.entities
-    .filter((entity) => entity.source !== 'related')
-    .map((entity) => entity.id);
-}
-
-/** Entities the relationship walk brought in around them. */
-function ambientEntityIds(context: ResolvedContext): string[] {
-  return context.entities
-    .filter((entity) => entity.source === 'related')
-    .map((entity) => entity.id);
-}
-
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function failure(error: unknown): { code: string; message: string } {
-  return {
-    code: isDomainError(error) ? error.code : 'provider_error',
-    message: message(error),
-  };
-}
-
-function toBadGateway(error: unknown): BadGatewayException {
-  return error instanceof BadGatewayException
-    ? error
-    : new BadGatewayException(`The AI provider could not answer: ${message(error)}`);
 }
