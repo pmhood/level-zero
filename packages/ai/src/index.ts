@@ -26,6 +26,11 @@ export {
   type AiResult,
 } from './provider';
 export { AiProviderRegistry } from './registry';
+export {
+  CONSISTENCY_SCAN_ACTOR,
+  ProviderAiCheckContext,
+  type ProviderAiCheckContextDeps,
+} from './provider-ai-check-context';
 export { EchoAiProvider } from './echo-provider';
 export {
   ANTHROPIC_DEFAULT_MAX_TOKENS,
