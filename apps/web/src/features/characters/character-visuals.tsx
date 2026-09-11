@@ -1,10 +1,18 @@
 'use client';
 
-import type { Asset, Entity } from '@level-zero/domain';
+import type { Asset, AssetSelectionContext, Entity } from '@level-zero/domain';
 import { Button, EmptyState, Field, LinkIcon, Panel, Select, Tag } from '@level-zero/ui';
 import { useState } from 'react';
 
 import { GenerationPanel, type GenerationPreset } from '@/features/generation/generation-panel';
+import {
+  AssetSelectionActions,
+  AssetSelectionBadges,
+  PurposePicker,
+} from '@/features/selection/asset-selection-actions';
+import { CurrentSelections } from '@/features/selection/current-selections';
+import { CHARACTER_VISUAL_PURPOSES } from '@/features/selection/selection';
+import { useIsCurrentSelection } from '@/features/selection/use-selection';
 import { apiErrorMessage, assetContentUrl } from '@/lib/api';
 
 import { resolveVisuals, unlinkedAssets, type CharacterVisual } from './character-visual';
@@ -75,6 +83,9 @@ export function CharacterVisuals({
   const unlink = useUnlinkCharacter(projectId);
   const attach = useAttachVisual(projectId);
   const [comparing, setComparing] = useState(false);
+  // What a decision on this tab is *for*. One picker rather than one per tile:
+  // a studio session is usually spent choosing a portrait, then costumes.
+  const [purpose, setPurpose] = useState(CHARACTER_VISUAL_PURPOSES[0]!.value);
 
   if (links.isPending || images.isPending) {
     return <p className="text-sm text-muted-foreground">Loading visuals…</p>;
@@ -106,11 +117,18 @@ export function CharacterVisuals({
     .map((visual) => visual.asset)
     .filter((asset): asset is Asset => asset !== null);
 
+  const context: AssetSelectionContext = { entityId: character.id, purpose };
+  // A portrait is the one picture that stands for the character, so choosing a
+  // new one supersedes the old. The other purposes hold several at once.
+  const replaceCurrent = purpose === 'portrait';
+
   if (comparing && comparable.length >= 2) {
     return (
       <VisualCompare
         projectId={projectId}
         images={comparable}
+        context={context}
+        replaceCurrent={replaceCurrent}
         onClose={() => setComparing(false)}
       />
     );
@@ -118,6 +136,22 @@ export function CharacterVisuals({
 
   return (
     <div className="flex flex-col gap-5">
+      <CurrentSelections projectId={projectId} entity={character} />
+
+      {!archived && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <PurposePicker
+            id="character-visual-purpose"
+            purposes={CHARACTER_VISUAL_PURPOSES}
+            value={purpose}
+            onChange={setPurpose}
+          />
+          <p className="text-xs text-faint-foreground">
+            Approving records who chose it and what for. Nothing here changes a file.
+          </p>
+        </div>
+      )}
+
       {!archived && (
         <GenerationPanel
           projectId={projectId}
@@ -126,6 +160,8 @@ export function CharacterVisuals({
           presets={VISUAL_PRESETS}
           onUseResult={(asset) => attach.mutate({ character, asset })}
           useResultLabel={`Link to ${character.name}`}
+          selectionContext={context}
+          replaceCurrentSelection={replaceCurrent}
         />
       )}
 
@@ -155,6 +191,9 @@ export function CharacterVisuals({
               <VisualTile
                 projectId={projectId}
                 visual={visual}
+                context={context}
+                replaceCurrent={replaceCurrent}
+                decidable={!archived}
                 unlinkable={!archived}
                 unlinking={unlink.isPending}
                 onUnlink={() =>
@@ -200,20 +239,29 @@ export function CharacterVisuals({
 function VisualTile({
   projectId,
   visual,
+  context,
+  replaceCurrent,
+  decidable,
   unlinkable,
   unlinking,
   onUnlink,
 }: {
   projectId: string;
   visual: CharacterVisual;
+  context: AssetSelectionContext;
+  replaceCurrent: boolean;
+  decidable: boolean;
   unlinkable: boolean;
   unlinking: boolean;
   onUnlink: () => void;
 }) {
   const { asset, reference } = visual;
+  const isCurrent = useIsCurrentSelection(projectId, asset?.id ?? '', context);
 
   return (
-    <Panel className="overflow-hidden">
+    // The chosen picture is bordered in the success tone rather than the blue
+    // `Card` ring, which already means "the thing you are inspecting".
+    <Panel className={isCurrent ? 'overflow-hidden border-success' : 'overflow-hidden'}>
       <div className="flex aspect-[4/5] items-center justify-center bg-raised">
         {asset ? (
           <img
@@ -233,6 +281,23 @@ function VisualTile({
         <p className="mt-0.5 text-xs text-faint-foreground">
           {asset ? `${asset.variant} · ${asset.kind}` : 'Missing asset'}
         </p>
+
+        {asset && (
+          <div className="mt-2">
+            <AssetSelectionBadges projectId={projectId} asset={asset} context={context} />
+          </div>
+        )}
+
+        {asset && decidable && (
+          <div className="mt-2">
+            <AssetSelectionActions
+              projectId={projectId}
+              asset={asset}
+              context={context}
+              replaceCurrent={replaceCurrent}
+            />
+          </div>
+        )}
 
         <div className="mt-2 flex items-center gap-1.5">
           {!asset && <Tag>Missing</Tag>}

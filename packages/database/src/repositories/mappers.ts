@@ -1,6 +1,8 @@
 import {
   type Activity,
   type Asset,
+  type AssetMark,
+  type AssetSelection,
   type Comment,
   type Entity,
   type EntityRelationship,
@@ -58,6 +60,12 @@ import {
   type NewReviewDecisionRow,
   type ReviewDecisionRow,
 } from '../schema/reviews';
+import {
+  type AssetMarkRow,
+  type AssetSelectionRow,
+  type NewAssetMarkRow,
+  type NewAssetSelectionRow,
+} from '../schema/selections';
 import { type NewSearchDocumentRow, type SearchDocumentRow } from '../schema/search-documents';
 import {
   type NewPrototypeEntityVersionRow,
@@ -787,6 +795,57 @@ function toReviewTarget(row: CommentRow | ReviewDecisionRow): ReviewTarget {
     id: row.targetId,
     anchor: row.targetAnchor,
     versionId: row.versionId,
+  };
+}
+
+export function toAssetSelection(row: AssetSelectionRow): AssetSelection {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    assetId: row.assetId,
+    context: { entityId: row.contextEntityId, purpose: row.purpose },
+    state: row.state,
+    actor: row.actor,
+    note: row.note,
+    supersededBySelectionId: row.supersededBySelectionId,
+    decidedAt: row.decidedAt,
+  };
+}
+
+export function toAssetSelectionRow(selection: AssetSelection): NewAssetSelectionRow {
+  return {
+    id: selection.id,
+    projectId: selection.projectId,
+    assetId: selection.assetId,
+    contextEntityId: selection.context.entityId,
+    purpose: selection.context.purpose,
+    state: selection.state,
+    actor: selection.actor,
+    note: selection.note,
+    supersededBySelectionId: selection.supersededBySelectionId,
+    decidedAt: selection.decidedAt,
+  };
+}
+
+export function toAssetMark(row: AssetMarkRow): AssetMark {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    assetId: row.assetId,
+    kind: row.kind,
+    actor: row.actor,
+    markedAt: row.markedAt,
+  };
+}
+
+export function toAssetMarkRow(mark: AssetMark): NewAssetMarkRow {
+  return {
+    id: mark.id,
+    projectId: mark.projectId,
+    assetId: mark.assetId,
+    kind: mark.kind,
+    actor: mark.actor,
+    markedAt: mark.markedAt,
   };
 }
 

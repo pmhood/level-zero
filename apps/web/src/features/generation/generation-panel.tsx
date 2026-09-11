@@ -1,6 +1,6 @@
 'use client';
 
-import type { Asset, Entity } from '@level-zero/domain';
+import type { Asset, AssetSelectionContext, Entity } from '@level-zero/domain';
 import {
   Button,
   Field,
@@ -59,6 +59,16 @@ export interface GenerationPanelProps {
   /** What this workspace does with a result the user keeps. */
   onUseResult?: (asset: Asset) => void;
   useResultLabel?: string;
+  /**
+   * What a result would be chosen *for*, when the surface has an answer —
+   * a character and `portrait`, a board and its direction. Given one, every
+   * result carries the triage actions; left out, the grid is read-only about
+   * selection, because "approved" with nothing to be approved for is not a
+   * thing this model records.
+   */
+  selectionContext?: AssetSelectionContext;
+  /** Passed through to the result grid: does this purpose hold one visual? */
+  replaceCurrentSelection?: boolean;
 }
 
 /**
@@ -81,6 +91,8 @@ export function GenerationPanel({
   presets = [],
   onUseResult,
   useResultLabel,
+  selectionContext,
+  replaceCurrentSelection,
 }: GenerationPanelProps) {
   const [mode, setMode] = useState<GenerationMode>('generate');
   const [prompt, setPrompt] = useState('');
@@ -267,6 +279,8 @@ export function GenerationPanel({
             onExploreVariations={exploreVariations}
             {...(onUseResult ? { onUseResult } : {})}
             {...(useResultLabel ? { useResultLabel } : {})}
+            {...(selectionContext ? { selectionContext } : {})}
+            {...(replaceCurrentSelection ? { replaceCurrentSelection } : {})}
           />
         )}
       </div>

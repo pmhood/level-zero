@@ -24,6 +24,7 @@ import { PrototypesModule } from './prototypes/prototypes.module';
 import { RelationshipsModule } from './relationships/relationships.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { SearchModule } from './search/search.module';
+import { SelectionsModule } from './selections/selections.module';
 import { VersionsModule } from './versions/versions.module';
 
 /**
@@ -59,6 +60,7 @@ import { VersionsModule } from './versions/versions.module';
     SearchModule,
     FindingsModule,
     ReviewsModule,
+    SelectionsModule,
     InspectorModule,
   ],
 })

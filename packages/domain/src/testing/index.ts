@@ -1,6 +1,8 @@
 export {
   InMemoryActivityRepository,
+  InMemoryAssetMarkRepository,
   InMemoryAssetRepository,
+  InMemoryAssetSelectionRepository,
   InMemoryCommentRepository,
   InMemoryEmbeddingProvider,
   InMemoryEntityRelationshipRepository,

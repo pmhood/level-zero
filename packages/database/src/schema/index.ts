@@ -13,3 +13,4 @@ export * from './projects';
 export * from './prototype-versions';
 export * from './reviews';
 export * from './search-documents';
+export * from './selections';

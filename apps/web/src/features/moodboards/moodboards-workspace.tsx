@@ -1,12 +1,23 @@
 'use client';
 
-import type { Entity, MoodboardNodeType, RelationType } from '@level-zero/domain';
+import {
+  referencedAssetId,
+  type Asset,
+  type Entity,
+  type MoodboardNodeType,
+  type RelationType,
+} from '@level-zero/domain';
 import { EmptyState, WorkspacePage } from '@level-zero/ui';
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { AiInspector } from '@/features/ai-inspector/ai-inspector';
 import type { AiSubject } from '@/features/ai-inspector/ai-subject';
 import { GenerationPanel } from '@/features/generation/generation-panel';
+import {
+  AssetSelectionActions,
+  AssetSelectionBadges,
+} from '@/features/selection/asset-selection-actions';
+import { MOODBOARD_PURPOSE } from '@/features/selection/selection';
 import { apiErrorMessage } from '@/lib/api';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 
@@ -138,6 +149,18 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
     [nodes, selectedNodeIds, entities],
   );
 
+  // The file a selected node shows, whether the node points straight at it or
+  // at the `asset_reference` entity in front of it. What the board can decide
+  // about is a file, so both routes resolve to the same one.
+  const selectedAsset = useMemo((): Asset | null => {
+    const direct = selectedNode?.assetId ? assets.get(selectedNode.assetId) : undefined;
+    if (direct) return direct;
+
+    const referenced = selectedNode?.entityId ? entities.get(selectedNode.entityId) : undefined;
+    const assetId = referenced ? referencedAssetId(referenced) : null;
+    return assetId === null ? null : (assets.get(assetId) ?? null);
+  }, [selectedNode, entities, assets]);
+
   // What the contextual AI inspector is about: the file a selected node shows,
   // or the canonical entity behind it. The entity wins where a node has both,
   // because that is the object the rest of the project is connected to.
@@ -172,6 +195,23 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
           }
           onDisconnect={(connectorId) => disconnect.mutate(connectorId)}
           onPromoteToVisualDirection={(source) => promoteToVisualDirection.mutateAsync(source)}
+          selection={
+            openBoardId &&
+            selectedAsset && (
+              <div className="flex flex-col gap-2">
+                <AssetSelectionBadges
+                  projectId={projectId}
+                  asset={selectedAsset}
+                  context={{ entityId: openBoardId, purpose: MOODBOARD_PURPOSE.value }}
+                />
+                <AssetSelectionActions
+                  projectId={projectId}
+                  asset={selectedAsset}
+                  context={{ entityId: openBoardId, purpose: MOODBOARD_PURPOSE.value }}
+                />
+              </div>
+            )
+          }
           generator={
             openBoardId && (
               <GenerationPanel
@@ -186,6 +226,14 @@ export function MoodboardsWorkspace({ projectId }: { projectId: string }) {
                   canvasRef.current?.recordCreate(created);
                 }}
                 useResultLabel="Add to board"
+                {...(openBoardId
+                  ? {
+                      selectionContext: {
+                        entityId: openBoardId,
+                        purpose: MOODBOARD_PURPOSE.value,
+                      },
+                    }
+                  : {})}
               />
             )
           }

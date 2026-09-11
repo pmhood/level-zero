@@ -1,9 +1,14 @@
 'use client';
 
-import type { Asset, Generation } from '@level-zero/domain';
+import type { Asset, AssetSelectionContext, Generation } from '@level-zero/domain';
 import { Button, HistoryIcon, Panel, SparklesIcon, Tag } from '@level-zero/ui';
 import { useState } from 'react';
 
+import { AssetDecisionHistory } from '@/features/selection/asset-decision-history';
+import {
+  AssetSelectionActions,
+  AssetSelectionBadges,
+} from '@/features/selection/asset-selection-actions';
 import { apiErrorMessage, assetContentUrl } from '@/lib/api';
 
 import { GenerationProvenanceDetails } from './generation-provenance';
@@ -17,6 +22,14 @@ export interface GenerationResultsProps {
   /** What this workspace does with a result the user keeps. */
   onUseResult?: (asset: Asset) => void;
   useResultLabel?: string;
+  /**
+   * What a result would be chosen for. Given one, each tile carries the triage
+   * actions — favourite, shortlist, approve, reject — so a wall of output can be
+   * cut down where it is looked at.
+   */
+  selectionContext?: AssetSelectionContext;
+  /** True where the purpose holds one visual, so approving supersedes. */
+  replaceCurrentSelection?: boolean;
 }
 
 /**
@@ -32,6 +45,8 @@ export function GenerationResults({
   onExploreVariations,
   onUseResult,
   useResultLabel = 'Use this result',
+  selectionContext,
+  replaceCurrentSelection = false,
 }: GenerationResultsProps) {
   const results = useGenerationResults(projectId, generation.outputAssetIds);
   const [provenanceFor, setProvenanceFor] = useState<string | null>(null);
@@ -72,6 +87,14 @@ export function GenerationResults({
                 </p>
               </div>
 
+              {selectionContext && (
+                <AssetSelectionBadges
+                  projectId={projectId}
+                  asset={asset}
+                  context={selectionContext}
+                />
+              )}
+
               <div className="flex flex-wrap items-center gap-1.5">
                 <Tag>Generated</Tag>
                 {onUseResult && (
@@ -95,8 +118,22 @@ export function GenerationResults({
                 </Button>
               </div>
 
+              {selectionContext && (
+                <AssetSelectionActions
+                  projectId={projectId}
+                  asset={asset}
+                  context={selectionContext}
+                  replaceCurrent={replaceCurrentSelection}
+                />
+              )}
+
               {provenanceFor === asset.id && (
-                <GenerationProvenanceDetails projectId={projectId} generation={generation} />
+                <div className="flex flex-col gap-3">
+                  <GenerationProvenanceDetails projectId={projectId} generation={generation} />
+                  {/* Where it came from, and what has been decided about it —
+                      including the purposes it was turned down for. */}
+                  <AssetDecisionHistory projectId={projectId} assetId={asset.id} />
+                </div>
               )}
             </div>
           </Panel>

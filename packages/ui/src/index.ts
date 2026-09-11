@@ -29,6 +29,7 @@ export { Field, type FieldProps } from './field';
 export { ParameterControl, type ParameterControlProps } from './parameter-control';
 export { ParameterSummary, type ParameterSummaryProps } from './parameter-summary';
 export {
+  CheckIcon,
   ChevronRightIcon,
   CloseIcon,
   DocumentIcon,
@@ -41,6 +42,7 @@ export {
   RefreshIcon,
   SearchIcon,
   SparklesIcon,
+  StarIcon,
   WarningIcon,
 } from './icons';
 export { RichTextEditor, type RichTextEditorProps } from './editor/rich-text-editor';
