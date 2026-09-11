@@ -24,7 +24,7 @@ export function WorldInspector({
 }: {
   projectId: string;
   entity: Entity;
-  onClose: () => void;
+  onClose?: () => void;
 }) {
   const [tab, setTab] = useState<InspectorTab>('links');
   const archiveEntity = useArchiveWorldEntity(projectId);
