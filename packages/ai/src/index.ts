@@ -25,7 +25,7 @@ export {
   type AiRequest,
   type AiResult,
 } from './provider';
-export { AiProviderRegistry } from './registry';
+export { AiProviderRegistry, AiProvidersExhaustedError, type AiProviderAttempt } from './registry';
 export {
   CONSISTENCY_SCAN_ACTOR,
   ProviderAiCheckContext,

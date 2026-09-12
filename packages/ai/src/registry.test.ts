@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { isAiCapability } from './capabilities';
 import { EchoAiProvider } from './echo-provider';
-import { AiProviderRegistry } from './registry';
+import { AiProviderRegistry, AiProvidersExhaustedError } from './registry';
 import { BaseAiProvider, type AiCapability, type AiRequest, type AiResult } from './index';
 
 class FailingProvider extends BaseAiProvider {
@@ -72,6 +72,43 @@ describe('AiProviderRegistry', () => {
     await expect(registry.execute({ capability: 'text.generate', prompt: 'x' })).rejects.toThrow(
       'provider unavailable',
     );
+  });
+
+  it('reports every candidate tried and why, in order, once all of them fail', async () => {
+    class NamedFailingProvider extends BaseAiProvider {
+      readonly capabilities: readonly AiCapability[] = ['text.generate'];
+      readonly defaultModel: string;
+
+      constructor(
+        readonly id: string,
+        private readonly message: string,
+      ) {
+        super();
+        this.defaultModel = `${id}-1`;
+      }
+
+      async execute(): Promise<AiResult> {
+        throw new Error(this.message);
+      }
+    }
+
+    const registry = new AiProviderRegistry()
+      .register(new NamedFailingProvider('primary', 'primary is down'))
+      .register(new NamedFailingProvider('secondary', 'secondary is down'));
+
+    const failure = await registry
+      .execute({ capability: 'text.generate', prompt: 'x' })
+      .catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(AiProvidersExhaustedError);
+    const exhausted = failure as AiProvidersExhaustedError;
+    // The message is still the last candidate's, so a caller that only reads
+    // it gets today's behaviour.
+    expect(exhausted.message).toBe('secondary is down');
+    expect(exhausted.attempts).toEqual([
+      { provider: 'primary', model: 'primary-1', message: 'primary is down' },
+      { provider: 'secondary', model: 'secondary-1', message: 'secondary is down' },
+    ]);
   });
 
   it('reports a missing capability before attempting execution', async () => {

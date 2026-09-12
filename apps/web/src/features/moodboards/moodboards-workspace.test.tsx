@@ -394,6 +394,7 @@ describe('placing and removing', () => {
       seed: null,
       providerRequestId: null,
       failure: null,
+      attempts: [],
       createdAt: new Date(),
       startedAt: null,
       completedAt: null,

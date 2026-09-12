@@ -33,6 +33,7 @@ function generation(overrides: Partial<Generation> = {}): Generation {
     seed: null,
     providerRequestId: null,
     failure: null,
+    attempts: [],
     createdAt: new Date('2026-09-01T10:00:00Z'),
     startedAt: null,
     completedAt: null,

@@ -1,4 +1,5 @@
 import {
+  AiProvidersExhaustedError,
   type AiCapability,
   type AiProviderRegistry,
   type AiResult,
@@ -109,7 +110,13 @@ export class InlineAiRequestService {
 
       return response;
     } catch (error) {
-      await this.generations.fail(projectId, generation.id, failure(error));
+      // Every candidate was tried and none produced a result: record the
+      // whole attempt sequence rather than just the last error, so the
+      // generation does not keep naming a provider that never answered.
+      await this.generations.fail(projectId, generation.id, {
+        ...failure(error),
+        attempts: error instanceof AiProvidersExhaustedError ? error.attempts : undefined,
+      });
       // A domain failure keeps its own status; anything the provider threw is
       // an upstream problem, not the caller's.
       throw isDomainError(error) ? error : toBadGateway(error);

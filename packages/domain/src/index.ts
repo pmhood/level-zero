@@ -228,6 +228,7 @@ export {
   type DispatchGenerationInput,
   type FailGenerationInput,
   type Generation,
+  type GenerationAttempt,
   type GenerationFactoryDeps,
   type GenerationFailure,
   type GenerationStatus,

@@ -135,6 +135,7 @@ describe('generation records', () => {
       outputAssetIds: [],
       seed: '42',
       failure: null,
+      attempts: [],
       completedAt: null,
       createdBy: 'pete',
     });
@@ -230,6 +231,46 @@ describe('generation records', () => {
         message: 'Prompt was rejected by the provider',
         details: { httpStatus: 400, providerCode: 'moderation_blocked' },
       },
+    });
+  });
+
+  it('round-trips the attempt sequence and clears the provider once every candidate is exhausted', async () => {
+    const created = await generations.record(project.id, {
+      capability: 'image.generate',
+      prompt: 'a drowned cathedral',
+    });
+    await generations.dispatch(project.id, created.id, {
+      provider: 'openai',
+      model: 'gpt-image-1',
+    });
+
+    const failed = await generations.fail(project.id, created.id, {
+      code: 'provider_error',
+      message: '503 upstream unavailable',
+      attempts: [
+        { provider: 'openai', model: 'gpt-image-1', message: 'timeout' },
+        { provider: 'anthropic', model: 'claude-1', message: '503 upstream unavailable' },
+      ],
+    });
+
+    expect(failed).toMatchObject({
+      status: 'failed',
+      provider: null,
+      model: null,
+      attempts: [
+        { provider: 'openai', model: 'gpt-image-1', message: 'timeout' },
+        { provider: 'anthropic', model: 'claude-1', message: '503 upstream unavailable' },
+      ],
+    });
+
+    // Reads back from Postgres, not just the value the write returned.
+    await expect(generations.getById(project.id, created.id)).resolves.toMatchObject({
+      provider: null,
+      model: null,
+      attempts: [
+        { provider: 'openai', model: 'gpt-image-1', message: 'timeout' },
+        { provider: 'anthropic', model: 'claude-1', message: '503 upstream unavailable' },
+      ],
     });
   });
 

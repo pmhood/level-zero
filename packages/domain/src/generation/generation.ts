@@ -40,6 +40,13 @@ export interface GenerationFailure {
   details: Record<string, unknown>;
 }
 
+/** One provider candidate that was tried and why it failed, in trial order. */
+export interface GenerationAttempt {
+  provider: string;
+  model: string;
+  message: string;
+}
+
 /**
  * One AI generation and everything needed to explain it afterwards.
  *
@@ -84,6 +91,15 @@ export interface Generation {
   /** The provider's own identifier for the request, for support and audit. */
   providerRequestId: string | null;
   failure: GenerationFailure | null;
+  /**
+   * Every provider candidate tried before the generation reached a terminal
+   * failure, in trial order, and why each one failed. Empty unless every
+   * candidate for the capability was exhausted — a completed generation, or
+   * one that failed before any candidate was tried, keeps none. When this is
+   * non-empty, `provider` and `model` are cleared: no candidate here produced
+   * the result they would otherwise name.
+   */
+  attempts: GenerationAttempt[];
   createdAt: Date;
   startedAt: Date | null;
   /** Set once the generation reaches any terminal status, not only success. */
@@ -136,6 +152,7 @@ export function createGeneration(
     seed: optionalText('seed', input.seed, MAX_GENERATION_SEED_LENGTH),
     providerRequestId: null,
     failure: null,
+    attempts: [],
     createdAt: deps.clock.now(),
     startedAt: null,
     completedAt: null,
@@ -220,6 +237,16 @@ export interface FailGenerationInput {
   code?: string;
   message: string;
   details?: Record<string, unknown>;
+  /**
+   * Every candidate tried for the capability and why each failed, in trial
+   * order. Presence — even an empty list — means the whole capability was
+   * exhausted, so `provider` and `model` are cleared rather than left naming
+   * whichever candidate the record was last dispatched to: that candidate
+   * produced nothing. Omit it for a failure that isn't about providers (the
+   * generation never made it out of the queue, say), which leaves whatever
+   * was already recorded untouched.
+   */
+  attempts?: readonly GenerationAttempt[];
 }
 
 /**
@@ -233,9 +260,14 @@ export function failGeneration(
 ): Generation {
   requireStatus(generation, ['queued', 'running'], 'failed');
 
+  const exhausted = input.attempts !== undefined;
+
   return {
     ...generation,
     status: 'failed',
+    provider: exhausted ? null : generation.provider,
+    model: exhausted ? null : generation.model,
+    attempts: exhausted ? normalizeAttempts(input.attempts!) : generation.attempts,
     failure: {
       code: requireText('failure.code', input.code ?? DEFAULT_GENERATION_FAILURE_CODE, 100),
       message: requireText('failure.message', input.message, MAX_GENERATION_FAILURE_MESSAGE_LENGTH),
@@ -275,6 +307,23 @@ function normalizeIds(field: string, value: readonly string[] | undefined): stri
     ids.push(id);
   }
   return ids;
+}
+
+/** Validates and trims each recorded attempt, keeping the order they were tried in. */
+function normalizeAttempts(attempts: readonly GenerationAttempt[]): GenerationAttempt[] {
+  return attempts.map((attempt, index) => ({
+    provider: requireText(
+      `attempts[${index}].provider`,
+      attempt.provider,
+      MAX_GENERATION_PROVIDER_LENGTH,
+    ),
+    model: requireText(`attempts[${index}].model`, attempt.model, MAX_GENERATION_MODEL_LENGTH),
+    message: requireText(
+      `attempts[${index}].message`,
+      attempt.message,
+      MAX_GENERATION_FAILURE_MESSAGE_LENGTH,
+    ),
+  }));
 }
 
 function requireStatus(

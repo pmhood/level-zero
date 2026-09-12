@@ -236,6 +236,7 @@ export class GenerationService {
       metadata: {
         capability: failed.capability,
         failureCode: failed.failure?.code ?? null,
+        attemptCount: failed.attempts.length,
       },
       actor: failed.createdBy,
     });

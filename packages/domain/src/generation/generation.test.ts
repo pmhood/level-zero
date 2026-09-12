@@ -60,6 +60,7 @@ describe('createGeneration', () => {
       parentGenerationId: null,
       seed: '42',
       failure: null,
+      attempts: [],
       startedAt: null,
       completedAt: null,
       createdBy: 'pete',
@@ -185,6 +186,34 @@ describe('failGeneration', () => {
     const failed = failGeneration(queued(), { message: 'No provider available' }, { clock });
 
     expect(failed).toMatchObject({ status: 'failed', failure: { code: 'provider_error' } });
+  });
+
+  it('clears provider and model once every candidate is exhausted, and keeps the attempt sequence', () => {
+    const original = running();
+
+    const failed = failGeneration(
+      original,
+      {
+        message: '503 upstream unavailable',
+        attempts: [
+          { provider: 'openai', model: 'gpt-image-1', message: 'timeout' },
+          { provider: 'anthropic', model: 'claude-1', message: '503 upstream unavailable' },
+        ],
+      },
+      { clock: laterClock },
+    );
+
+    expect(failed).toMatchObject({
+      status: 'failed',
+      // Neither candidate produced the result, so the record no longer
+      // names the first-choice one it was dispatched to.
+      provider: null,
+      model: null,
+      attempts: [
+        { provider: 'openai', model: 'gpt-image-1', message: 'timeout' },
+        { provider: 'anthropic', model: 'claude-1', message: '503 upstream unavailable' },
+      ],
+    });
   });
 
   it('refuses to reopen a finished generation', () => {

@@ -266,6 +266,11 @@ describe('POST /projects/:projectId/documents/:documentId/ai/suggestions', () =>
     const page = await generations.listByProject(project.id);
     expect(page.items[0]?.status).toBe('failed');
     expect(page.items[0]?.failure?.message).toContain('the provider is on fire');
+    // Its one candidate never answered, so the record no longer names it.
+    expect(page.items[0]?.provider).toBeNull();
+    expect(page.items[0]?.attempts).toEqual([
+      { provider: 'scripted', model: 'scripted-1', message: 'the provider is on fire' },
+    ]);
   });
 
   it('treats an empty answer as a failed generation rather than an empty edit', async () => {
@@ -316,5 +321,37 @@ describe('POST /projects/:projectId/documents/:documentId/ai/suggestions', () =>
     expect(response.body.suggestion).toBe('A steadier sentence.');
     const generation = await generations.getById(project.id, response.body.generationId);
     expect(generation.provider).toBe('standby');
+  });
+
+  it('clears the provider and records every candidate tried once all of them fail', async () => {
+    const document = await createDocument();
+    const first = new ScriptedProvider('first', () => {
+      throw new Error('first is down');
+    });
+    const second = new ScriptedProvider('second', () => {
+      throw new Error('second is down');
+    });
+    const registry = new AiProviderRegistry().register(first).register(second);
+
+    await app.close();
+    app = await startApp(registry);
+
+    const response = await http()
+      .post(suggestionsUrl(document.entity.id))
+      .send(REWRITE)
+      .expect(502);
+    expect(response.body.message).toContain('second is down');
+
+    const page = await generations.listByProject(project.id);
+    const generation = page.items[0];
+    expect(generation?.status).toBe('failed');
+    // Neither candidate produced the result, so the record no longer names
+    // the first-choice one it was dispatched to.
+    expect(generation?.provider).toBeNull();
+    expect(generation?.model).toBeNull();
+    expect(generation?.attempts).toEqual([
+      { provider: 'first', model: 'scripted-1', message: 'first is down' },
+      { provider: 'second', model: 'scripted-1', message: 'second is down' },
+    ]);
   });
 });

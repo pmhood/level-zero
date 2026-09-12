@@ -111,6 +111,7 @@ function generation(overrides: Partial<Generation> = {}): Generation {
     seed: null,
     providerRequestId: null,
     failure: null,
+    attempts: [],
     createdAt: new Date(),
     startedAt: null,
     completedAt: null,
