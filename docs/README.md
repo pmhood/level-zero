@@ -16,6 +16,7 @@ This package is intended to be copied into the `pmhood/level-zero` repository.
 
 Engineering evaluations written in this repository, rather than imported design material.
 
+- `asset-library-model.md` — collections, tags, pipeline state and versions for assets (issue #177)
 - `canonical-entity-routes.md` — HTTP routing and navigation model for entities (issue #86)
 - `consistency-findings.md` — storage model for project consistency findings (issue #88)
 - `moodboard-canvas-library.md` — freely licensed alternatives to tldraw for the Moodboard canvas (issue #59)
