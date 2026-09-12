@@ -190,9 +190,13 @@ export {
   referencedAssetId,
 } from './asset/asset-reference';
 export {
+  ASSET_SORT_DIRECTIONS,
+  ASSET_SORT_FIELDS,
   type AssetListFilter,
   type AssetPage,
   type AssetRepository,
+  type AssetSortDirection,
+  type AssetSortField,
 } from './asset/asset-repository';
 export {
   type GetUrlOptions,

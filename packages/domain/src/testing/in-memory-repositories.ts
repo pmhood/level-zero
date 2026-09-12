@@ -9,6 +9,8 @@ import {
   type AssetListFilter,
   type AssetPage,
   type AssetRepository,
+  type AssetSortDirection,
+  type AssetSortField,
 } from '../asset/asset-repository';
 import { referencedAssetId } from '../asset/asset-reference';
 import {
@@ -105,6 +107,26 @@ import { ConflictError, NotFoundError } from '../shared/errors';
 function byNewest<T extends { createdAt: Date; id: string }>(a: T, b: T): number {
   const byDate = b.createdAt.getTime() - a.createdAt.getTime();
   return byDate !== 0 ? byDate : b.id.localeCompare(a.id);
+}
+
+/** Compares by `field`, tying on `id` in the same direction so paging is stable. */
+function byAssetSort(
+  field: AssetSortField,
+  direction: AssetSortDirection,
+): (a: Asset, b: Asset) => number {
+  const sign = direction === 'asc' ? 1 : -1;
+  return (a, b) => {
+    const byField =
+      field === 'createdAt'
+        ? a.createdAt.getTime() - b.createdAt.getTime()
+        : field === 'updatedAt'
+          ? a.updatedAt.getTime() - b.updatedAt.getTime()
+          : field === 'filename'
+            ? a.filename.localeCompare(b.filename)
+            : a.byteSize - b.byteSize;
+
+    return sign * (byField !== 0 ? byField : a.id.localeCompare(b.id));
+  };
 }
 
 function contains(haystack: string | null, needle: string): boolean {
@@ -409,7 +431,14 @@ export class InMemoryAssetRepository implements AssetRepository {
       .filter((asset) => !filter.variants || filter.variants.includes(asset.variant))
       .filter((asset) => !filter.sourceAssetId || asset.sourceAssetId === filter.sourceAssetId)
       .filter((asset) => !search || asset.filename.toLowerCase().includes(search))
-      .sort(byNewest);
+      .filter(
+        (asset) =>
+          !filter.mimeFamilies ||
+          filter.mimeFamilies.includes(asset.mimeType.split('/', 1)[0] ?? ''),
+      )
+      .filter((asset) => !filter.createdAfter || asset.createdAt >= filter.createdAfter)
+      .filter((asset) => !filter.createdBefore || asset.createdAt < filter.createdBefore)
+      .sort(byAssetSort(filter.sortBy ?? 'createdAt', filter.sortDirection ?? 'desc'));
 
     const offset = filter.offset ?? 0;
     const limit = filter.limit ?? matches.length;

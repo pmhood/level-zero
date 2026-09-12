@@ -1,8 +1,12 @@
 import {
   ASSET_KINDS,
+  ASSET_SORT_DIRECTIONS,
+  ASSET_SORT_FIELDS,
   ASSET_STATUSES,
   ASSET_VARIANTS,
   type AssetKind,
+  type AssetSortDirection,
+  type AssetSortField,
   type AssetStatus,
   type AssetVariant,
 } from '@level-zero/domain';
@@ -11,6 +15,7 @@ import {
   IsArray,
   IsBase64,
   IsBoolean,
+  IsDate,
   IsIn,
   IsInt,
   IsNumber,
@@ -99,10 +104,37 @@ export class ListAssetsQueryDto {
   @IsString()
   search?: string;
 
+  /** Matches the part of `mimeType` before the slash: "image", "video", ... */
+  @IsOptional()
+  @Transform(({ value }) => toStringArray(value))
+  @IsArray()
+  @IsString({ each: true })
+  mimeFamily?: string[];
+
+  /** Inclusive lower bound on `createdAt`. */
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  createdAfter?: Date;
+
+  /** Exclusive upper bound on `createdAt`. */
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  createdBefore?: Date;
+
   @IsOptional()
   @Transform(({ value }) => toBoolean(value))
   @IsBoolean()
   includeArchived?: boolean;
+
+  @IsOptional()
+  @IsIn(ASSET_SORT_FIELDS)
+  sortBy?: AssetSortField;
+
+  @IsOptional()
+  @IsIn(ASSET_SORT_DIRECTIONS)
+  sortDirection?: AssetSortDirection;
 
   @IsOptional()
   @Type(() => Number)

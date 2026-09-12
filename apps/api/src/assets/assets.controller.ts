@@ -35,7 +35,12 @@ export class AssetsController {
       statuses: query.status,
       sourceAssetId: query.sourceAssetId,
       search: query.search,
+      mimeFamilies: query.mimeFamily,
+      createdAfter: query.createdAfter,
+      createdBefore: query.createdBefore,
       includeArchived: query.includeArchived,
+      sortBy: query.sortBy,
+      sortDirection: query.sortDirection,
       limit: query.limit,
       offset: query.offset,
     });

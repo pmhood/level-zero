@@ -209,6 +209,104 @@ describe('retrieving an asset', () => {
   });
 });
 
+describe('sort, mime-family and date-range query params', () => {
+  it('sorts by the requested field and direction', async () => {
+    await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'zebra.png',
+        mimeType: 'image/png',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+    await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'apple.png',
+        mimeType: 'image/png',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+
+    const response = await http()
+      .get(`/api/projects/${project.id}/assets`)
+      .query({ sortBy: 'filename', sortDirection: 'asc' })
+      .expect(200);
+
+    expect(response.body.items.map((asset: { filename: string }) => asset.filename)).toEqual([
+      'apple.png',
+      'zebra.png',
+    ]);
+  });
+
+  it('rejects an unknown sort field', async () => {
+    await http()
+      .get(`/api/projects/${project.id}/assets`)
+      .query({ sortBy: 'relevance' })
+      .expect(400);
+  });
+
+  it('rejects an unknown sort direction', async () => {
+    await http()
+      .get(`/api/projects/${project.id}/assets`)
+      .query({ sortDirection: 'sideways' })
+      .expect(400);
+  });
+
+  it('narrows by mime family, not by kind', async () => {
+    await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({ kind: 'image', filename: 'a.png', mimeType: 'image/png', contentBase64: pngBase64 })
+      .expect(201);
+    await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'export',
+        filename: 'b.mp4',
+        mimeType: 'video/mp4',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+
+    const response = await http()
+      .get(`/api/projects/${project.id}/assets`)
+      .query({ mimeFamily: 'video' })
+      .expect(200);
+
+    expect(response.body.items.map((asset: { filename: string }) => asset.filename)).toEqual([
+      'b.mp4',
+    ]);
+  });
+
+  it('narrows by createdAfter and createdBefore', async () => {
+    await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({ kind: 'image', filename: 'a.png', mimeType: 'image/png', contentBase64: pngBase64 })
+      .expect(201);
+
+    const before = await http()
+      .get(`/api/projects/${project.id}/assets`)
+      .query({ createdBefore: '2026-01-01T00:00:00.000Z' })
+      .expect(200);
+    expect(before.body.total).toBe(0);
+
+    const after = await http()
+      .get(`/api/projects/${project.id}/assets`)
+      .query({ createdAfter: '2026-01-01T00:00:00.000Z' })
+      .expect(200);
+    expect(after.body.total).toBe(1);
+  });
+
+  it('rejects a malformed date', async () => {
+    await http()
+      .get(`/api/projects/${project.id}/assets`)
+      .query({ createdAfter: 'not a date' })
+      .expect(400);
+  });
+});
+
 describe('archiving and restoring an asset', () => {
   it('archives an asset and hides it from the default listing', async () => {
     const created = await http()
