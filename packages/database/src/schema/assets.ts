@@ -65,7 +65,9 @@ export const assets = pgTable(
     index('assets_project_idx').on(table.projectId),
     index('assets_project_kind_idx').on(table.projectId, table.kind),
     index('assets_project_status_idx').on(table.projectId, table.status),
-    index('assets_project_created_at_idx').on(table.projectId, table.createdAt),
+    // Trailing `id` matches the default sort's tiebreak, so paging never
+    // drops or repeats a row when two assets share a `created_at`.
+    index('assets_project_created_at_idx').on(table.projectId, table.createdAt, table.id),
     index('assets_source_idx').on(table.sourceAssetId),
     check(
       'assets_variant_source_consistency',

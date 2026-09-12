@@ -4,8 +4,9 @@ import {
   type AssetListFilter,
   type AssetPage,
   type AssetRepository,
+  type AssetSortField,
 } from '@level-zero/domain';
-import { and, count, desc, eq, ilike, inArray, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, ilike, inArray, lt, sql, type SQL } from 'drizzle-orm';
 
 import { type Database } from '../postgres/client';
 import { assets } from '../schema/assets';
@@ -45,7 +46,7 @@ export class DrizzleAssetRepository implements AssetRepository {
         .select()
         .from(assets)
         .where(where)
-        .orderBy(desc(assets.createdAt), desc(assets.id))
+        .orderBy(...buildAssetOrderBy(filter))
         .limit(filter.limit ?? 50)
         .offset(filter.offset ?? 0),
       this.db.select({ value: count() }).from(assets).where(where),
@@ -65,6 +66,16 @@ export class DrizzleAssetRepository implements AssetRepository {
     return toAsset(row);
   }
 }
+
+const ASSET_SORT_COLUMNS = {
+  createdAt: assets.createdAt,
+  updatedAt: assets.updatedAt,
+  filename: assets.filename,
+  byteSize: assets.byteSize,
+} satisfies Record<AssetSortField, unknown>;
+
+/** The part of `mime_type` before the slash: "image", "video", "application", ... */
+const mimeFamily = sql`split_part(${assets.mimeType}, '/', 1)`;
 
 function buildAssetWhere(projectId: string, filter: AssetListFilter): SQL {
   const conditions: SQL[] = [eq(assets.projectId, projectId)];
@@ -93,5 +104,28 @@ function buildAssetWhere(projectId: string, filter: AssetListFilter): SQL {
     conditions.push(ilike(assets.filename, `%${escapeLikePattern(search)}%`));
   }
 
+  if (filter.mimeFamilies?.length) {
+    conditions.push(inArray(mimeFamily, [...filter.mimeFamilies]));
+  }
+
+  if (filter.createdAfter) {
+    conditions.push(gte(assets.createdAt, filter.createdAfter));
+  }
+
+  if (filter.createdBefore) {
+    conditions.push(lt(assets.createdAt, filter.createdBefore));
+  }
+
   return and(...conditions) as SQL;
+}
+
+/**
+ * Orders by the requested field and direction, tying on `id` in the same
+ * direction so paging never drops or repeats a row when two assets share a
+ * sort value — bulk-generated assets routinely do.
+ */
+function buildAssetOrderBy(filter: AssetListFilter): SQL[] {
+  const column = ASSET_SORT_COLUMNS[filter.sortBy ?? 'createdAt'];
+  const order = filter.sortDirection === 'asc' ? asc : desc;
+  return [order(column), order(assets.id)];
 }

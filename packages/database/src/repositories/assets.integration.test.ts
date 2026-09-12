@@ -2,6 +2,7 @@ import {
   AssetService,
   NotFoundError,
   ProjectService,
+  fixedClock,
   systemClock,
   uuidIdGenerator,
   type Project,
@@ -65,6 +66,18 @@ beforeEach(async () => {
 
 async function seedProject(name: string): Promise<Project> {
   return projects.create({ name });
+}
+
+/**
+ * The same service writing at a stated instant, so tests can control
+ * `createdAt`/`updatedAt` ordering precisely instead of relying on wall-clock
+ * timing between uploads.
+ */
+function assetsAt(instant: string): AssetService {
+  return new AssetService(assetRepo, projectRepo, storage, {
+    clock: fixedClock(instant),
+    ids: uuidIdGenerator,
+  });
 }
 
 describe('upload metadata', () => {
@@ -284,5 +297,348 @@ describe('deletion and archive behavior', () => {
     await client.db.execute(sql`delete from projects where id = ${project.id}`);
 
     await expect(assets.listByProject(project.id)).resolves.toMatchObject({ total: 0 });
+  });
+});
+
+describe('mime-family filter', () => {
+  it('narrows by the part of mimeType before the slash, in SQL, not after paging', async () => {
+    const project = await seedProject('Deep Fathom');
+    await assets.upload(project.id, {
+      kind: 'image',
+      filename: 'a.png',
+      mimeType: 'image/png',
+      content: Buffer.from('a'),
+    });
+    await assets.upload(project.id, {
+      kind: 'video',
+      filename: 'b.mp4',
+      mimeType: 'video/mp4',
+      content: Buffer.from('b'),
+    });
+    await assets.upload(project.id, {
+      kind: 'export',
+      filename: 'c.pdf',
+      mimeType: 'application/pdf',
+      content: Buffer.from('c'),
+    });
+
+    const images = await assets.listByProject(project.id, { mimeFamilies: ['image'] });
+    expect(images.items.map((asset) => asset.filename)).toEqual(['a.png']);
+    expect(images.total).toBe(1);
+
+    const imagesAndVideos = await assets.listByProject(project.id, {
+      mimeFamilies: ['image', 'video'],
+    });
+    expect(imagesAndVideos.items.map((asset) => asset.filename).sort()).toEqual(['a.png', 'b.mp4']);
+    expect(imagesAndVideos.total).toBe(2);
+  });
+
+  it('never matches another project asset', async () => {
+    const [a, b] = [await seedProject('A'), await seedProject('B')];
+    await assets.upload(a.id, {
+      kind: 'image',
+      filename: 'a.png',
+      mimeType: 'image/png',
+      content: Buffer.from('a'),
+    });
+    await assets.upload(b.id, {
+      kind: 'image',
+      filename: 'b.png',
+      mimeType: 'image/png',
+      content: Buffer.from('b'),
+    });
+
+    const page = await assets.listByProject(a.id, { mimeFamilies: ['image'] });
+    expect(page.items.map((asset) => asset.filename)).toEqual(['a.png']);
+  });
+});
+
+describe('date-range filter', () => {
+  it('narrows by createdAfter and createdBefore, half-open', async () => {
+    const project = await seedProject('Deep Fathom');
+    const day1 = await assetsAt('2026-01-01T00:00:00.000Z').upload(project.id, {
+      kind: 'image',
+      filename: 'day1.png',
+      mimeType: 'image/png',
+      content: Buffer.from('1'),
+    });
+    const day2 = await assetsAt('2026-01-02T00:00:00.000Z').upload(project.id, {
+      kind: 'image',
+      filename: 'day2.png',
+      mimeType: 'image/png',
+      content: Buffer.from('2'),
+    });
+    const day3 = await assetsAt('2026-01-03T00:00:00.000Z').upload(project.id, {
+      kind: 'image',
+      filename: 'day3.png',
+      mimeType: 'image/png',
+      content: Buffer.from('3'),
+    });
+
+    const after = await assets.listByProject(project.id, {
+      createdAfter: new Date('2026-01-02T00:00:00.000Z'),
+      sortBy: 'createdAt',
+      sortDirection: 'asc',
+    });
+    expect(after.items.map((asset) => asset.id)).toEqual([day2.id, day3.id]);
+    expect(after.total).toBe(2);
+
+    // Exclusive: an asset created exactly at the boundary is not "before" it.
+    const before = await assets.listByProject(project.id, {
+      createdBefore: new Date('2026-01-02T00:00:00.000Z'),
+    });
+    expect(before.items.map((asset) => asset.id)).toEqual([day1.id]);
+    expect(before.total).toBe(1);
+
+    const between = await assets.listByProject(project.id, {
+      createdAfter: new Date('2026-01-01T00:00:00.000Z'),
+      createdBefore: new Date('2026-01-03T00:00:00.000Z'),
+    });
+    // Inclusive lower bound, exclusive upper bound: day1 and day2, not day3.
+    expect(between.items.map((asset) => asset.id)).toEqual([day2.id, day1.id]);
+  });
+
+  it('never matches another project asset with createdAfter', async () => {
+    const [a, b] = [await seedProject('A'), await seedProject('B')];
+    await assetsAt('2026-01-01T00:00:00.000Z').upload(a.id, {
+      kind: 'image',
+      filename: 'a.png',
+      mimeType: 'image/png',
+      content: Buffer.from('a'),
+    });
+    await assetsAt('2026-01-01T00:00:00.000Z').upload(b.id, {
+      kind: 'image',
+      filename: 'b.png',
+      mimeType: 'image/png',
+      content: Buffer.from('b'),
+    });
+
+    const page = await assets.listByProject(a.id, {
+      createdAfter: new Date('2020-01-01T00:00:00.000Z'),
+    });
+    expect(page.items.map((asset) => asset.filename)).toEqual(['a.png']);
+  });
+
+  it('never matches another project asset with createdBefore', async () => {
+    const [a, b] = [await seedProject('A'), await seedProject('B')];
+    await assetsAt('2026-01-01T00:00:00.000Z').upload(a.id, {
+      kind: 'image',
+      filename: 'a.png',
+      mimeType: 'image/png',
+      content: Buffer.from('a'),
+    });
+    await assetsAt('2026-01-01T00:00:00.000Z').upload(b.id, {
+      kind: 'image',
+      filename: 'b.png',
+      mimeType: 'image/png',
+      content: Buffer.from('b'),
+    });
+
+    const page = await assets.listByProject(a.id, {
+      createdBefore: new Date('2030-01-01T00:00:00.000Z'),
+    });
+    expect(page.items.map((asset) => asset.filename)).toEqual(['a.png']);
+  });
+});
+
+describe('sort order', () => {
+  it('defaults to createdAt descending, tying on id, when no sort is given', async () => {
+    const project = await seedProject('Deep Fathom');
+    const first = await assetsAt('2026-01-01T00:00:00.000Z').upload(project.id, {
+      kind: 'image',
+      filename: 'first.png',
+      mimeType: 'image/png',
+      content: Buffer.from('1'),
+    });
+    const second = await assetsAt('2026-01-02T00:00:00.000Z').upload(project.id, {
+      kind: 'image',
+      filename: 'second.png',
+      mimeType: 'image/png',
+      content: Buffer.from('2'),
+    });
+
+    const page = await assets.listByProject(project.id);
+    expect(page.items.map((asset) => asset.id)).toEqual([second.id, first.id]);
+  });
+
+  it('sorts by createdAt in both directions', async () => {
+    const project = await seedProject('Deep Fathom');
+    const first = await assetsAt('2026-01-01T00:00:00.000Z').upload(project.id, {
+      kind: 'image',
+      filename: 'first.png',
+      mimeType: 'image/png',
+      content: Buffer.from('1'),
+    });
+    const second = await assetsAt('2026-01-02T00:00:00.000Z').upload(project.id, {
+      kind: 'image',
+      filename: 'second.png',
+      mimeType: 'image/png',
+      content: Buffer.from('2'),
+    });
+    const third = await assetsAt('2026-01-03T00:00:00.000Z').upload(project.id, {
+      kind: 'image',
+      filename: 'third.png',
+      mimeType: 'image/png',
+      content: Buffer.from('3'),
+    });
+
+    const desc = await assets.listByProject(project.id, {
+      sortBy: 'createdAt',
+      sortDirection: 'desc',
+    });
+    expect(desc.items.map((asset) => asset.id)).toEqual([third.id, second.id, first.id]);
+
+    const asc = await assets.listByProject(project.id, {
+      sortBy: 'createdAt',
+      sortDirection: 'asc',
+    });
+    expect(asc.items.map((asset) => asset.id)).toEqual([first.id, second.id, third.id]);
+  });
+
+  it('sorts by updatedAt in both directions, independent of createdAt order', async () => {
+    const project = await seedProject('Deep Fathom');
+    // Both created at the same instant, then restored in reverse order so
+    // `updatedAt` disagrees with `createdAt` and the sort field actually matters.
+    const a = await assetsAt('2026-01-01T00:00:00.000Z').upload(project.id, {
+      kind: 'image',
+      filename: 'a.png',
+      mimeType: 'image/png',
+      content: Buffer.from('a'),
+    });
+    const b = await assetsAt('2026-01-01T00:00:00.000Z').upload(project.id, {
+      kind: 'image',
+      filename: 'b.png',
+      mimeType: 'image/png',
+      content: Buffer.from('b'),
+    });
+
+    await assetsAt('2026-02-01T00:00:00.000Z').archive(project.id, a.id);
+    await assetsAt('2026-02-02T00:00:00.000Z').restore(project.id, a.id);
+    await assetsAt('2026-02-03T00:00:00.000Z').archive(project.id, b.id);
+    await assetsAt('2026-02-04T00:00:00.000Z').restore(project.id, b.id);
+
+    const asc = await assets.listByProject(project.id, {
+      sortBy: 'updatedAt',
+      sortDirection: 'asc',
+    });
+    expect(asc.items.map((asset) => asset.id)).toEqual([a.id, b.id]);
+
+    const desc = await assets.listByProject(project.id, {
+      sortBy: 'updatedAt',
+      sortDirection: 'desc',
+    });
+    expect(desc.items.map((asset) => asset.id)).toEqual([b.id, a.id]);
+  });
+
+  it('sorts by filename in both directions', async () => {
+    const project = await seedProject('Deep Fathom');
+    await assets.upload(project.id, {
+      kind: 'image',
+      filename: 'zebra.png',
+      mimeType: 'image/png',
+      content: Buffer.from('z'),
+    });
+    await assets.upload(project.id, {
+      kind: 'image',
+      filename: 'apple.png',
+      mimeType: 'image/png',
+      content: Buffer.from('a'),
+    });
+    await assets.upload(project.id, {
+      kind: 'image',
+      filename: 'mango.png',
+      mimeType: 'image/png',
+      content: Buffer.from('m'),
+    });
+
+    const asc = await assets.listByProject(project.id, {
+      sortBy: 'filename',
+      sortDirection: 'asc',
+    });
+    expect(asc.items.map((asset) => asset.filename)).toEqual([
+      'apple.png',
+      'mango.png',
+      'zebra.png',
+    ]);
+
+    const desc = await assets.listByProject(project.id, {
+      sortBy: 'filename',
+      sortDirection: 'desc',
+    });
+    expect(desc.items.map((asset) => asset.filename)).toEqual([
+      'zebra.png',
+      'mango.png',
+      'apple.png',
+    ]);
+  });
+
+  it('sorts by byteSize in both directions', async () => {
+    const project = await seedProject('Deep Fathom');
+    await assets.upload(project.id, {
+      kind: 'image',
+      filename: 'small.png',
+      mimeType: 'image/png',
+      content: Buffer.from('x'),
+    });
+    await assets.upload(project.id, {
+      kind: 'image',
+      filename: 'large.png',
+      mimeType: 'image/png',
+      content: Buffer.from('x'.repeat(100)),
+    });
+    await assets.upload(project.id, {
+      kind: 'image',
+      filename: 'medium.png',
+      mimeType: 'image/png',
+      content: Buffer.from('x'.repeat(10)),
+    });
+
+    const asc = await assets.listByProject(project.id, {
+      sortBy: 'byteSize',
+      sortDirection: 'asc',
+    });
+    expect(asc.items.map((asset) => asset.filename)).toEqual([
+      'small.png',
+      'medium.png',
+      'large.png',
+    ]);
+
+    const desc = await assets.listByProject(project.id, {
+      sortBy: 'byteSize',
+      sortDirection: 'desc',
+    });
+    expect(desc.items.map((asset) => asset.filename)).toEqual([
+      'large.png',
+      'medium.png',
+      'small.png',
+    ]);
+  });
+});
+
+describe('paging with tied sort values', () => {
+  it('returns every asset exactly once when several share a timestamp', async () => {
+    const project = await seedProject('Deep Fathom');
+    const sameInstant = assetsAt('2026-01-01T00:00:00.000Z');
+
+    const uploaded = [];
+    for (let i = 0; i < 5; i += 1) {
+      uploaded.push(
+        await sameInstant.upload(project.id, {
+          kind: 'image',
+          filename: `tied-${i}.png`,
+          mimeType: 'image/png',
+          content: Buffer.from(`tied-${i}`),
+        }),
+      );
+    }
+
+    const seen: string[] = [];
+    for (let offset = 0; offset < uploaded.length; offset += 2) {
+      const page = await assets.listByProject(project.id, { limit: 2, offset });
+      seen.push(...page.items.map((asset) => asset.id));
+    }
+
+    expect(seen).toHaveLength(uploaded.length);
+    expect(new Set(seen)).toEqual(new Set(uploaded.map((asset) => asset.id)));
   });
 });
