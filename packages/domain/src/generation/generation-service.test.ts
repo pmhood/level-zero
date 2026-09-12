@@ -236,7 +236,38 @@ describe('generation failure', () => {
     expect(failure?.subjectId).toBe(generation.id);
     expect(failure?.summary.length).toBeLessThanOrEqual(300);
     expect(failure?.summary.startsWith('Generation failed: xxx')).toBe(true);
-    expect(failure?.metadata).toMatchObject({ failureCode: 'timeout' });
+    expect(failure?.metadata).toMatchObject({ failureCode: 'timeout', attemptCount: 0 });
+  });
+
+  it('clears the provider and records every candidate tried once the capability is exhausted', async () => {
+    const generation = await generations.record(project.id, request());
+    await generations.dispatch(project.id, generation.id, {
+      provider: 'openai',
+      model: 'gpt-image-1',
+    });
+
+    const failed = await generations.fail(project.id, generation.id, {
+      code: 'provider_error',
+      message: '503 upstream unavailable',
+      attempts: [
+        { provider: 'openai', model: 'gpt-image-1', message: 'timeout' },
+        { provider: 'anthropic', model: 'claude-1', message: '503 upstream unavailable' },
+      ],
+    });
+
+    expect(failed).toMatchObject({
+      status: 'failed',
+      provider: null,
+      model: null,
+      attempts: [
+        { provider: 'openai', model: 'gpt-image-1', message: 'timeout' },
+        { provider: 'anthropic', model: 'claude-1', message: '503 upstream unavailable' },
+      ],
+    });
+
+    const feed = await activityRepo.listByProject(project.id, {});
+    const failure = feed.items.find((item) => item.type === 'generation_failed');
+    expect(failure?.metadata).toMatchObject({ attemptCount: 2 });
   });
 
   it('can be retried as a child generation that points back at the failure', async () => {

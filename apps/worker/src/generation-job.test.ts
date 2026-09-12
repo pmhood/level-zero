@@ -294,7 +294,11 @@ describe('failure and retry', () => {
     await expect(jobs.getById(project.id, job.id)).resolves.toMatchObject({ status: 'failed' });
     await expect(generations.getById(project.id, generation.id)).resolves.toMatchObject({
       status: 'failed',
+      // Its one candidate never answered, so the record no longer names it.
+      provider: null,
+      model: null,
       failure: { code: 'provider_error', message: 'provider unavailable' },
+      attempts: [{ provider: 'flaky', model: 'flaky-1', message: 'provider unavailable' }],
     });
   });
 });
@@ -325,9 +329,18 @@ describe('provider fallback', () => {
     await expect(handle()(delivery(job))).rejects.toThrow('secondary unavailable');
 
     await expect(jobs.getById(project.id, job.id)).resolves.toMatchObject({ status: 'failed' });
+    // Neither candidate produced the result, so the record no longer names
+    // the first-choice one it was dispatched to — and it keeps the whole
+    // attempt sequence, not just the last error.
     await expect(generations.getById(project.id, generation.id)).resolves.toMatchObject({
       status: 'failed',
+      provider: null,
+      model: null,
       failure: { message: 'secondary unavailable' },
+      attempts: [
+        { provider: 'primary', model: 'failing-1', message: 'primary unavailable' },
+        { provider: 'secondary', model: 'failing-1', message: 'secondary unavailable' },
+      ],
     });
   });
 });

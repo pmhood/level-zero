@@ -1,4 +1,5 @@
 import {
+  AiProvidersExhaustedError,
   isAiCapability,
   readResolvedContext,
   type AiArtifact,
@@ -248,7 +249,13 @@ async function recordFailure(
 
   const generation = await deps.generations.getById(delivery.projectId, generationId);
   if (generation.status === 'queued' || generation.status === 'running') {
-    await deps.generations.fail(delivery.projectId, generationId, failure);
+    // Every candidate was tried and none produced a result: record the whole
+    // attempt sequence rather than just the last error, so the generation
+    // does not keep naming a provider that never answered.
+    await deps.generations.fail(delivery.projectId, generationId, {
+      ...failure,
+      attempts: error instanceof AiProvidersExhaustedError ? error.attempts : undefined,
+    });
   }
 }
 

@@ -1,0 +1,1 @@
+ALTER TABLE "generations" ADD COLUMN "attempts" jsonb DEFAULT '[]'::jsonb NOT NULL;

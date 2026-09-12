@@ -1,4 +1,8 @@
-import { GENERATION_STATUSES, type GenerationFailure } from '@level-zero/domain';
+import {
+  GENERATION_STATUSES,
+  type GenerationAttempt,
+  type GenerationFailure,
+} from '@level-zero/domain';
 import { sql } from 'drizzle-orm';
 import {
   check,
@@ -83,6 +87,16 @@ export const generations = pgTable(
     seed: text('seed'),
     providerRequestId: text('provider_request_id'),
     failure: jsonb('failure').$type<GenerationFailure>(),
+    /**
+     * Every provider candidate tried before a terminal failure, and why each
+     * one failed. Empty unless the whole capability was exhausted — the case
+     * that also clears `provider`/`model` above, so this is the only place
+     * their vendor detail survives on a failed row.
+     */
+    attempts: jsonb('attempts')
+      .$type<GenerationAttempt[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     startedAt: timestamp('started_at', { withTimezone: true }),
     completedAt: timestamp('completed_at', { withTimezone: true }),
