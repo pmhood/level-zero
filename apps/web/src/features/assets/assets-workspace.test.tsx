@@ -6,11 +6,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AssetsWorkspace } from './assets-workspace';
 
+let currentSearch = '';
+const routerReplace = vi.fn();
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace: routerReplace }),
+  usePathname: () => '/projects/prj_1/assets',
+  useSearchParams: () => new URLSearchParams(currentSearch),
+}));
+
 vi.mock('@/lib/api', () => ({
   ApiRequestError: class ApiRequestError extends Error {},
   apiErrorMessage: (error: unknown, fallback = 'Something went wrong talking to the API.') =>
     error instanceof Error ? error.message : fallback,
   listAssetLibrary: vi.fn(),
+  listEntities: vi.fn(),
+  getEntity: vi.fn(),
   assetContentUrl: (projectId: string, assetId: string) =>
     `https://api.test/projects/${projectId}/assets/${assetId}/content`,
 }));
@@ -78,7 +89,10 @@ describe('Assets workspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage.clear();
+    currentSearch = '';
     vi.mocked(api.listAssetLibrary).mockResolvedValue(libraryPage([], []));
+    vi.mocked(api.listEntities).mockResolvedValue({ items: [], total: 0 });
+    vi.mocked(api.getEntity).mockRejectedValue(new Error('not found'));
   });
 
   afterEach(cleanup);
@@ -128,7 +142,7 @@ describe('Assets workspace', () => {
 
     await screen.findByText('kael-suit.png');
     expect(screen.getByText('All Assets (342)')).toBeDefined();
-    expect(screen.getByText('Approved')).toBeDefined();
+    expect(screen.getByText('Approved', { selector: 'span' })).toBeDefined();
     expect(screen.getByRole('img', { name: 'kael-suit.png' })).toBeDefined();
   });
 
@@ -164,17 +178,32 @@ describe('Assets workspace', () => {
     expect(screen.getByText('kael-suit.png')).toBeDefined();
   });
 
-  it('includes archived assets in the base view and badges them Archived', async () => {
-    const archived = asset({ id: 'ast_3', filename: 'retired-crate.png', status: 'archived' });
-    vi.mocked(api.listAssetLibrary).mockResolvedValue(
-      libraryPage([archived], [summary({ assetId: 'ast_3' })]),
-    );
+  it('hides archived assets by default, matching the API default', async () => {
+    vi.mocked(api.listAssetLibrary).mockResolvedValue(libraryPage([asset()], [summary()]));
 
     renderWorkspace();
 
+    await screen.findByText('kael-suit.png');
+    expect(vi.mocked(api.listAssetLibrary).mock.calls[0]![1]).toMatchObject({
+      includeArchived: false,
+    });
+  });
+
+  it('includes archived assets, badged Archived, once the toolbar checkbox is checked', async () => {
+    const archived = asset({ id: 'ast_3', filename: 'retired-crate.png', status: 'archived' });
+    vi.mocked(api.listAssetLibrary).mockResolvedValue(libraryPage([], []));
+
+    renderWorkspace();
+    await screen.findByText('No assets yet');
+
+    vi.mocked(api.listAssetLibrary).mockResolvedValue(
+      libraryPage([archived], [summary({ assetId: 'ast_3' })]),
+    );
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Include archived' }));
+
     await screen.findByText('retired-crate.png');
     expect(screen.getByText('Archived')).toBeDefined();
-    expect(vi.mocked(api.listAssetLibrary).mock.calls[0]![1]).toMatchObject({
+    expect(vi.mocked(api.listAssetLibrary).mock.calls.at(-1)![1]).toMatchObject({
       includeArchived: true,
     });
   });
@@ -249,6 +278,76 @@ describe('Assets workspace', () => {
       offset: 60,
       limit: 60,
     });
+  });
+
+  it('reads its filters back out of a pasted URL and queries with them from the first request', async () => {
+    currentSearch = 'kind=image&origin=generated&sort=filename';
+    vi.mocked(api.listAssetLibrary).mockResolvedValue(libraryPage([asset()], [summary()]));
+
+    renderWorkspace();
+
+    await waitForCall();
+    expect(vi.mocked(api.listAssetLibrary).mock.calls[0]![1]).toMatchObject({
+      kind: ['image'],
+      origin: 'generated',
+      sortBy: 'filename',
+      sortDirection: 'asc',
+    });
+  });
+
+  it('re-queries with each filter as it changes, and resets to the first page', async () => {
+    const items = Array.from({ length: 60 }, (_, index) =>
+      asset({ id: `ast_${index}`, filename: `asset-${index}.png` }),
+    );
+    vi.mocked(api.listAssetLibrary).mockResolvedValue(
+      libraryPage(
+        items,
+        items.map((item) => summary({ assetId: item.id })),
+        120,
+      ),
+    );
+
+    renderWorkspace();
+    await screen.findByText('All Assets (120)');
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitForCall(2);
+
+    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'image' } });
+
+    await waitForCall(3);
+    const lastCall = vi.mocked(api.listAssetLibrary).mock.calls.at(-1)!;
+    expect(lastCall[1]).toMatchObject({ kind: ['image'], offset: 0 });
+  });
+
+  it('writes a changed filter back into the URL', async () => {
+    vi.mocked(api.listAssetLibrary).mockResolvedValue(libraryPage([], []));
+
+    renderWorkspace();
+    await waitForCall();
+
+    fireEvent.change(screen.getByLabelText('Origin'), { target: { value: 'imported' } });
+
+    await waitFor(() =>
+      expect(routerReplace).toHaveBeenCalledWith('/projects/prj_1/assets?origin=imported', {
+        scroll: false,
+      }),
+    );
+  });
+
+  it('distinguishes no assets in the project from no assets matching the filters', async () => {
+    vi.mocked(api.listAssetLibrary).mockResolvedValue(libraryPage([], []));
+
+    renderWorkspace();
+    await screen.findByText('No assets yet');
+
+    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'video' } });
+
+    await screen.findByText('No assets match these filters');
+    expect(screen.queryByText('No assets yet')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+
+    await screen.findByText('No assets yet');
   });
 });
 

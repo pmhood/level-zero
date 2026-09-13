@@ -8,8 +8,8 @@ import * as api from '@/lib/api';
 export const ASSET_LIBRARY_PAGE_SIZE = 60;
 
 const assetKeys = {
-  library: (projectId: string, page: number) =>
-    ['projects', projectId, 'assets', 'library', page] as const,
+  library: (projectId: string, page: number, params: api.ListAssetLibraryParams) =>
+    ['projects', projectId, 'assets', 'library', page, params] as const,
 };
 
 /**
@@ -18,16 +18,21 @@ const assetKeys = {
  * changes how a page is drawn, never which assets are fetched or how many
  * exist in `total` (issue #171's acceptance criteria).
  *
- * `includeArchived: true` because this workspace has no filter UI yet (that
- * is #172) — the base view is "what do we have", archived included and
- * badged, rather than silently matching the API's default of hiding them.
+ * `params` is #172's toolbar state, translated to the API's filter and sort
+ * fields — every one of them round-trips to the server, so a filtered count,
+ * an empty page and an empty state all agree with the same query rather than
+ * a client-side narrowing of an already-fetched page.
  */
-export function useAssetLibrary(projectId: string, page: number) {
+export function useAssetLibrary(
+  projectId: string,
+  page: number,
+  params: api.ListAssetLibraryParams = {},
+) {
   return useQuery({
-    queryKey: assetKeys.library(projectId, page),
+    queryKey: assetKeys.library(projectId, page, params),
     queryFn: () =>
       api.listAssetLibrary(projectId, {
-        includeArchived: true,
+        ...params,
         limit: ASSET_LIBRARY_PAGE_SIZE,
         offset: page * ASSET_LIBRARY_PAGE_SIZE,
       }),
