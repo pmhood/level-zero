@@ -210,11 +210,14 @@ export {
   type UploadAssetInput,
 } from './asset/asset-service';
 export {
+  ASSET_LINKED_ENTITIES_CAP,
   ASSET_ORIGINS,
   isApprovedInAnyContext,
   pickNewestOrigin,
   summarizeCurrentSelections,
   type AssetGenerationOrigin,
+  type AssetLinkedEntitiesSummary,
+  type AssetLinkedEntity,
   type AssetOrigin,
   type AssetSelectionSummaryEntry,
   type AssetSummary,
