@@ -209,6 +209,18 @@ export {
   type AssetServiceDeps,
   type UploadAssetInput,
 } from './asset/asset-service';
+export {
+  ASSET_ORIGINS,
+  type AssetGenerationOrigin,
+  type AssetOrigin,
+  type AssetSummary,
+} from './asset/asset-summary';
+export {
+  type AssetLibraryFilter,
+  type AssetLibraryPage,
+  type AssetLibraryReadModel,
+} from './asset/asset-library-read-model';
+export { AssetLibraryService } from './asset/asset-library-service';
 
 export {
   DEFAULT_GENERATION_FAILURE_CODE,

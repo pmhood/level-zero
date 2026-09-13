@@ -77,7 +77,8 @@ const ASSET_SORT_COLUMNS = {
 /** The part of `mime_type` before the slash: "image", "video", "application", ... */
 const mimeFamily = sql`split_part(${assets.mimeType}, '/', 1)`;
 
-function buildAssetWhere(projectId: string, filter: AssetListFilter): SQL {
+/** Shared with `DrizzleAssetLibraryReadModel`, which narrows further by origin. */
+export function buildAssetWhere(projectId: string, filter: AssetListFilter): SQL {
   const conditions: SQL[] = [eq(assets.projectId, projectId)];
 
   if (filter.statuses?.length) {
@@ -124,7 +125,7 @@ function buildAssetWhere(projectId: string, filter: AssetListFilter): SQL {
  * direction so paging never drops or repeats a row when two assets share a
  * sort value — bulk-generated assets routinely do.
  */
-function buildAssetOrderBy(filter: AssetListFilter): SQL[] {
+export function buildAssetOrderBy(filter: AssetListFilter): SQL[] {
   const column = ASSET_SORT_COLUMNS[filter.sortBy ?? 'createdAt'];
   const order = filter.sortDirection === 'asc' ? asc : desc;
   return [order(column), order(assets.id)];

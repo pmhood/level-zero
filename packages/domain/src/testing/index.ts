@@ -1,5 +1,6 @@
 export {
   InMemoryActivityRepository,
+  InMemoryAssetLibraryReadModel,
   InMemoryAssetMarkRepository,
   InMemoryAssetRepository,
   InMemoryAssetSelectionRepository,

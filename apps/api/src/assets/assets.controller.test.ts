@@ -1,13 +1,19 @@
 import {
+  AssetLibraryService,
   AssetService,
   ProjectService,
+  completeGeneration,
+  createGeneration,
   createProject,
+  dispatchGeneration,
   fixedClock,
   sequentialIdGenerator,
   type Project,
 } from '@level-zero/domain';
 import {
+  InMemoryAssetLibraryReadModel,
   InMemoryAssetRepository,
+  InMemoryGenerationRepository,
   InMemoryObjectStorageProvider,
   InMemoryProjectRepository,
 } from '@level-zero/domain/testing';
@@ -25,6 +31,7 @@ const clock = fixedClock('2026-03-01T09:00:00.000Z');
 
 let app: INestApplication;
 let projectService: ProjectService;
+let generations: InMemoryGenerationRepository;
 let project: Project;
 let otherProject: Project;
 
@@ -33,14 +40,19 @@ beforeEach(async () => {
   const projects = new InMemoryProjectRepository();
   const assets = new InMemoryAssetRepository();
   const storage = new InMemoryObjectStorageProvider();
+  generations = new InMemoryGenerationRepository();
   projectService = new ProjectService(projects, deps);
   const assetService = new AssetService(assets, projects, storage, deps);
+  const libraryService = new AssetLibraryService(
+    new InMemoryAssetLibraryReadModel(assets, generations),
+  );
 
   const moduleRef = await Test.createTestingModule({
     controllers: [ProjectsController, AssetsController],
     providers: [
       { provide: ProjectService, useValue: projectService },
       { provide: AssetService, useValue: assetService },
+      { provide: AssetLibraryService, useValue: libraryService },
       { provide: APP_FILTER, useClass: DomainExceptionFilter },
     ],
   }).compile();
@@ -344,5 +356,104 @@ describe('archiving and restoring an asset', () => {
     await http()
       .post(`/api/projects/${otherProject.id}/assets/${created.body.id}/archive`)
       .expect(404);
+  });
+});
+
+describe('asset library summaries', () => {
+  async function uploadAsset(filename: string): Promise<string> {
+    const created = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({ kind: 'image', filename, mimeType: 'image/png', contentBase64: pngBase64 })
+      .expect(201);
+    return created.body.id as string;
+  }
+
+  async function recordGeneration(outputAssetId: string): Promise<string> {
+    const deps = { clock, ids: sequentialIdGenerator('generation') };
+    let generation = createGeneration(
+      { projectId: project.id, capability: 'image.generate', prompt: 'a diver' },
+      deps,
+    );
+    generation = dispatchGeneration(generation, { provider: 'anthropic', model: 'claude' }, deps);
+    generation = completeGeneration(generation, { outputAssetIds: [outputAssetId] }, deps);
+    await generations.insert(generation);
+    return generation.id;
+  }
+
+  it('does not include summaries without ?summary=true', async () => {
+    await uploadAsset('kael.png');
+
+    const response = await http().get(`/api/projects/${project.id}/assets`).expect(200);
+
+    expect(response.body.summaries).toBeUndefined();
+  });
+
+  it('reports an uploaded asset as imported', async () => {
+    const assetId = await uploadAsset('kael.png');
+
+    const response = await http()
+      .get(`/api/projects/${project.id}/assets`)
+      .query({ summary: 'true' })
+      .expect(200);
+
+    expect(response.body.summaries).toEqual([{ assetId, origin: 'imported', generation: null }]);
+  });
+
+  it('reports a generated asset with its generation id, capability, provider and model', async () => {
+    const assetId = await uploadAsset('portrait.png');
+    const generationId = await recordGeneration(assetId);
+
+    const response = await http()
+      .get(`/api/projects/${project.id}/assets`)
+      .query({ summary: 'true' })
+      .expect(200);
+
+    expect(response.body.summaries).toEqual([
+      {
+        assetId,
+        origin: 'generated',
+        generation: {
+          generationId,
+          capability: 'image.generate',
+          provider: 'anthropic',
+          model: 'claude',
+        },
+      },
+    ]);
+  });
+
+  it('narrows by origin, in both directions, and reflects it in total', async () => {
+    const uploaded = await uploadAsset('uploaded.png');
+    const generated = await uploadAsset('generated.png');
+    await recordGeneration(generated);
+
+    const generatedOnly = await http()
+      .get(`/api/projects/${project.id}/assets`)
+      .query({ origin: 'generated' })
+      .expect(200);
+    expect(generatedOnly.body.total).toBe(1);
+    expect(generatedOnly.body.items.map((asset: { id: string }) => asset.id)).toEqual([generated]);
+
+    const importedOnly = await http()
+      .get(`/api/projects/${project.id}/assets`)
+      .query({ origin: 'imported' })
+      .expect(200);
+    expect(importedOnly.body.total).toBe(1);
+    expect(importedOnly.body.items.map((asset: { id: string }) => asset.id)).toEqual([uploaded]);
+  });
+
+  it('implies summary=true when only origin is given', async () => {
+    await uploadAsset('kael.png');
+
+    const response = await http()
+      .get(`/api/projects/${project.id}/assets`)
+      .query({ origin: 'imported' })
+      .expect(200);
+
+    expect(response.body.summaries).toHaveLength(1);
+  });
+
+  it('rejects an unknown origin', async () => {
+    await http().get(`/api/projects/${project.id}/assets`).query({ origin: 'stolen' }).expect(400);
   });
 });
