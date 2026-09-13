@@ -1,0 +1,40 @@
+version: 2
+
+# Dependabot is the half that the dependency-review check cannot do. That check
+# only fires on a pull request, so it never notices an advisory published
+# against a dependency nobody is currently touching. This opens the bump.
+#
+# Note that *security* updates are a repository setting (Settings → Advanced
+# Security → Dependabot), not something this file turns on. This file covers
+# routine version updates; the two are configured separately and both are
+# wanted.
+
+updates:
+  # One entry covers the whole workspace. pnpm resolves every package from the
+  # single root lockfile, so Dependabot reads the root manifest, follows
+  # pnpm-workspace.yaml, and updates the member package.json that actually
+  # declares the dependency.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    # Minor and patch bumps arrive as two batched pull requests rather than
+    # twenty. Majors stay individual — those are the ones worth reading.
+    groups:
+      production-minor-patch:
+        dependency-type: production
+        update-types: [minor, patch]
+      development-minor-patch:
+        dependency-type: development
+        update-types: [minor, patch]
+
+  # Actions are dependencies too, and a stale third-party action is a supply
+  # chain risk in the same way a stale package is.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
