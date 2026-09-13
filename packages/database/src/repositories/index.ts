@@ -1,4 +1,5 @@
 export { DrizzleActivityRepository } from './activity-repository';
+export { DrizzleAssetLibraryReadModel } from './asset-library-read-model';
 export { DrizzleAssetMarkRepository } from './asset-mark-repository';
 export { DrizzleAssetRepository } from './asset-repository';
 export { DrizzleAssetSelectionRepository } from './asset-selection-repository';

@@ -1,5 +1,6 @@
 import {
   DrizzleActivityRepository,
+  DrizzleAssetLibraryReadModel,
   DrizzleAssetMarkRepository,
   DrizzleAssetRepository,
   DrizzleAssetSelectionRepository,
@@ -20,6 +21,7 @@ import {
 } from '@level-zero/database';
 import {
   ActivityService,
+  AssetLibraryService,
   AssetSelectionService,
   AssetService,
   CommentService,
@@ -44,6 +46,7 @@ import {
   systemClock,
   uuidIdGenerator,
   type ActivityRepository,
+  type AssetLibraryReadModel,
   type AssetMarkRepository,
   type AssetRepository,
   type AssetSelectionRepository,
@@ -81,6 +84,7 @@ export const ACTIVITY_REPOSITORY = Symbol('ACTIVITY_REPOSITORY');
 export const RELATIONSHIP_REPOSITORY = Symbol('RELATIONSHIP_REPOSITORY');
 export const VERSION_REPOSITORY = Symbol('VERSION_REPOSITORY');
 export const ASSET_REPOSITORY = Symbol('ASSET_REPOSITORY');
+export const ASSET_LIBRARY_READ_MODEL = Symbol('ASSET_LIBRARY_READ_MODEL');
 export const GENERATION_REPOSITORY = Symbol('GENERATION_REPOSITORY');
 export const PROTOTYPE_VERSION_REPOSITORY = Symbol('PROTOTYPE_VERSION_REPOSITORY');
 export const PLAYTEST_REPOSITORY = Symbol('PLAYTEST_REPOSITORY');
@@ -230,6 +234,18 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
         deps: EntityServiceDeps,
         search: SearchIndexService,
       ): AssetService => new AssetService(assets, projects, storage, deps, search),
+    },
+    {
+      provide: ASSET_LIBRARY_READ_MODEL,
+      inject: [DATABASE_CLIENT],
+      useFactory: (client: DatabaseClient): AssetLibraryReadModel =>
+        new DrizzleAssetLibraryReadModel(client.db),
+    },
+    {
+      provide: AssetLibraryService,
+      inject: [ASSET_LIBRARY_READ_MODEL],
+      useFactory: (readModel: AssetLibraryReadModel): AssetLibraryService =>
+        new AssetLibraryService(readModel),
     },
     {
       provide: GENERATION_REPOSITORY,
@@ -526,6 +542,7 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     DocumentService,
     LineageService,
     AssetService,
+    AssetLibraryService,
     GenerationService,
     PrototypeService,
     PlaytestService,
@@ -546,6 +563,7 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     RELATIONSHIP_REPOSITORY,
     VERSION_REPOSITORY,
     ASSET_REPOSITORY,
+    ASSET_LIBRARY_READ_MODEL,
     GENERATION_REPOSITORY,
     PROTOTYPE_VERSION_REPOSITORY,
     PLAYTEST_REPOSITORY,

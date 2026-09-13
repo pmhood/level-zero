@@ -6,6 +6,11 @@ import {
 } from '../activity/activity-repository';
 import { type Asset } from '../asset/asset';
 import {
+  type AssetLibraryFilter,
+  type AssetLibraryPage,
+  type AssetLibraryReadModel,
+} from '../asset/asset-library-read-model';
+import {
   type AssetListFilter,
   type AssetPage,
   type AssetRepository,
@@ -13,6 +18,7 @@ import {
   type AssetSortField,
 } from '../asset/asset-repository';
 import { referencedAssetId } from '../asset/asset-reference';
+import { pickNewestOrigin, type AssetSummary } from '../asset/asset-summary';
 import {
   type GetUrlOptions,
   type ObjectStorageProvider,
@@ -578,6 +584,64 @@ export class InMemoryGenerationRepository implements GenerationRepository {
     this.rows.set(generation.id, structuredClone(generation));
     return structuredClone(generation);
   }
+}
+
+/**
+ * In-memory `AssetLibraryReadModel` for tests. Joins the same two in-memory
+ * repositories the Postgres adapter joins in SQL, and applies the same
+ * origin tiebreak: an asset produced by more than one generation reports the
+ * most recently created one, tying on id.
+ */
+export class InMemoryAssetLibraryReadModel implements AssetLibraryReadModel {
+  constructor(
+    private readonly assets: AssetRepository,
+    private readonly generations: GenerationRepository,
+  ) {}
+
+  async listByProject(projectId: string, filter: AssetLibraryFilter): Promise<AssetLibraryPage> {
+    const unpaged = await this.assets.listByProject(projectId, {
+      ...filter,
+      limit: undefined,
+      offset: undefined,
+    });
+    const { items: allGenerations } = await this.generations.listByProject(projectId, {});
+
+    const summarized = unpaged.items.map((asset) => ({
+      asset,
+      summary: summarize(asset.id, allGenerations),
+    }));
+
+    const filtered = filter.origin
+      ? summarized.filter((entry) => entry.summary.origin === filter.origin)
+      : summarized;
+
+    const offset = filter.offset ?? 0;
+    const limit = filter.limit ?? filtered.length;
+    const page = filtered.slice(offset, offset + limit);
+
+    return {
+      items: page.map((entry) => entry.asset),
+      summaries: page.map((entry) => entry.summary),
+      total: filtered.length,
+    };
+  }
+}
+
+function summarize(assetId: string, generations: readonly Generation[]): AssetSummary {
+  const matches = generations.filter((candidate) => candidate.outputAssetIds.includes(assetId));
+  const winner = pickNewestOrigin(matches);
+
+  if (!winner) return { assetId, origin: 'imported', generation: null };
+  return {
+    assetId,
+    origin: 'generated',
+    generation: {
+      generationId: winner.id,
+      capability: winner.capability,
+      provider: winner.provider,
+      model: winner.model,
+    },
+  };
 }
 
 /**

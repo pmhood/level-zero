@@ -1,10 +1,12 @@
 import {
   ASSET_KINDS,
+  ASSET_ORIGINS,
   ASSET_SORT_DIRECTIONS,
   ASSET_SORT_FIELDS,
   ASSET_STATUSES,
   ASSET_VARIANTS,
   type AssetKind,
+  type AssetOrigin,
   type AssetSortDirection,
   type AssetSortField,
   type AssetStatus,
@@ -127,6 +129,21 @@ export class ListAssetsQueryDto {
   @Transform(({ value }) => toBoolean(value))
   @IsBoolean()
   includeArchived?: boolean;
+
+  /**
+   * Opts into the joined library view: items come back with their
+   * `AssetSummary`. A summary-only filter (`origin`) implies this, so a
+   * caller that only wants an origin filter doesn't also have to ask.
+   */
+  @IsOptional()
+  @Transform(({ value }) => toBoolean(value))
+  @IsBoolean()
+  summary?: boolean;
+
+  /** Generated-vs-imported. Narrows in SQL and is reflected in `total`. */
+  @IsOptional()
+  @IsIn(ASSET_ORIGINS)
+  origin?: AssetOrigin;
 
   @IsOptional()
   @IsIn(ASSET_SORT_FIELDS)

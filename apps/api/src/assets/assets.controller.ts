@@ -1,4 +1,11 @@
-import { AssetService, type Asset, type AssetPage } from '@level-zero/domain';
+import {
+  AssetLibraryService,
+  AssetService,
+  type Asset,
+  type AssetLibraryPage,
+  type AssetListFilter,
+  type AssetPage,
+} from '@level-zero/domain';
 import { Body, Controller, Get, Param, Post, Query, Res } from '@nestjs/common';
 import { type Response } from 'express';
 
@@ -14,7 +21,10 @@ import { CreateAssetDto, ListAssetsQueryDto } from './dto/asset.dto';
  */
 @Controller('projects/:projectId/assets')
 export class AssetsController {
-  constructor(private readonly assets: AssetService) {}
+  constructor(
+    private readonly assets: AssetService,
+    private readonly library: AssetLibraryService,
+  ) {}
 
   @Post()
   upload(@Param('projectId') projectId: string, @Body() body: CreateAssetDto): Promise<Asset> {
@@ -24,12 +34,19 @@ export class AssetsController {
     });
   }
 
+  /**
+   * Plain by default, matching every caller that just wants a page of
+   * assets (`character-visuals`, `moodboard-rail`). `?summary=true`, or any
+   * summary-only filter such as `origin`, switches to the joined library
+   * view so a grid can show a badge per tile without a follow-up query per
+   * tile.
+   */
   @Get()
   list(
     @Param('projectId') projectId: string,
     @Query() query: ListAssetsQueryDto,
-  ): Promise<AssetPage> {
-    return this.assets.listByProject(projectId, {
+  ): Promise<AssetPage | AssetLibraryPage> {
+    const filter: AssetListFilter = {
       kinds: query.kind,
       variants: query.variant,
       statuses: query.status,
@@ -43,7 +60,13 @@ export class AssetsController {
       sortDirection: query.sortDirection,
       limit: query.limit,
       offset: query.offset,
-    });
+    };
+
+    if (query.summary || query.origin !== undefined) {
+      return this.library.list(projectId, { ...filter, origin: query.origin });
+    }
+
+    return this.assets.listByProject(projectId, filter);
   }
 
   @Get(':assetId')
