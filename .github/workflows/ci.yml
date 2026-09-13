@@ -1,6 +1,9 @@
 name: CI
 
 on:
+  # Lets CI be run on demand, which is the only way to check whether Actions is
+  # working without pushing to main and risking a red X on the history.
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
