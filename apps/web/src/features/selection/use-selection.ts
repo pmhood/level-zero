@@ -113,6 +113,8 @@ export function useToggleAssetMark(projectId: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: selectionKeys.marks(projectId) });
+      // The library summary carries the mark kinds too (#200).
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'assets'] });
     },
   });
 }
@@ -128,6 +130,9 @@ function useSelectionMutation<TInput, TResult>(
     mutationFn,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: selectionKeys.all(projectId) });
+      // The asset library's read model joins these decisions in (#201), so a
+      // listing that shows an "Approved" pill is stale the moment one lands.
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'assets'] });
     },
   });
 }

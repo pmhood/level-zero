@@ -1,4 +1,9 @@
-import type { AssetMarkKind, AssetSelection, AssetSelectionState } from '@level-zero/domain';
+import type {
+  AssetMarkKind,
+  AssetSelection,
+  AssetSelectionState,
+  EntityType,
+} from '@level-zero/domain';
 
 import type { PresentedState } from '@/features/review/review';
 
@@ -42,6 +47,22 @@ export const WORLD_VISUAL_PURPOSES: readonly AssetPurpose[] = [
  * context-scoped approval — no second mechanism.
  */
 export const MOODBOARD_PURPOSE: AssetPurpose = { value: 'direction', label: 'Visual direction' };
+
+/**
+ * The purposes to offer for one entity, for a surface that sees every kind of
+ * entity rather than one.
+ *
+ * Character Studio knows it is deciding about a character and names
+ * `CHARACTER_VISUAL_PURPOSES` directly; the asset library does not know what it
+ * has selected until the user picks the entity, so it asks here. The world
+ * vocabulary is the general one because a key visual, concept art or a map is
+ * what a visual is for anywhere outside a character sheet or a board.
+ */
+export function visualPurposesFor(entityType: EntityType): readonly AssetPurpose[] {
+  if (entityType === 'character') return CHARACTER_VISUAL_PURPOSES;
+  if (entityType === 'moodboard') return [MOODBOARD_PURPOSE];
+  return WORLD_VISUAL_PURPOSES;
+}
 
 const PURPOSE_LABELS = new Map(
   [...CHARACTER_VISUAL_PURPOSES, ...WORLD_VISUAL_PURPOSES, MOODBOARD_PURPOSE].map((purpose) => [
