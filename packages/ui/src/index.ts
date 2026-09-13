@@ -33,9 +33,11 @@ export {
   ChevronRightIcon,
   CloseIcon,
   DocumentIcon,
+  GridIcon,
   HistoryIcon,
   IdeaLabIcon,
   LinkIcon,
+  ListIcon,
   MechanicsIcon,
   OverviewIcon,
   PlusIcon,
@@ -45,6 +47,22 @@ export {
   StarIcon,
   WarningIcon,
 } from './icons';
+export {
+  MediaCard,
+  MediaCardSkeleton,
+  type MediaCardAspect,
+  type MediaCardProps,
+} from './media-card';
+export {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  type TableRowProps,
+} from './table';
+export { ViewSwitcher, type ViewSwitcherItem, type ViewSwitcherProps } from './view-switcher';
 export { RichTextEditor, type RichTextEditorProps } from './editor/rich-text-editor';
 export {
   EDITOR_MODE_CONFIG,

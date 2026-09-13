@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 
+import { AssetsIcon } from '@/features/assets/assets-icon';
 import { CharactersIcon } from '@/features/characters/character-icons';
 import { MoodboardIcon } from '@/features/moodboards/moodboard-icon';
 import { PrototypeIcon } from '@/features/prototypes/prototype-icon';
@@ -55,6 +56,7 @@ export function ProjectSidebar({
   const charactersHref = `/projects/${projectId}/characters`;
   const mechanicsHref = `/projects/${projectId}/mechanics`;
   const moodboardsHref = `/projects/${projectId}/moodboards`;
+  const assetsHref = `/projects/${projectId}/assets`;
   const gddHref = `/projects/${projectId}/gdd`;
   const prototypesHref = `/projects/${projectId}/prototypes`;
   const searchHref = `/projects/${projectId}/search`;
@@ -102,6 +104,13 @@ export function ProjectSidebar({
       label: 'Moodboards',
       icon: <MoodboardIcon className="size-4" />,
       active: pathname?.startsWith(moodboardsHref) ?? false,
+    },
+    {
+      key: 'assets',
+      href: assetsHref,
+      label: 'Assets',
+      icon: <AssetsIcon className="size-4" />,
+      active: pathname?.startsWith(assetsHref) ?? false,
     },
     {
       key: 'gdd',

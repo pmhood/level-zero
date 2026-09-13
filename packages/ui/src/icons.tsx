@@ -135,3 +135,23 @@ export const CheckIcon = createIcon(<path d="m5 12.5 4.2 4.2L19 7" />);
 export const StarIcon = createIcon(
   <path d="M12 4.3l2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4L4.2 10l5.4-.8Z" />,
 );
+
+/** `assets/icons/grid.svg` — the grid position of a view switcher. */
+export const GridIcon = createIcon(
+  <>
+    <rect x="4" y="4" width="6" height="6" rx="1" />
+    <rect x="14" y="4" width="6" height="6" rx="1" />
+    <rect x="4" y="14" width="6" height="6" rx="1" />
+    <rect x="14" y="14" width="6" height="6" rx="1" />
+  </>,
+);
+
+/** `assets/icons/list.svg` — the list position of a view switcher. */
+export const ListIcon = createIcon(
+  <>
+    <path d="M9 6h11M9 12h11M9 18h11" />
+    <circle cx="5" cy="6" r="1" />
+    <circle cx="5" cy="12" r="1" />
+    <circle cx="5" cy="18" r="1" />
+  </>,
+);
