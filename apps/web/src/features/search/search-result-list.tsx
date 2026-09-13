@@ -47,7 +47,9 @@ export function SearchResultList({
               <EntityCard
                 name={result.title}
                 typeLabel={`${typeLabel(result)} • ${projectName}`}
-                status={isEntityStatus(result.status) ? entityStatusBadge(result.status) : undefined}
+                status={
+                  isEntityStatus(result.status) ? entityStatusBadge(result.status) : undefined
+                }
                 description={result.excerpt || null}
                 tags={result.tags}
                 className="hover:border-border-strong hover:bg-hover"

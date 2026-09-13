@@ -92,7 +92,13 @@ export function buildProjectCommands(projectId: string): PaletteCommand[] {
 
   return [
     // --- Navigate --------------------------------------------------------
-    { id: 'go-overview', label: 'Go to Overview', group: 'Navigate', kind: 'action', action: navigate(base) },
+    {
+      id: 'go-overview',
+      label: 'Go to Overview',
+      group: 'Navigate',
+      kind: 'action',
+      action: navigate(base),
+    },
     {
       id: 'go-idea-lab',
       label: 'Go to Idea Lab',

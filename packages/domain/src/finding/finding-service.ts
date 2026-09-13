@@ -2,7 +2,11 @@ import { type Clock } from '../shared/clock';
 import { NotFoundError } from '../shared/errors';
 import { normalizePaging } from '../shared/paging';
 import { dismissFinding, reopenFinding, type DismissFindingInput, type Finding } from './finding';
-import { type FindingListFilter, type FindingPage, type FindingRepository } from './finding-repository';
+import {
+  type FindingListFilter,
+  type FindingPage,
+  type FindingRepository,
+} from './finding-repository';
 
 export interface FindingServiceDeps {
   clock: Clock;
@@ -43,7 +47,11 @@ export class FindingService {
    * The row survives — dismissal is a status, never a deletion — and a scan
    * that reproduces the same fingerprint later leaves this alone (§3.2, §4.4).
    */
-  async dismiss(projectId: string, findingId: string, input: DismissFindingInput): Promise<Finding> {
+  async dismiss(
+    projectId: string,
+    findingId: string,
+    input: DismissFindingInput,
+  ): Promise<Finding> {
     const finding = await this.getById(projectId, findingId);
     return this.findings.save(dismissFinding(finding, input, this.deps));
   }

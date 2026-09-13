@@ -135,7 +135,9 @@ export class DrizzleMoodboardRepository implements MoodboardRepository {
     await this.db.transaction(async (tx) => {
       await tx
         .delete(moodboardNodes)
-        .where(and(eq(moodboardNodes.projectId, projectId), inArray(moodboardNodes.id, [...nodeIds])));
+        .where(
+          and(eq(moodboardNodes.projectId, projectId), inArray(moodboardNodes.id, [...nodeIds])),
+        );
     });
   }
 

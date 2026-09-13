@@ -771,9 +771,7 @@ describe('grouping and ungrouping (issue #126)', () => {
 
   it('redoes a group by recreating the row and rejoining the same members', async () => {
     actions.createGroup = vi.fn().mockResolvedValue(node({ id: 'group_new', type: 'group' }));
-    actions.restoreNodes = vi
-      .fn()
-      .mockResolvedValue([node({ id: 'group_redone', type: 'group' })]);
+    actions.restoreNodes = vi.fn().mockResolvedValue([node({ id: 'group_redone', type: 'group' })]);
     const canvas = renderCanvas([node({ id: 'node_1', x: 0 }), node({ id: 'node_2', x: 300 })]);
 
     drag(canvas, { x: -10, y: -10 }, { x: 600, y: 250 });
@@ -798,7 +796,9 @@ describe('grouping and ungrouping (issue #126)', () => {
   });
 
   it('ungroups as one step, and undo restores the group row with the same members', async () => {
-    actions.restoreNodes = vi.fn().mockResolvedValue([node({ id: 'group_restored', type: 'group' })]);
+    actions.restoreNodes = vi
+      .fn()
+      .mockResolvedValue([node({ id: 'group_restored', type: 'group' })]);
     const canvas = renderCanvas([
       node({ id: 'group_1', type: 'group' }),
       node({ id: 'node_1', groupId: 'group_1', x: 0, zOrder: 0 }),
@@ -824,7 +824,9 @@ describe('grouping and ungrouping (issue #126)', () => {
   });
 
   it('redoes an ungroup by detaching the members and removing the row again', async () => {
-    actions.restoreNodes = vi.fn().mockResolvedValue([node({ id: 'group_restored', type: 'group' })]);
+    actions.restoreNodes = vi
+      .fn()
+      .mockResolvedValue([node({ id: 'group_restored', type: 'group' })]);
     const canvas = renderCanvas([
       node({ id: 'group_1', type: 'group' }),
       node({ id: 'node_1', groupId: 'group_1', x: 0, zOrder: 0 }),

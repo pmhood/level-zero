@@ -80,9 +80,9 @@ describe('dismiss', () => {
   });
 
   it('throws NotFoundError rather than dismissing a finding that does not exist', async () => {
-    await expect(
-      service.dismiss('project-1', 'missing', { dismissedBy: 'pete' }),
-    ).rejects.toThrow(NotFoundError);
+    await expect(service.dismiss('project-1', 'missing', { dismissedBy: 'pete' })).rejects.toThrow(
+      NotFoundError,
+    );
   });
 });
 

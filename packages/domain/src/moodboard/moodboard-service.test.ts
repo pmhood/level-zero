@@ -434,9 +434,7 @@ describe('duplicating', () => {
       type: 'asset',
       assetId: asset.id,
     });
-    await moodboards.updateNodes(project.id, board.id, [
-      { id: assetNode.id, groupId: group.id },
-    ]);
+    await moodboards.updateNodes(project.id, board.id, [{ id: assetNode.id, groupId: group.id }]);
 
     const copies = await moodboards.duplicateNodes(project.id, board.id, [group.id]);
 

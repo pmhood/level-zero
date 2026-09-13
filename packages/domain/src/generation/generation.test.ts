@@ -106,7 +106,10 @@ describe('redispatchGeneration', () => {
   it('corrects the provider and model without touching status or startedAt', () => {
     const dispatched = running();
 
-    const generation = redispatchGeneration(dispatched, { provider: 'openai', model: 'gpt-image-1' });
+    const generation = redispatchGeneration(dispatched, {
+      provider: 'openai',
+      model: 'gpt-image-1',
+    });
 
     expect(generation).toMatchObject({
       status: 'running',
@@ -117,9 +120,9 @@ describe('redispatchGeneration', () => {
   });
 
   it('refuses to redispatch a generation that was never dispatched', () => {
-    expect(() => redispatchGeneration(queued(), { provider: 'openai', model: 'gpt-image-1' })).toThrow(
-      ConflictError,
-    );
+    expect(() =>
+      redispatchGeneration(queued(), { provider: 'openai', model: 'gpt-image-1' }),
+    ).toThrow(ConflictError);
   });
 });
 

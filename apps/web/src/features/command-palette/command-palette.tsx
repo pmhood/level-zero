@@ -18,7 +18,11 @@ import { entityRoute } from '@/features/entity-detail/entity-route';
 import { apiErrorMessage, searchProject } from '@/lib/api';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 
-import { buildProjectCommands, matchesCommand, type PaletteCommand } from './command-palette-commands';
+import {
+  buildProjectCommands,
+  matchesCommand,
+  type PaletteCommand,
+} from './command-palette-commands';
 import { useRecentPaletteItems, type RecentPaletteItem } from './use-recent-palette-items';
 
 type PaletteListEntry =
@@ -50,7 +54,13 @@ function entryKey(entry: PaletteListEntry): string {
  * Mounted once by `ProjectShell`, so it is available from every workspace
  * without each of them wiring it up.
  */
-export function CommandPalette({ projectId, projectName }: { projectId: string; projectName: string }) {
+export function CommandPalette({
+  projectId,
+  projectName,
+}: {
+  projectId: string;
+  projectName: string;
+}) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
@@ -170,7 +180,8 @@ function CommandPaletteDialog({
   }, [query, commands, trimmedQuery, mode, searchResults, recent.items]);
 
   const flatEntries = useMemo(() => sections.flatMap((section) => section.entries), [sections]);
-  const clampedIndex = flatEntries.length === 0 ? -1 : Math.min(selectedIndex, flatEntries.length - 1);
+  const clampedIndex =
+    flatEntries.length === 0 ? -1 : Math.min(selectedIndex, flatEntries.length - 1);
 
   function activate(entry: PaletteListEntry) {
     if (entry.kind === 'recent') {
@@ -255,7 +266,9 @@ function CommandPaletteDialog({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={
-              mode === 'semantic' ? 'Ask Level Zero about this project…' : 'Search or run a command…'
+              mode === 'semantic'
+                ? 'Ask Level Zero about this project…'
+                : 'Search or run a command…'
             }
             className="flex-1"
           />
@@ -348,7 +361,9 @@ function PaletteRow({
       </span>
 
       {entry.kind === 'recent' && (
-        <span className="shrink-0 truncate text-xs text-faint-foreground">{entry.item.description}</span>
+        <span className="shrink-0 truncate text-xs text-faint-foreground">
+          {entry.item.description}
+        </span>
       )}
       {entry.kind === 'result' && (
         <span className="shrink-0 truncate text-xs text-faint-foreground">
