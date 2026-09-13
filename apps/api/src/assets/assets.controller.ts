@@ -95,16 +95,29 @@ export class AssetsController {
     return { url: await this.assets.getUrl(projectId, assetId) };
   }
 
-  /** Streams the asset's bytes back, for local development and simple integrations. */
+  /**
+   * Streams the asset's bytes back, for local development and simple
+   * integrations.
+   *
+   * `?download=true` adds the `Content-Disposition` a browser needs to save
+   * the file instead of rendering it, which is what the asset inspector's
+   * Download action asks for. It is opt-in per request because the same URL is
+   * an `<img src>` everywhere else, and an `attachment` disposition would stop
+   * those previews loading.
+   */
   @Get(':assetId/content')
   async getContent(
     @Param('projectId') projectId: string,
     @Param('assetId') assetId: string,
     @Res() response: Response,
+    @Query('download') download?: string,
   ): Promise<void> {
     const { asset, content } = await this.assets.download(projectId, assetId);
     response.setHeader('Content-Type', asset.mimeType);
     response.setHeader('Content-Length', content.byteLength);
+    if (download !== undefined && download !== 'false') {
+      response.setHeader('Content-Disposition', attachmentDisposition(asset.filename));
+    }
     response.send(content);
   }
 
@@ -123,4 +136,13 @@ export class AssetsController {
   ): Promise<Asset> {
     return this.assets.restore(projectId, assetId);
   }
+}
+
+/**
+ * RFC 6266's two spellings of one filename: the ASCII fallback every browser
+ * reads, and the UTF-8 form that keeps a name the fallback had to flatten.
+ */
+function attachmentDisposition(filename: string): string {
+  const ascii = filename.replace(/[^ -~]/g, '_').replace(/["\\]/g, '');
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }

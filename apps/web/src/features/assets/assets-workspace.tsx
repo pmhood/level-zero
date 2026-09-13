@@ -14,7 +14,9 @@ import { useState } from 'react';
 
 import { apiErrorMessage } from '@/lib/api';
 
+import { AssetCompare } from './asset-compare';
 import { AssetGrid, AssetGridSkeleton } from './asset-grid';
+import { AssetInspector } from './asset-inspector';
 import { AssetList, AssetListSkeleton } from './asset-list';
 import { CollectionsIcon, PipelineIcon } from './asset-view-icons';
 import { ASSET_LIBRARY_PAGE_SIZE, useAssetLibrary } from './use-assets';
@@ -48,18 +50,27 @@ const VIEW_ITEMS: ViewSwitcherItem<AssetView>[] = [
  * choice Characters, Mechanics and Moodboards already make. It becomes
  * cinematic the moment an art asset lands, with no code change here.
  *
- * Filters, the inspector, upload, bulk actions, Collections and the
- * Pipeline are later issues (#172–#173, #178–#179) — this workspace only
- * decides what to show and how, never a project-changing action.
+ * Filters, upload, bulk actions, Collections and the Pipeline are later
+ * issues (#172, #178–#179). The selected asset is the inspector's (#173);
+ * this workspace decides what to show and how, and never a project-changing
+ * action of its own.
  */
 export function AssetsWorkspace({ projectId }: { projectId: string }) {
   const [view, changeView] = useAssetView();
   const [page, setPage] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [comparedWith, setComparedWith] = useState<Asset | null>(null);
 
   const libraryQuery = useAssetLibrary(projectId, page);
 
+  const items = libraryQuery.data?.items ?? [];
+  const selectedIndex = items.findIndex((asset) => asset.id === selectedId);
+  const selected = selectedIndex === -1 ? null : items[selectedIndex]!;
+  const selectedSummary =
+    selectedIndex === -1 ? undefined : libraryQuery.data?.summaries[selectedIndex];
+
   function select(asset: Asset) {
+    setComparedWith(null);
     setSelectedId((current) => (current === asset.id ? null : asset.id));
   }
 
@@ -75,20 +86,45 @@ export function AssetsWorkspace({ projectId }: { projectId: string }) {
       toolbar={
         <ViewSwitcher label="Asset views" items={VIEW_ITEMS} value={view} onChange={switchView} />
       }
+      inspector={
+        selected && (
+          <AssetInspector
+            projectId={projectId}
+            asset={selected}
+            summary={selectedSummary}
+            onClose={() => {
+              setSelectedId(null);
+              setComparedWith(null);
+            }}
+            onCompare={setComparedWith}
+          />
+        )
+      }
     >
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 xl:p-5 2xl:p-6">
-        <AssetsBody
-          projectId={projectId}
-          view={view}
-          page={page}
-          onPageChange={setPage}
-          selectedId={selectedId}
-          onSelect={select}
-          isPending={libraryQuery.isPending}
-          error={libraryQuery.error}
-          onRetry={() => void libraryQuery.refetch()}
-          data={libraryQuery.data}
-        />
+        {/* A comparison needs both panes side by side, so it takes the body
+            rather than the 320px inspector that asked for it. */}
+        {selected && comparedWith ? (
+          <AssetCompare
+            projectId={projectId}
+            a={selected}
+            b={comparedWith}
+            onClose={() => setComparedWith(null)}
+          />
+        ) : (
+          <AssetsBody
+            projectId={projectId}
+            view={view}
+            page={page}
+            onPageChange={setPage}
+            selectedId={selectedId}
+            onSelect={select}
+            isPending={libraryQuery.isPending}
+            error={libraryQuery.error}
+            onRetry={() => void libraryQuery.refetch()}
+            data={libraryQuery.data}
+          />
+        )}
       </div>
     </WorkspacePage>
   );
