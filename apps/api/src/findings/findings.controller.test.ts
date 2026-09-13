@@ -132,7 +132,10 @@ describe('GET /projects/:projectId/findings', () => {
 
   it('never reaches another project’s findings', async () => {
     await seedFinding();
-    await seedFinding({ projectId: otherProject.id, fingerprint: `duplicate-name::${otherProject.id}` });
+    await seedFinding({
+      projectId: otherProject.id,
+      fingerprint: `duplicate-name::${otherProject.id}`,
+    });
 
     const response = await http().get(findingsUrl(otherProject.id)).expect(200);
 

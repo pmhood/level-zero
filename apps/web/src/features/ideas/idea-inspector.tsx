@@ -121,8 +121,7 @@ function IdeaDetailsForm({ projectId, idea }: { projectId: string; idea: Entity 
               label={promotion.label}
               size="sm"
               pending={
-                promoteIdea.isPending &&
-                promoteIdea.variables?.input.type === promotion.targetType
+                promoteIdea.isPending && promoteIdea.variables?.input.type === promotion.targetType
               }
               onPromote={() =>
                 promoteIdea.mutate(

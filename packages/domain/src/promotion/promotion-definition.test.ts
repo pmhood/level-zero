@@ -4,12 +4,11 @@ import { PROMOTIONS, findPromotion, promotionsFor } from './promotion-definition
 
 describe('the promotion catalogue', () => {
   it('offers idea promotions to design pillar, mechanic, character and location', () => {
-    expect(promotionsFor('idea').map((promotion) => promotion.targetType).sort()).toEqual([
-      'character',
-      'design_pillar',
-      'location',
-      'mechanic',
-    ]);
+    expect(
+      promotionsFor('idea')
+        .map((promotion) => promotion.targetType)
+        .sort(),
+    ).toEqual(['character', 'design_pillar', 'location', 'mechanic']);
   });
 
   it('offers a reference or moodboard promotion to design pillar (visual direction)', () => {

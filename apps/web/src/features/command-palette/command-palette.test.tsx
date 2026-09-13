@@ -47,7 +47,9 @@ function renderPalette(projectId = 'prj_1') {
   function Wrapper({ children }: { children: ReactNode }) {
     return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
   }
-  return render(<CommandPalette projectId={projectId} projectName="Driftwake" />, { wrapper: Wrapper });
+  return render(<CommandPalette projectId={projectId} projectName="Driftwake" />, {
+    wrapper: Wrapper,
+  });
 }
 
 beforeEach(() => {
@@ -176,7 +178,9 @@ describe('CommandPalette', () => {
 
     const recentSection = screen.getByText('Recent').closest('div');
     expect(recentSection).not.toBeNull();
-    expect(within(recentSection as HTMLElement).getByRole('option', { name: /Go to Mechanics/ })).toBeDefined();
+    expect(
+      within(recentSection as HTMLElement).getByRole('option', { name: /Go to Mechanics/ }),
+    ).toBeDefined();
   });
 
   it('scopes commands and search to the given project', () => {

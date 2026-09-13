@@ -22,10 +22,7 @@ import {
   resolvePlaytestMetricKey,
   type PlaytestMetric,
 } from './playtest-metric';
-import {
-  createPlaytestObservation,
-  type PlaytestObservation,
-} from './playtest-observation';
+import { createPlaytestObservation, type PlaytestObservation } from './playtest-observation';
 import {
   type PlaytestListFilter,
   type PlaytestPage,

@@ -78,7 +78,12 @@ describe('buildProjectCommands', () => {
   it('covers creating an Idea, Character, Mechanic and Location', () => {
     const ids = buildProjectCommands('prj_1').map((command) => command.id);
     expect(ids).toEqual(
-      expect.arrayContaining(['create-idea', 'create-character', 'create-mechanic', 'create-location']),
+      expect.arrayContaining([
+        'create-idea',
+        'create-character',
+        'create-mechanic',
+        'create-location',
+      ]),
     );
   });
 
@@ -93,8 +98,10 @@ describe('buildProjectCommands', () => {
 
     expect(ask?.kind).toBe('ai');
     expect(ask?.action).toEqual({ type: 'ask' });
-    expect(commands.filter((command) => command.id !== 'ask-level-zero').every((c) => c.kind === 'action')).toBe(
-      true,
-    );
+    expect(
+      commands
+        .filter((command) => command.id !== 'ask-level-zero')
+        .every((c) => c.kind === 'action'),
+    ).toBe(true);
   });
 });

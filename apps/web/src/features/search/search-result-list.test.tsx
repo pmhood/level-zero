@@ -26,18 +26,14 @@ afterEach(cleanup);
 
 describe('SearchResultList', () => {
   it('opens the canonical entity route for an entity hit', () => {
-    render(
-      <SearchResultList results={[result()]} projectId="prj_1" projectName="Driftwake" />,
-    );
+    render(<SearchResultList results={[result()]} projectId="prj_1" projectName="Driftwake" />);
 
     const link = screen.getByRole('link', { name: /Kael Voss/ });
     expect(link.getAttribute('href')).toBe('/projects/prj_1/entities/ent_kael');
   });
 
   it('is reachable by keyboard, not only by mouse', () => {
-    render(
-      <SearchResultList results={[result()]} projectId="prj_1" projectName="Driftwake" />,
-    );
+    render(<SearchResultList results={[result()]} projectId="prj_1" projectName="Driftwake" />);
 
     // A search result is a real link, so Tab reaches it and Enter/Space
     // activate it the way every other browser link does — no bespoke
@@ -52,7 +48,12 @@ describe('SearchResultList', () => {
     render(
       <SearchResultList
         results={[
-          result({ sourceType: 'asset', sourceId: 'asset_1', entityType: null, title: 'Concept art' }),
+          result({
+            sourceType: 'asset',
+            sourceId: 'asset_1',
+            entityType: null,
+            title: 'Concept art',
+          }),
         ]}
         projectId="prj_1"
         projectName="Driftwake"

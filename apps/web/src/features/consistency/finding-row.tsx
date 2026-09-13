@@ -64,9 +64,7 @@ export function FindingRow({ projectId, finding }: { projectId: string; finding:
             variant="secondary"
             size="sm"
             disabled={dismiss.isPending}
-            onClick={() =>
-              dismiss.mutate({ findingId: finding.id, dismissedBy: DISMISSED_BY })
-            }
+            onClick={() => dismiss.mutate({ findingId: finding.id, dismissedBy: DISMISSED_BY })}
           >
             {dismiss.isPending ? 'Dismissing…' : 'Dismiss'}
           </Button>

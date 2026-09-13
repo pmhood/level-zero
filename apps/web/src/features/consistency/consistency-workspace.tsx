@@ -68,7 +68,10 @@ export function ConsistencyWorkspace({ projectId }: { projectId: string }) {
 
   const emptyState = hasEverScanned
     ? hasAnyFinding
-      ? { title: TAB_EMPTY_TITLES[tab], description: 'Nothing in this view right now — try another tab.' }
+      ? {
+          title: TAB_EMPTY_TITLES[tab],
+          description: 'Nothing in this view right now — try another tab.',
+        }
       : {
           title: 'No consistency findings',
           description: 'The last scan found nothing to flag. Run it again after making changes.',
@@ -76,7 +79,7 @@ export function ConsistencyWorkspace({ projectId }: { projectId: string }) {
     : {
         title: 'No scan has run yet',
         description:
-          "Run analysis to check this project for contradictions a scan can prove — between prototypes, mechanics and documents.",
+          'Run analysis to check this project for contradictions a scan can prove — between prototypes, mechanics and documents.',
       };
 
   return (

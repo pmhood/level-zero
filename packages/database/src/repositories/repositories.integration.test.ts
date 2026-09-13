@@ -275,7 +275,13 @@ describe('filtering in SQL', () => {
 describe('DrizzleEntityRepository.findOrCreateAssetReference', () => {
   function candidate(project: Project, assetId: string, name = 'portrait.png'): Entity {
     return createEntity(
-      { projectId: project.id, type: 'asset_reference', name, status: 'active', data: assetReferenceData(assetId) },
+      {
+        projectId: project.id,
+        type: 'asset_reference',
+        name,
+        status: 'active',
+        data: assetReferenceData(assetId),
+      },
       deps,
     );
   }
@@ -283,7 +289,10 @@ describe('DrizzleEntityRepository.findOrCreateAssetReference', () => {
   it('inserts the first reference for an asset', async () => {
     const project = await seedProject('Deep Fathom');
 
-    const result = await entityRepo.findOrCreateAssetReference(candidate(project, 'asset-1'), 'asset-1');
+    const result = await entityRepo.findOrCreateAssetReference(
+      candidate(project, 'asset-1'),
+      'asset-1',
+    );
 
     expect(result.created).toBe(true);
     expect(result.entity).toMatchObject({ type: 'asset_reference', data: { assetId: 'asset-1' } });
@@ -291,9 +300,15 @@ describe('DrizzleEntityRepository.findOrCreateAssetReference', () => {
 
   it('returns the existing reference instead of inserting a duplicate', async () => {
     const project = await seedProject('Deep Fathom');
-    const first = await entityRepo.findOrCreateAssetReference(candidate(project, 'asset-1'), 'asset-1');
+    const first = await entityRepo.findOrCreateAssetReference(
+      candidate(project, 'asset-1'),
+      'asset-1',
+    );
 
-    const second = await entityRepo.findOrCreateAssetReference(candidate(project, 'asset-1'), 'asset-1');
+    const second = await entityRepo.findOrCreateAssetReference(
+      candidate(project, 'asset-1'),
+      'asset-1',
+    );
 
     expect(second.created).toBe(false);
     expect(second.entity.id).toBe(first.entity.id);
@@ -301,9 +316,15 @@ describe('DrizzleEntityRepository.findOrCreateAssetReference', () => {
 
   it('never resolves a reference belonging to another project', async () => {
     const [a, b] = [await seedProject('A'), await seedProject('B')];
-    const inA = await entityRepo.findOrCreateAssetReference(candidate(a, 'shared-asset'), 'shared-asset');
+    const inA = await entityRepo.findOrCreateAssetReference(
+      candidate(a, 'shared-asset'),
+      'shared-asset',
+    );
 
-    const inB = await entityRepo.findOrCreateAssetReference(candidate(b, 'shared-asset'), 'shared-asset');
+    const inB = await entityRepo.findOrCreateAssetReference(
+      candidate(b, 'shared-asset'),
+      'shared-asset',
+    );
 
     expect(inB.created).toBe(true);
     expect(inB.entity.id).not.toBe(inA.entity.id);
@@ -312,10 +333,16 @@ describe('DrizzleEntityRepository.findOrCreateAssetReference', () => {
 
   it('finds an archived reference rather than creating a second one', async () => {
     const project = await seedProject('Deep Fathom');
-    const first = await entityRepo.findOrCreateAssetReference(candidate(project, 'asset-1'), 'asset-1');
+    const first = await entityRepo.findOrCreateAssetReference(
+      candidate(project, 'asset-1'),
+      'asset-1',
+    );
     await entities.archive(project.id, first.entity.id);
 
-    const second = await entityRepo.findOrCreateAssetReference(candidate(project, 'asset-1'), 'asset-1');
+    const second = await entityRepo.findOrCreateAssetReference(
+      candidate(project, 'asset-1'),
+      'asset-1',
+    );
 
     expect(second.created).toBe(false);
     expect(second.entity.id).toBe(first.entity.id);

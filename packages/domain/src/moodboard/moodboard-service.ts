@@ -195,11 +195,7 @@ export class MoodboardService {
    * Removes all placements and their connectors atomically, so a failure
    * removes nothing. The assets or entities they pointed at are untouched.
    */
-  async removeNodes(
-    projectId: string,
-    boardId: string,
-    nodeIds: readonly string[],
-  ): Promise<void> {
+  async removeNodes(projectId: string, boardId: string, nodeIds: readonly string[]): Promise<void> {
     await this.requireEditableBoard(projectId, boardId);
     if (nodeIds.length === 0) return;
 
@@ -395,8 +391,7 @@ export class MoodboardService {
     boardId: string,
     nodeIds: readonly string[],
   ): Promise<Map<string, MoodboardNode>> {
-    const found =
-      nodeIds.length === 0 ? [] : await this.boards.findNodes(projectId, nodeIds);
+    const found = nodeIds.length === 0 ? [] : await this.boards.findNodes(projectId, nodeIds);
     const byId = new Map(
       found.filter((node) => node.boardId === boardId).map((node) => [node.id, node] as const),
     );
