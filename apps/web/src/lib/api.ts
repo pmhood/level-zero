@@ -448,6 +448,7 @@ export function listAssets(projectId: string, params: ListAssetsParams = {}): Pr
 }
 
 export interface ListAssetLibraryParams {
+  includeArchived?: boolean;
   limit?: number;
   offset?: number;
 }

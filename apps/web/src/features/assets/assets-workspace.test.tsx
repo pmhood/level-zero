@@ -152,6 +152,33 @@ describe('Assets workspace', () => {
     expect(screen.queryByRole('img')).toBeNull();
   });
 
+  it('falls back to the kind placeholder when an image asset has a missing storage reference', async () => {
+    vi.mocked(api.listAssetLibrary).mockResolvedValue(libraryPage([asset()], [summary()]));
+
+    renderWorkspace();
+
+    const img = await screen.findByRole('img', { name: 'kael-suit.png' });
+    fireEvent.error(img);
+
+    expect(screen.queryByRole('img')).toBeNull();
+    expect(screen.getByText('kael-suit.png')).toBeDefined();
+  });
+
+  it('includes archived assets in the base view and badges them Archived', async () => {
+    const archived = asset({ id: 'ast_3', filename: 'retired-crate.png', status: 'archived' });
+    vi.mocked(api.listAssetLibrary).mockResolvedValue(
+      libraryPage([archived], [summary({ assetId: 'ast_3' })]),
+    );
+
+    renderWorkspace();
+
+    await screen.findByText('retired-crate.png');
+    expect(screen.getByText('Archived')).toBeDefined();
+    expect(vi.mocked(api.listAssetLibrary).mock.calls[0]![1]).toMatchObject({
+      includeArchived: true,
+    });
+  });
+
   it('switches to the list view and shows the same badge column', async () => {
     vi.mocked(api.listAssetLibrary).mockResolvedValue(
       libraryPage([asset()], [summary({ origin: 'generated' })]),
