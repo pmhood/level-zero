@@ -1,6 +1,7 @@
 import { type Asset } from './asset';
 import { type AssetListFilter } from './asset-repository';
 import { type AssetOrigin, type AssetSummary } from './asset-summary';
+import { type AssetMarkKind } from '../selection/asset-mark';
 
 /**
  * `AssetListFilter` plus the facets the library's joined view can narrow by.
@@ -9,6 +10,8 @@ import { type AssetOrigin, type AssetSummary } from './asset-summary';
  */
 export interface AssetLibraryFilter extends AssetListFilter {
   origin?: AssetOrigin;
+  /** Asset matches when it carries any of the requested kinds. */
+  markKinds?: AssetMarkKind[];
 }
 
 export interface AssetLibraryPage {

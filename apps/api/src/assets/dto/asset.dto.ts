@@ -1,11 +1,13 @@
 import {
   ASSET_KINDS,
+  ASSET_MARK_KINDS,
   ASSET_ORIGINS,
   ASSET_SORT_DIRECTIONS,
   ASSET_SORT_FIELDS,
   ASSET_STATUSES,
   ASSET_VARIANTS,
   type AssetKind,
+  type AssetMarkKind,
   type AssetOrigin,
   type AssetSortDirection,
   type AssetSortField,
@@ -132,8 +134,9 @@ export class ListAssetsQueryDto {
 
   /**
    * Opts into the joined library view: items come back with their
-   * `AssetSummary`. A summary-only filter (`origin`) implies this, so a
-   * caller that only wants an origin filter doesn't also have to ask.
+   * `AssetSummary`. A summary-only filter (`origin` or `markKinds`) implies
+   * this, so a caller that only wants one of those filters doesn't also have
+   * to ask.
    */
   @IsOptional()
   @Transform(({ value }) => toBoolean(value))
@@ -144,6 +147,13 @@ export class ListAssetsQueryDto {
   @IsOptional()
   @IsIn(ASSET_ORIGINS)
   origin?: AssetOrigin;
+
+  /** Mark kinds to filter by. Asset matches when it carries any of the requested kinds. */
+  @IsOptional()
+  @Transform(({ value }) => toStringArray(value))
+  @IsArray()
+  @IsIn(ASSET_MARK_KINDS, { each: true })
+  markKinds?: AssetMarkKind[];
 
   @IsOptional()
   @IsIn(ASSET_SORT_FIELDS)

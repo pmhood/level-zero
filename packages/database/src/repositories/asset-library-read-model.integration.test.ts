@@ -2,11 +2,13 @@ import {
   AssetService,
   ProjectService,
   completeGeneration,
+  createAssetMark,
   createGeneration,
   dispatchGeneration,
   fixedClock,
   systemClock,
   uuidIdGenerator,
+  type AssetMarkKind,
   type Generation,
   type Project,
 } from '@level-zero/domain';
@@ -19,6 +21,7 @@ import { assets as assetsTable } from '../schema/assets';
 import { countQueries } from '../testing/query-counter';
 import { connectTestDatabase, truncateDomainTables } from '../testing/test-database';
 import { buildLibraryWhere, DrizzleAssetLibraryReadModel } from './asset-library-read-model';
+import { DrizzleAssetMarkRepository } from './asset-mark-repository';
 import { DrizzleAssetRepository } from './asset-repository';
 import { DrizzleGenerationRepository } from './generation-repository';
 import { DrizzleProjectRepository } from './project-repository';
@@ -29,6 +32,7 @@ let client: DatabaseClient;
 let projectRepo: DrizzleProjectRepository;
 let assetRepo: DrizzleAssetRepository;
 let generationRepo: DrizzleGenerationRepository;
+let markRepo: DrizzleAssetMarkRepository;
 let readModel: DrizzleAssetLibraryReadModel;
 let projects: ProjectService;
 let assets: AssetService;
@@ -39,6 +43,7 @@ beforeAll(async () => {
   projectRepo = new DrizzleProjectRepository(client.db);
   assetRepo = new DrizzleAssetRepository(client.db);
   generationRepo = new DrizzleGenerationRepository(client.db);
+  markRepo = new DrizzleAssetMarkRepository(client.db);
   readModel = new DrizzleAssetLibraryReadModel(client.db);
   projects = new ProjectService(projectRepo, deps);
 });
@@ -108,6 +113,17 @@ async function seedFillerGenerations(projectId: string, count: number): Promise<
   `);
 }
 
+/**
+ * Marks an asset with the given kind.
+ */
+async function markAsset(projectId: string, assetId: string, kind: AssetMarkKind): Promise<void> {
+  const mark = createAssetMark(
+    { projectId, assetId, kind, actor: 'test' },
+    { clock: systemClock, ids: uuidIdGenerator },
+  );
+  await markRepo.add(mark);
+}
+
 describe('asset library read model', () => {
   it('reports an uploaded asset as imported, with no generation at all', async () => {
     const project = await seedProject('Deep Fathom');
@@ -121,7 +137,9 @@ describe('asset library read model', () => {
     const page = await readModel.listByProject(project.id, {});
 
     expect(page.items.map((item) => item.id)).toEqual([asset.id]);
-    expect(page.summaries).toEqual([{ assetId: asset.id, origin: 'imported', generation: null }]);
+    expect(page.summaries).toEqual([
+      { assetId: asset.id, origin: 'imported', generation: null, markKinds: [] },
+    ]);
     expect(page.total).toBe(1);
   });
 
@@ -150,6 +168,7 @@ describe('asset library read model', () => {
           provider: 'anthropic',
           model: 'claude-image',
         },
+        markKinds: [],
       },
     ]);
   });
@@ -340,6 +359,154 @@ describe('asset library read model', () => {
 
       expect(plan).not.toContain('Seq Scan on generations');
       expect(plan).toContain('generations_output_assets_idx');
+    });
+  });
+
+  describe('mark kinds', () => {
+    it('reports an empty array for an asset with no marks', async () => {
+      const project = await seedProject('Deep Fathom');
+      const asset = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'reference.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+
+      const page = await readModel.listByProject(project.id, {});
+
+      expect(page.items[0]?.id).toBe(asset.id);
+      expect(page.summaries[0]?.markKinds).toEqual([]);
+    });
+
+    it('reports both mark kinds when an asset has both', async () => {
+      const project = await seedProject('Deep Fathom');
+      const asset = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'reference.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+      await markAsset(project.id, asset.id, 'favorite');
+      await markAsset(project.id, asset.id, 'shortlisted');
+
+      const page = await readModel.listByProject(project.id, {});
+
+      expect(page.summaries[0]?.markKinds).toEqual(['favorite', 'shortlisted']);
+    });
+
+    it('narrows to assets with any of the requested kinds', async () => {
+      const project = await seedProject('Deep Fathom');
+      const favorited = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'favorited.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+      const shortlisted = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'shortlisted.png',
+        mimeType: 'image/png',
+        content: Buffer.from('b'),
+      });
+      const unmarked = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'unmarked.png',
+        mimeType: 'image/png',
+        content: Buffer.from('c'),
+      });
+
+      await markAsset(project.id, favorited.id, 'favorite');
+      await markAsset(project.id, shortlisted.id, 'shortlisted');
+
+      const page = await readModel.listByProject(project.id, {
+        markKinds: ['favorite', 'shortlisted'],
+      });
+
+      expect(page.items.map((item) => item.id)).toEqual(
+        expect.arrayContaining([favorited.id, shortlisted.id]),
+      );
+      expect(page.items).toHaveLength(2);
+      expect(page.total).toBe(2);
+      expect(unmarked.id).not.toBe(favorited.id);
+      expect(unmarked.id).not.toBe(shortlisted.id);
+    });
+
+    it('narrows by a single mark kind', async () => {
+      const project = await seedProject('Deep Fathom');
+      const favorited = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'favorited.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+      const shortlisted = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'shortlisted.png',
+        mimeType: 'image/png',
+        content: Buffer.from('b'),
+      });
+
+      await markAsset(project.id, favorited.id, 'favorite');
+      await markAsset(project.id, shortlisted.id, 'shortlisted');
+
+      const page = await readModel.listByProject(project.id, { markKinds: ['favorite'] });
+
+      expect(page.items.map((item) => item.id)).toEqual([favorited.id]);
+      expect(page.total).toBe(1);
+    });
+
+    it('never reports another project asset marks', async () => {
+      const [a, b] = [await seedProject('A'), await seedProject('B')];
+      const assetA = await assets.upload(a.id, {
+        kind: 'image',
+        filename: 'a.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+      const assetB = await assets.upload(b.id, {
+        kind: 'image',
+        filename: 'b.png',
+        mimeType: 'image/png',
+        content: Buffer.from('b'),
+      });
+      await markAsset(a.id, assetA.id, 'favorite');
+      await markAsset(b.id, assetB.id, 'favorite');
+
+      const pageA = await readModel.listByProject(a.id, {
+        markKinds: ['favorite'],
+      });
+      expect(pageA.items.map((item) => item.id)).toEqual([assetA.id]);
+      expect(pageA.total).toBe(1);
+
+      const pageB = await readModel.listByProject(b.id, {
+        markKinds: ['favorite'],
+      });
+      expect(pageB.items.map((item) => item.id)).toEqual([assetB.id]);
+      expect(pageB.total).toBe(1);
+    });
+
+    it('issues the same number of queries regardless of how many assets are on the page when filtering by marks', async () => {
+      const project = await seedProject('Deep Fathom');
+      for (let i = 0; i < 20; i += 1) {
+        const asset = await assets.upload(project.id, {
+          kind: 'image',
+          filename: `asset-${i}.png`,
+          mimeType: 'image/png',
+          content: Buffer.from(String(i)),
+        });
+        // Every other asset is marked as favorite
+        if (i % 2 === 0) {
+          await markAsset(project.id, asset.id, 'favorite');
+        }
+      }
+
+      const smallPage = await countQueries(client, () =>
+        readModel.listByProject(project.id, { limit: 5, markKinds: ['favorite'] }),
+      );
+      const largePage = await countQueries(client, () =>
+        readModel.listByProject(project.id, { limit: 20, markKinds: ['favorite'] }),
+      );
+      expect(largePage).toBe(smallPage);
     });
   });
 });

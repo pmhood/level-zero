@@ -84,7 +84,7 @@ import {
   type ProjectPage,
   type ProjectRepository,
 } from '../project/project-repository';
-import { type AssetMark, type AssetMarkKind } from '../selection/asset-mark';
+import { ASSET_MARK_KINDS, type AssetMark, type AssetMarkKind } from '../selection/asset-mark';
 import { type AssetMarkRepository } from '../selection/asset-mark-repository';
 import {
   type AssetSelection,
@@ -596,6 +596,7 @@ export class InMemoryAssetLibraryReadModel implements AssetLibraryReadModel {
   constructor(
     private readonly assets: AssetRepository,
     private readonly generations: GenerationRepository,
+    private readonly marks: AssetMarkRepository,
   ) {}
 
   async listByProject(projectId: string, filter: AssetLibraryFilter): Promise<AssetLibraryPage> {
@@ -605,15 +606,22 @@ export class InMemoryAssetLibraryReadModel implements AssetLibraryReadModel {
       offset: undefined,
     });
     const { items: allGenerations } = await this.generations.listByProject(projectId, {});
+    const allMarks = await this.marks.listByProject(projectId);
 
     const summarized = unpaged.items.map((asset) => ({
       asset,
-      summary: summarize(asset.id, allGenerations),
+      summary: summarize(asset.id, allGenerations, allMarks),
     }));
 
-    const filtered = filter.origin
+    let filtered = filter.origin
       ? summarized.filter((entry) => entry.summary.origin === filter.origin)
       : summarized;
+
+    if (filter.markKinds && filter.markKinds.length > 0) {
+      filtered = filtered.filter((entry) =>
+        filter.markKinds!.some((kind) => entry.summary.markKinds.includes(kind)),
+      );
+    }
 
     const offset = filter.offset ?? 0;
     const limit = filter.limit ?? filtered.length;
@@ -627,21 +635,42 @@ export class InMemoryAssetLibraryReadModel implements AssetLibraryReadModel {
   }
 }
 
-function summarize(assetId: string, generations: readonly Generation[]): AssetSummary {
+function summarize(
+  assetId: string,
+  generations: readonly Generation[],
+  marks: readonly AssetMark[],
+): AssetSummary {
   const matches = generations.filter((candidate) => candidate.outputAssetIds.includes(assetId));
   const winner = pickNewestOrigin(matches);
 
-  if (!winner) return { assetId, origin: 'imported', generation: null };
-  return {
-    assetId,
-    origin: 'generated',
-    generation: {
-      generationId: winner.id,
-      capability: winner.capability,
-      provider: winner.provider,
-      model: winner.model,
-    },
-  };
+  const assetMarks = marks.filter((mark) => mark.assetId === assetId);
+  // Sort in ASSET_MARK_KINDS order for consistent rendering
+  const markKinds = assetMarks
+    .map((mark) => mark.kind)
+    .sort((a, b) => {
+      const kindAIndex = ASSET_MARK_KINDS.indexOf(a);
+      const kindBIndex = ASSET_MARK_KINDS.indexOf(b);
+      return kindAIndex - kindBIndex;
+    });
+
+  const baseSummary = winner
+    ? {
+        assetId,
+        origin: 'generated' as const,
+        generation: {
+          generationId: winner.id,
+          capability: winner.capability,
+          provider: winner.provider,
+          model: winner.model,
+        },
+      }
+    : {
+        assetId,
+        origin: 'imported' as const,
+        generation: null,
+      };
+
+  return { ...baseSummary, markKinds };
 }
 
 /**
