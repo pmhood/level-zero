@@ -18,7 +18,7 @@ import {
   type AssetSortField,
 } from '../asset/asset-repository';
 import { referencedAssetId } from '../asset/asset-reference';
-import { type AssetSummary } from '../asset/asset-summary';
+import { pickNewestOrigin, type AssetSummary } from '../asset/asset-summary';
 import {
   type GetUrlOptions,
   type ObjectStorageProvider,
@@ -628,11 +628,8 @@ export class InMemoryAssetLibraryReadModel implements AssetLibraryReadModel {
 }
 
 function summarize(assetId: string, generations: readonly Generation[]): AssetSummary {
-  let winner: Generation | undefined;
-  for (const candidate of generations) {
-    if (!candidate.outputAssetIds.includes(assetId)) continue;
-    if (!winner || isNewerGeneration(candidate, winner)) winner = candidate;
-  }
+  const matches = generations.filter((candidate) => candidate.outputAssetIds.includes(assetId));
+  const winner = pickNewestOrigin(matches);
 
   if (!winner) return { assetId, origin: 'imported', generation: null };
   return {
@@ -645,14 +642,6 @@ function summarize(assetId: string, generations: readonly Generation[]): AssetSu
       model: winner.model,
     },
   };
-}
-
-/** The stated tiebreak for an asset produced by more than one generation: newest first, ties on id. */
-function isNewerGeneration(candidate: Generation, current: Generation): boolean {
-  const candidateTime = candidate.createdAt.getTime();
-  const currentTime = current.createdAt.getTime();
-  if (candidateTime !== currentTime) return candidateTime > currentTime;
-  return candidate.id > current.id;
 }
 
 /**

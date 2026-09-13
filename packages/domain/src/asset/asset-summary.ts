@@ -26,3 +26,32 @@ export interface AssetSummary {
   /** Set only when `origin` is `'generated'`. Null for an imported asset. */
   generation: AssetGenerationOrigin | null;
 }
+
+/** The minimum a generation candidate needs to carry to be picked between. */
+export interface OriginCandidate {
+  id: string;
+  createdAt: Date;
+}
+
+/**
+ * The tiebreak for an asset produced by more than one generation: the most
+ * recently created one wins, ties broken by id. Shared between the Postgres
+ * adapter and the in-memory test double so the rule has exactly one place to
+ * change.
+ */
+export function pickNewestOrigin<T extends OriginCandidate>(
+  candidates: readonly T[],
+): T | undefined {
+  let winner: T | undefined;
+  for (const candidate of candidates) {
+    if (!winner || isNewerOrigin(candidate, winner)) winner = candidate;
+  }
+  return winner;
+}
+
+function isNewerOrigin(candidate: OriginCandidate, current: OriginCandidate): boolean {
+  const candidateTime = candidate.createdAt.getTime();
+  const currentTime = current.createdAt.getTime();
+  if (candidateTime !== currentTime) return candidateTime > currentTime;
+  return candidate.id > current.id;
+}

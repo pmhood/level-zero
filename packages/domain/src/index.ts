@@ -211,9 +211,11 @@ export {
 } from './asset/asset-service';
 export {
   ASSET_ORIGINS,
+  pickNewestOrigin,
   type AssetGenerationOrigin,
   type AssetOrigin,
   type AssetSummary,
+  type OriginCandidate,
 } from './asset/asset-summary';
 export {
   type AssetLibraryFilter,

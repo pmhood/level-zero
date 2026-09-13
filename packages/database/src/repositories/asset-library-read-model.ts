@@ -1,4 +1,5 @@
 import {
+  pickNewestOrigin,
   type AssetLibraryFilter,
   type AssetLibraryPage,
   type AssetLibraryReadModel,
@@ -14,13 +15,18 @@ import { toAsset } from './mappers';
 
 /**
  * Correlated existence check for "some generation in this project lists this
- * asset as an output". Rides the GIN index on `generations.output_asset_ids`
- * rather than needing an index of its own.
+ * asset as an output".
+ *
+ * `@>` (contains) is one of the operators the GIN `array_ops` opclass
+ * indexes, so this rides `generations_output_assets_idx` rather than needing
+ * an index of its own. `= any(...)` looks equivalent but is a
+ * `ScalarArrayOpExpr`, which that opclass does not support — it planned as a
+ * sequential scan of every generation in the project, once per asset row.
  */
 const isGenerated = sql`exists (
   select 1 from ${generations}
   where ${generations.projectId} = ${assets.projectId}
-    and ${assets.id} = any(${generations.outputAssetIds})
+    and ${generations.outputAssetIds} @> array[${assets.id}]::uuid[]
 )`;
 
 /**
@@ -93,11 +99,8 @@ export class DrizzleAssetLibraryReadModel implements AssetLibraryReadModel {
       );
 
     for (const assetId of assetIds) {
-      let winner: (typeof candidates)[number] | undefined;
-      for (const candidate of candidates) {
-        if (!candidate.outputAssetIds.includes(assetId)) continue;
-        if (!winner || isNewer(candidate, winner)) winner = candidate;
-      }
+      const matches = candidates.filter((candidate) => candidate.outputAssetIds.includes(assetId));
+      const winner = pickNewestOrigin(matches);
 
       summaries.set(
         assetId,
@@ -120,24 +123,12 @@ export class DrizzleAssetLibraryReadModel implements AssetLibraryReadModel {
   }
 }
 
-interface GenerationCandidate {
-  id: string;
-  createdAt: Date;
-}
-
-/** The stated tiebreak for an asset produced by more than one generation: newest first, ties on id. */
-function isNewer(candidate: GenerationCandidate, current: GenerationCandidate): boolean {
-  const candidateTime = candidate.createdAt.getTime();
-  const currentTime = current.createdAt.getTime();
-  if (candidateTime !== currentTime) return candidateTime > currentTime;
-  return candidate.id > current.id;
-}
-
 function importedSummary(assetId: string): AssetSummary {
   return { assetId, origin: 'imported', generation: null };
 }
 
-function buildLibraryWhere(projectId: string, filter: AssetLibraryFilter): SQL {
+/** Exported so a test can assert the origin filter compiles to an index-friendly plan. */
+export function buildLibraryWhere(projectId: string, filter: AssetLibraryFilter): SQL {
   const conditions: SQL[] = [buildAssetWhere(projectId, filter)];
 
   if (filter.origin === 'generated') {
