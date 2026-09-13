@@ -2,16 +2,24 @@ import { type Asset } from './asset';
 import { type AssetListFilter } from './asset-repository';
 import { type AssetOrigin, type AssetSummary } from './asset-summary';
 import { type AssetMarkKind } from '../selection/asset-mark';
+import { type AssetSelectionState } from '../selection/asset-selection';
 
 /**
  * `AssetListFilter` plus the facets the library's joined view can narrow by.
- * Every #169 filter and sort keeps working unchanged; this issue adds
- * `origin`, and #200-#202 each add one more field here.
+ * Every #169 filter and sort keeps working unchanged; #170 added `origin`,
+ * #200 added `markKinds`, this issue (#201) adds `selectionStates`, and #202
+ * adds one more field here.
  */
 export interface AssetLibraryFilter extends AssetListFilter {
   origin?: AssetOrigin;
   /** Asset matches when it carries any of the requested kinds. */
   markKinds?: AssetMarkKind[];
+  /**
+   * Asset matches when it has a *current* selection in one of these states,
+   * in any context — an older decision that was superseded or overtaken
+   * never counts on the strength of the row it lost to.
+   */
+  selectionStates?: AssetSelectionState[];
 }
 
 export interface AssetLibraryPage {

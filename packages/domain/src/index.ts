@@ -211,9 +211,12 @@ export {
 } from './asset/asset-service';
 export {
   ASSET_ORIGINS,
+  isApprovedInAnyContext,
   pickNewestOrigin,
+  summarizeCurrentSelections,
   type AssetGenerationOrigin,
   type AssetOrigin,
+  type AssetSelectionSummaryEntry,
   type AssetSummary,
   type OriginCandidate,
 } from './asset/asset-summary';

@@ -1,20 +1,24 @@
 import {
   ASSET_MARK_KINDS,
+  isApprovedInAnyContext,
   pickNewestOrigin,
+  summarizeCurrentSelections,
   type AssetLibraryFilter,
   type AssetLibraryPage,
   type AssetLibraryReadModel,
   type AssetMarkKind,
+  type AssetSelectionState,
+  type AssetSelectionSummaryEntry,
   type AssetSummary,
 } from '@level-zero/domain';
-import { and, arrayOverlaps, count, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import { and, arrayOverlaps, count, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 
 import { type Database } from '../postgres/client';
 import { assets } from '../schema/assets';
-import { assetMarks } from '../schema/selections';
+import { assetMarks, assetSelections } from '../schema/selections';
 import { generations } from '../schema/generations';
 import { buildAssetOrderBy, buildAssetWhere } from './asset-repository';
-import { toAsset } from './mappers';
+import { toAsset, toAssetSelection } from './mappers';
 
 /**
  * Correlated existence check for "some generation in this project lists this
@@ -37,10 +41,10 @@ const isGenerated = sql`exists (
  *
  * Follows `DrizzleAssetRepository`'s shape: one `where` builder shared
  * between the page query and the count, every statement carrying
- * `project_id`. The origin facet adds exactly one extra statement to the
- * page — a single query for every generation whose outputs overlap the
- * page's asset ids — so the query count is fixed regardless of how many
- * assets are on the page, not one lookup per asset.
+ * `project_id`. Each facet adds exactly one extra statement to the page —
+ * `originsFor`, `marksFor` and `selectionsFor` each run once for the whole
+ * page, batched over its asset ids — so the query count is fixed regardless
+ * of how many assets are on the page, not one lookup per asset.
  */
 export class DrizzleAssetLibraryReadModel implements AssetLibraryReadModel {
   constructor(private readonly db: Database) {}
@@ -60,9 +64,10 @@ export class DrizzleAssetLibraryReadModel implements AssetLibraryReadModel {
     ]);
 
     const assetIds = rows.map((row) => row.id);
-    const [origins, marks] = await Promise.all([
+    const [origins, marks, selections] = await Promise.all([
       this.originsFor(projectId, assetIds),
       this.marksFor(projectId, assetIds),
+      this.selectionsFor(projectId, assetIds),
     ]);
 
     return {
@@ -70,7 +75,13 @@ export class DrizzleAssetLibraryReadModel implements AssetLibraryReadModel {
       summaries: rows.map((row) => {
         const origin = origins.get(row.id) ?? importedSummary(row.id);
         const markKinds = marks.get(row.id) ?? [];
-        return { ...origin, markKinds };
+        const entries = selections.get(row.id) ?? [];
+        return {
+          ...origin,
+          markKinds,
+          selections: entries,
+          approved: isApprovedInAnyContext(entries),
+        };
       }),
       total: totals?.value ?? 0,
     };
@@ -85,8 +96,11 @@ export class DrizzleAssetLibraryReadModel implements AssetLibraryReadModel {
   private async originsFor(
     projectId: string,
     assetIds: string[],
-  ): Promise<Map<string, Omit<AssetSummary, 'markKinds'>>> {
-    const summaries = new Map<string, Omit<AssetSummary, 'markKinds'>>();
+  ): Promise<Map<string, Omit<AssetSummary, 'markKinds' | 'selections' | 'approved'>>> {
+    const summaries = new Map<
+      string,
+      Omit<AssetSummary, 'markKinds' | 'selections' | 'approved'>
+    >();
     if (assetIds.length === 0) return summaries;
 
     const candidates = await this.db
@@ -160,9 +174,34 @@ export class DrizzleAssetLibraryReadModel implements AssetLibraryReadModel {
 
     return marks;
   }
+
+  /**
+   * One query for the whole page, not one per asset: every selection ever
+   * recorded for the page's asset ids, folded to the newest decision per
+   * `(asset, context)` by `summarizeCurrentSelections` — the shared fold, so
+   * this never re-derives the precedence rule.
+   */
+  private async selectionsFor(
+    projectId: string,
+    assetIds: string[],
+  ): Promise<Map<string, AssetSelectionSummaryEntry[]>> {
+    if (assetIds.length === 0) return new Map();
+
+    const rows = await this.db
+      .select()
+      .from(assetSelections)
+      .where(
+        and(eq(assetSelections.projectId, projectId), inArray(assetSelections.assetId, assetIds)),
+      )
+      .orderBy(desc(assetSelections.decidedAt), desc(assetSelections.id));
+
+    return summarizeCurrentSelections(rows.map(toAssetSelection));
+  }
 }
 
-function importedSummary(assetId: string): Omit<AssetSummary, 'markKinds'> {
+function importedSummary(
+  assetId: string,
+): Omit<AssetSummary, 'markKinds' | 'selections' | 'approved'> {
   return { assetId, origin: 'imported', generation: null };
 }
 
@@ -179,6 +218,42 @@ function hasMarkKinds(markKinds: readonly AssetMarkKind[]): SQL {
   )`;
 }
 
+/**
+ * Correlated check for "this asset has a *current* selection in one of the
+ * requested states, in any context".
+ *
+ * `distinct on (context_entity_id, purpose) ... order by ... decided_at desc,
+ * id desc` folds to the newest row per context before `state` is ever
+ * tested — the same precedence `latestSelectionByAsset` applies — so an
+ * approval that was later superseded or rejected cannot match on the
+ * strength of the row it lost to. The outer `where` is an equality on
+ * `(project_id, asset_id)`, exactly `asset_selections_project_asset_idx`, so
+ * this reads the (typically few) rows for one asset via that index and only
+ * sorts within them.
+ */
+function hasSelectionInStates(states: readonly AssetSelectionState[]): SQL {
+  const wanted = sql.join(
+    states.map((state) => sql`${state}`),
+    sql`, `,
+  );
+
+  return sql`exists (
+    select 1 from (
+      select distinct on (${assetSelections.contextEntityId}, ${assetSelections.purpose})
+        ${assetSelections.state} as state
+      from ${assetSelections}
+      where ${assetSelections.projectId} = ${assets.projectId}
+        and ${assetSelections.assetId} = ${assets.id}
+      order by
+        ${assetSelections.contextEntityId},
+        ${assetSelections.purpose},
+        ${assetSelections.decidedAt} desc,
+        ${assetSelections.id} desc
+    ) latest
+    where latest.state in (${wanted})
+  )`;
+}
+
 /** Exported so a test can assert the origin filter compiles to an index-friendly plan. */
 export function buildLibraryWhere(projectId: string, filter: AssetLibraryFilter): SQL {
   const conditions: SQL[] = [buildAssetWhere(projectId, filter)];
@@ -191,6 +266,10 @@ export function buildLibraryWhere(projectId: string, filter: AssetLibraryFilter)
 
   if (filter.markKinds && filter.markKinds.length > 0) {
     conditions.push(hasMarkKinds(filter.markKinds));
+  }
+
+  if (filter.selectionStates && filter.selectionStates.length > 0) {
+    conditions.push(hasSelectionInStates(filter.selectionStates));
   }
 
   return and(...conditions) as SQL;
