@@ -1,20 +1,26 @@
 import {
+  ASSET_LINKED_ENTITIES_CAP,
   ASSET_MARK_KINDS,
+  ASSET_REFERENCE_ASSET_ID_KEY,
   isApprovedInAnyContext,
   pickNewestOrigin,
   summarizeCurrentSelections,
   type AssetLibraryFilter,
   type AssetLibraryPage,
   type AssetLibraryReadModel,
+  type AssetLinkedEntitiesSummary,
   type AssetMarkKind,
   type AssetSelectionState,
   type AssetSelectionSummaryEntry,
   type AssetSummary,
+  type EntityType,
 } from '@level-zero/domain';
 import { and, arrayOverlaps, count, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 
 import { type Database } from '../postgres/client';
 import { assets } from '../schema/assets';
+import { entities } from '../schema/entities';
+import { entityRelationships } from '../schema/entity-relationships';
 import { assetMarks, assetSelections } from '../schema/selections';
 import { generations } from '../schema/generations';
 import { buildAssetOrderBy, buildAssetWhere } from './asset-repository';
@@ -42,9 +48,10 @@ const isGenerated = sql`exists (
  * Follows `DrizzleAssetRepository`'s shape: one `where` builder shared
  * between the page query and the count, every statement carrying
  * `project_id`. Each facet adds exactly one extra statement to the page —
- * `originsFor`, `marksFor` and `selectionsFor` each run once for the whole
- * page, batched over its asset ids — so the query count is fixed regardless
- * of how many assets are on the page, not one lookup per asset.
+ * `originsFor`, `marksFor`, `selectionsFor` and `linkedEntitiesFor` each run
+ * once for the whole page, batched over its asset ids — so the query count
+ * is fixed regardless of how many assets are on the page, not one lookup per
+ * asset.
  */
 export class DrizzleAssetLibraryReadModel implements AssetLibraryReadModel {
   constructor(private readonly db: Database) {}
@@ -64,10 +71,11 @@ export class DrizzleAssetLibraryReadModel implements AssetLibraryReadModel {
     ]);
 
     const assetIds = rows.map((row) => row.id);
-    const [origins, marks, selections] = await Promise.all([
+    const [origins, marks, selections, linkedEntities] = await Promise.all([
       this.originsFor(projectId, assetIds),
       this.marksFor(projectId, assetIds),
       this.selectionsFor(projectId, assetIds),
+      this.linkedEntitiesFor(projectId, assetIds),
     ]);
 
     return {
@@ -81,6 +89,7 @@ export class DrizzleAssetLibraryReadModel implements AssetLibraryReadModel {
           markKinds,
           selections: entries,
           approved: isApprovedInAnyContext(entries),
+          linkedEntities: linkedEntities.get(row.id) ?? { entities: [], total: 0 },
         };
       }),
       total: totals?.value ?? 0,
@@ -96,10 +105,12 @@ export class DrizzleAssetLibraryReadModel implements AssetLibraryReadModel {
   private async originsFor(
     projectId: string,
     assetIds: string[],
-  ): Promise<Map<string, Omit<AssetSummary, 'markKinds' | 'selections' | 'approved'>>> {
+  ): Promise<
+    Map<string, Omit<AssetSummary, 'markKinds' | 'selections' | 'approved' | 'linkedEntities'>>
+  > {
     const summaries = new Map<
       string,
-      Omit<AssetSummary, 'markKinds' | 'selections' | 'approved'>
+      Omit<AssetSummary, 'markKinds' | 'selections' | 'approved' | 'linkedEntities'>
     >();
     if (assetIds.length === 0) return summaries;
 
@@ -197,11 +208,93 @@ export class DrizzleAssetLibraryReadModel implements AssetLibraryReadModel {
 
     return summarizeCurrentSelections(rows.map(toAssetSelection));
   }
+
+  /**
+   * One query for the whole page, not one per asset: two hops from each
+   * asset — its `asset_reference` entity (`refs`, keyed by
+   * `data->>'assetId'`), then that entity's relationship edges in either
+   * direction (`linked`) — folded to one row per distinct `(asset, entity)`
+   * pair by the `union` itself (plain `union`, not `union all`, so a second
+   * edge between the same pair collapses rather than duplicating it) before
+   * a windowed `row_number`/`count` in `ranked` caps and counts in the same
+   * pass. An asset with no `asset_reference` entity, or one whose reference
+   * relates to nothing, has no rows here and is filled in with a zero
+   * summary by the caller.
+   */
+  private async linkedEntitiesFor(
+    projectId: string,
+    assetIds: string[],
+  ): Promise<Map<string, AssetLinkedEntitiesSummary>> {
+    const summaries = new Map<string, AssetLinkedEntitiesSummary>();
+    if (assetIds.length === 0) return summaries;
+
+    const assetIdList = sql.join(
+      assetIds.map((assetId) => sql`${assetId}`),
+      sql`, `,
+    );
+
+    const result = await this.db.execute<{
+      assetId: string;
+      entityId: string;
+      type: EntityType;
+      name: string;
+      total: number;
+    }>(sql`
+      with refs as (
+        select
+          ${entities.id} as reference_id,
+          ${entities.data} ->> ${ASSET_REFERENCE_ASSET_ID_KEY} as asset_id
+        from ${entities}
+        where ${entities.projectId} = ${projectId}
+          and ${entities.type} = 'asset_reference'
+          and ${entities.data} ->> ${ASSET_REFERENCE_ASSET_ID_KEY} in (${assetIdList})
+      ),
+      linked as (
+        select refs.asset_id, ${entityRelationships.targetEntityId} as entity_id
+        from ${entityRelationships}
+        join refs on ${entityRelationships.sourceEntityId} = refs.reference_id
+        where ${entityRelationships.projectId} = ${projectId}
+        union
+        select refs.asset_id, ${entityRelationships.sourceEntityId} as entity_id
+        from ${entityRelationships}
+        join refs on ${entityRelationships.targetEntityId} = refs.reference_id
+        where ${entityRelationships.projectId} = ${projectId}
+      ),
+      ranked as (
+        select
+          linked.asset_id,
+          ${entities.id} as entity_id,
+          ${entities.type} as type,
+          ${entities.name} as name,
+          row_number() over (partition by linked.asset_id order by ${entities.name}, ${entities.id}) as rank,
+          count(*) over (partition by linked.asset_id) as total
+        from linked
+        join ${entities} on ${entities.id} = linked.entity_id
+      )
+      select
+        asset_id as "assetId",
+        entity_id as "entityId",
+        type,
+        name,
+        total::int as total
+      from ranked
+      where rank <= ${ASSET_LINKED_ENTITIES_CAP}
+      order by asset_id, rank
+    `);
+
+    for (const row of result.rows) {
+      const summary = summaries.get(row.assetId) ?? { entities: [], total: row.total };
+      summary.entities.push({ entityId: row.entityId, type: row.type, name: row.name });
+      summaries.set(row.assetId, summary);
+    }
+
+    return summaries;
+  }
 }
 
 function importedSummary(
   assetId: string,
-): Omit<AssetSummary, 'markKinds' | 'selections' | 'approved'> {
+): Omit<AssetSummary, 'markKinds' | 'selections' | 'approved' | 'linkedEntities'> {
   return { assetId, origin: 'imported', generation: null };
 }
 
@@ -254,6 +347,32 @@ function hasSelectionInStates(states: readonly AssetSelectionState[]): SQL {
   )`;
 }
 
+/**
+ * Correlated existence check for "this asset's `asset_reference` entity has
+ * a relationship edge to `entityId`, in either direction" — the same two
+ * hops `linkedEntitiesFor` follows, narrowed to one target entity instead of
+ * grouped and capped.
+ */
+function isLinkedToEntity(entityId: string): SQL {
+  return sql`exists (
+    select 1
+    from ${entities}
+    where ${entities.projectId} = ${assets.projectId}
+      and ${entities.type} = 'asset_reference'
+      and (${entities.data} ->> ${ASSET_REFERENCE_ASSET_ID_KEY})::uuid = ${assets.id}
+      and exists (
+        select 1 from ${entityRelationships}
+        where ${entityRelationships.projectId} = ${entities.projectId}
+          and (
+            (${entityRelationships.sourceEntityId} = ${entities.id}
+              and ${entityRelationships.targetEntityId} = ${entityId})
+            or (${entityRelationships.targetEntityId} = ${entities.id}
+              and ${entityRelationships.sourceEntityId} = ${entityId})
+          )
+      )
+  )`;
+}
+
 /** Exported so a test can assert the origin filter compiles to an index-friendly plan. */
 export function buildLibraryWhere(projectId: string, filter: AssetLibraryFilter): SQL {
   const conditions: SQL[] = [buildAssetWhere(projectId, filter)];
@@ -270,6 +389,10 @@ export function buildLibraryWhere(projectId: string, filter: AssetLibraryFilter)
 
   if (filter.selectionStates && filter.selectionStates.length > 0) {
     conditions.push(hasSelectionInStates(filter.selectionStates));
+  }
+
+  if (filter.linkedEntityId) {
+    conditions.push(isLinkedToEntity(filter.linkedEntityId));
   }
 
   return and(...conditions) as SQL;

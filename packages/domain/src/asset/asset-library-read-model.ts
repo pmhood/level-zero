@@ -7,8 +7,8 @@ import { type AssetSelectionState } from '../selection/asset-selection';
 /**
  * `AssetListFilter` plus the facets the library's joined view can narrow by.
  * Every #169 filter and sort keeps working unchanged; #170 added `origin`,
- * #200 added `markKinds`, this issue (#201) adds `selectionStates`, and #202
- * adds one more field here.
+ * #200 added `markKinds`, #201 added `selectionStates`, and this issue
+ * (#202) adds `linkedEntityId`.
  */
 export interface AssetLibraryFilter extends AssetListFilter {
   origin?: AssetOrigin;
@@ -20,6 +20,12 @@ export interface AssetLibraryFilter extends AssetListFilter {
    * never counts on the strength of the row it lost to.
    */
   selectionStates?: AssetSelectionState[];
+  /**
+   * Asset matches when it is reachable from this entity: its
+   * `asset_reference` entity has a relationship edge to `linkedEntityId`, in
+   * either direction.
+   */
+  linkedEntityId?: string;
 }
 
 export interface AssetLibraryPage {

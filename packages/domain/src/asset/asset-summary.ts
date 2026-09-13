@@ -1,3 +1,4 @@
+import { type EntityType } from '../entity/entity-type';
 import { type AssetMarkKind } from '../selection/asset-mark';
 import {
   latestSelectionByAsset,
@@ -35,12 +36,40 @@ export interface AssetSelectionSummaryEntry {
   decidedAt: Date;
 }
 
+/** The few fields a "used by" badge needs to name an entity that links to an asset. */
+export interface AssetLinkedEntity {
+  entityId: string;
+  type: EntityType;
+  name: string;
+}
+
+/**
+ * How many linked entities `AssetLinkedEntitiesSummary.entities` carries
+ * before falling back to a "+N" count. The inspector's Usage tab
+ * (#173, via `EntityRelationshipService`) is where the full list lives; this
+ * is only what a grid tile needs.
+ */
+export const ASSET_LINKED_ENTITIES_CAP = 4;
+
+/**
+ * The entities that reference an asset — through its `asset_reference`
+ * entity's relationships, two hops from the asset itself — each counted
+ * once no matter how many edges relate it, capped at
+ * `ASSET_LINKED_ENTITIES_CAP` with `total` holding the full distinct count
+ * so a tile can say "Kira, Ravine Outpost, +4".
+ */
+export interface AssetLinkedEntitiesSummary {
+  /** Up to `ASSET_LINKED_ENTITIES_CAP` entities, alphabetical by name. */
+  entities: AssetLinkedEntity[];
+  /** Distinct entities linked to this asset. May exceed `entities.length`. */
+  total: number;
+}
+
 /**
  * The facts about an asset that don't live on the `assets` row itself,
  * joined in from the aggregates that record them — one flat field per facet.
- * #170 landed `origin`, #200 added `markKinds`, this issue (#201) adds
- * `selections`/`approved`, and #202 (linked entities) adds one more field
- * alongside them.
+ * #170 landed `origin`, #200 added `markKinds`, #201 added
+ * `selections`/`approved`, and this issue (#202) adds `linkedEntities`.
  */
 export interface AssetSummary {
   assetId: string;
@@ -62,6 +91,13 @@ export interface AssetSummary {
    * both stay true underneath this one flag.
    */
   approved: boolean;
+  /**
+   * Who this asset is used by — the entities reachable from it through its
+   * `asset_reference` entity. Zero entities and a zero total both when there
+   * is no `asset_reference` entity for this asset and when there is one but
+   * it relates to nothing.
+   */
+  linkedEntities: AssetLinkedEntitiesSummary;
 }
 
 /** Project-wide "approved": true when the asset is approved in at least one context. */

@@ -19,9 +19,11 @@ import {
 } from '../asset/asset-repository';
 import { referencedAssetId } from '../asset/asset-reference';
 import {
+  ASSET_LINKED_ENTITIES_CAP,
   isApprovedInAnyContext,
   pickNewestOrigin,
   summarizeCurrentSelections,
+  type AssetLinkedEntitiesSummary,
   type AssetSelectionSummaryEntry,
   type AssetSummary,
 } from '../asset/asset-summary';
@@ -593,10 +595,10 @@ export class InMemoryGenerationRepository implements GenerationRepository {
 }
 
 /**
- * In-memory `AssetLibraryReadModel` for tests. Joins the same two in-memory
- * repositories the Postgres adapter joins in SQL, and applies the same
- * origin tiebreak: an asset produced by more than one generation reports the
- * most recently created one, tying on id.
+ * In-memory `AssetLibraryReadModel` for tests. Joins the same repositories
+ * the Postgres adapter joins in SQL, and applies the same origin tiebreak:
+ * an asset produced by more than one generation reports the most recently
+ * created one, tying on id.
  */
 export class InMemoryAssetLibraryReadModel implements AssetLibraryReadModel {
   constructor(
@@ -604,6 +606,8 @@ export class InMemoryAssetLibraryReadModel implements AssetLibraryReadModel {
     private readonly generations: GenerationRepository,
     private readonly marks: AssetMarkRepository,
     private readonly selections: AssetSelectionRepository,
+    private readonly entities: EntityRepository,
+    private readonly relationships: EntityRelationshipRepository,
   ) {}
 
   async listByProject(projectId: string, filter: AssetLibraryFilter): Promise<AssetLibraryPage> {
@@ -629,9 +633,17 @@ export class InMemoryAssetLibraryReadModel implements AssetLibraryReadModel {
       ),
     );
 
+    const linkedEntities = await this.linkedEntitiesByAsset(projectId, unpaged.items);
+
     const summarized = unpaged.items.map((asset) => ({
       asset,
-      summary: summarize(asset.id, allGenerations, allMarks, selectionEntries.get(asset.id) ?? []),
+      summary: summarize(
+        asset.id,
+        allGenerations,
+        allMarks,
+        selectionEntries.get(asset.id) ?? [],
+        linkedEntities.get(asset.id)?.summary ?? emptyLinkedEntities(),
+      ),
     }));
 
     let filtered = filter.origin
@@ -652,6 +664,13 @@ export class InMemoryAssetLibraryReadModel implements AssetLibraryReadModel {
       );
     }
 
+    if (filter.linkedEntityId) {
+      const wanted = filter.linkedEntityId;
+      filtered = filtered.filter((entry) =>
+        linkedEntities.get(entry.asset.id)?.entityIds.has(wanted),
+      );
+    }
+
     const offset = filter.offset ?? 0;
     const limit = filter.limit ?? filtered.length;
     const page = filtered.slice(offset, offset + limit);
@@ -662,6 +681,76 @@ export class InMemoryAssetLibraryReadModel implements AssetLibraryReadModel {
       total: filtered.length,
     };
   }
+
+  /**
+   * The linked-entities facet for a batch of assets: each asset's
+   * `asset_reference` entity resolved project-wide in one read, then that
+   * entity's neighbourhood resolved one `listForEntity` at a time — a test
+   * double, not the query-count-sensitive path that guarantee belongs to
+   * (the Postgres adapter, covered by its own integration test).
+   *
+   * Returns the full deduplicated neighbour id set alongside the capped
+   * summary so `linkedEntityId` can filter on the whole set even when it
+   * exceeds `ASSET_LINKED_ENTITIES_CAP`.
+   */
+  private async linkedEntitiesByAsset(
+    projectId: string,
+    assets: readonly Asset[],
+  ): Promise<Map<string, { summary: AssetLinkedEntitiesSummary; entityIds: Set<string> }>> {
+    const { items: assetReferences } = await this.entities.listByProject(projectId, {
+      types: ['asset_reference'],
+      includeArchived: true,
+    });
+    const referenceEntityIdByAssetId = new Map<string, string>();
+    for (const entity of assetReferences) {
+      const assetId = referencedAssetId(entity);
+      if (assetId) referenceEntityIdByAssetId.set(assetId, entity.id);
+    }
+
+    return new Map(
+      await Promise.all(
+        assets.map(async (asset) => {
+          const referenceEntityId = referenceEntityIdByAssetId.get(asset.id);
+          if (!referenceEntityId) {
+            return [
+              asset.id,
+              { summary: emptyLinkedEntities(), entityIds: new Set<string>() },
+            ] as const;
+          }
+
+          const { items: edges } = await this.relationships.listForEntity(
+            projectId,
+            referenceEntityId,
+            {},
+          );
+          const neighborIds = new Set(
+            edges.map((edge) =>
+              edge.sourceEntityId === referenceEntityId ? edge.targetEntityId : edge.sourceEntityId,
+            ),
+          );
+
+          const neighbors: Entity[] = [];
+          for (const id of neighborIds) {
+            const neighbor = await this.entities.findById(projectId, id);
+            if (neighbor) neighbors.push(neighbor);
+          }
+          neighbors.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+
+          const summary: AssetLinkedEntitiesSummary = {
+            entities: neighbors
+              .slice(0, ASSET_LINKED_ENTITIES_CAP)
+              .map((entity) => ({ entityId: entity.id, type: entity.type, name: entity.name })),
+            total: neighbors.length,
+          };
+          return [asset.id, { summary, entityIds: neighborIds }] as const;
+        }),
+      ),
+    );
+  }
+}
+
+function emptyLinkedEntities(): AssetLinkedEntitiesSummary {
+  return { entities: [], total: 0 };
 }
 
 function summarize(
@@ -669,6 +758,7 @@ function summarize(
   generations: readonly Generation[],
   marks: readonly AssetMark[],
   selections: readonly AssetSelectionSummaryEntry[],
+  linkedEntities: AssetLinkedEntitiesSummary,
 ): AssetSummary {
   const matches = generations.filter((candidate) => candidate.outputAssetIds.includes(assetId));
   const winner = pickNewestOrigin(matches);
@@ -705,6 +795,7 @@ function summarize(
     markKinds,
     selections: [...selections],
     approved: isApprovedInAnyContext(selections),
+    linkedEntities,
   };
 }
 

@@ -167,6 +167,14 @@ export class ListAssetsQueryDto {
   @IsIn(ASSET_SELECTION_STATES, { each: true })
   selectionStates?: AssetSelectionState[];
 
+  /**
+   * Narrows to assets reachable from this entity: its `asset_reference`
+   * entity has a relationship edge to it, in either direction.
+   */
+  @IsOptional()
+  @IsString()
+  linkedEntityId?: string;
+
   @IsOptional()
   @IsIn(ASSET_SORT_FIELDS)
   sortBy?: AssetSortField;

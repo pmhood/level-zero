@@ -1,7 +1,9 @@
 import {
   ActivityService,
+  ASSET_LINKED_ENTITIES_CAP,
   AssetSelectionService,
   AssetService,
+  EntityRelationshipService,
   EntityService,
   ProjectService,
   ReviewTargetResolver,
@@ -13,6 +15,7 @@ import {
   systemClock,
   uuidIdGenerator,
   type AssetMarkKind,
+  type Entity,
   type Generation,
   type Project,
 } from '@level-zero/domain';
@@ -29,6 +32,7 @@ import { buildLibraryWhere, DrizzleAssetLibraryReadModel } from './asset-library
 import { DrizzleAssetMarkRepository } from './asset-mark-repository';
 import { DrizzleAssetRepository } from './asset-repository';
 import { DrizzleAssetSelectionRepository } from './asset-selection-repository';
+import { DrizzleEntityRelationshipRepository } from './entity-relationship-repository';
 import { DrizzleEntityRepository } from './entity-repository';
 import { DrizzleEntityVersionRepository } from './entity-version-repository';
 import { DrizzleGenerationRepository } from './generation-repository';
@@ -45,6 +49,7 @@ let markRepo: DrizzleAssetMarkRepository;
 let readModel: DrizzleAssetLibraryReadModel;
 let projects: ProjectService;
 let entities: EntityService;
+let relationships: EntityRelationshipService;
 let assets: AssetService;
 let selections: AssetSelectionService;
 let storage: InMemoryObjectStorageProvider;
@@ -61,6 +66,11 @@ beforeAll(async () => {
   const entityRepo = new DrizzleEntityRepository(client.db);
   const activity = new ActivityService(new DrizzleActivityRepository(client.db), deps);
   entities = new EntityService(entityRepo, projectRepo, activity, deps);
+  relationships = new EntityRelationshipService(
+    new DrizzleEntityRelationshipRepository(client.db),
+    entityRepo,
+    deps,
+  );
 
   const targets = new ReviewTargetResolver(
     entityRepo,
@@ -152,6 +162,27 @@ async function markAsset(projectId: string, assetId: string, kind: AssetMarkKind
   await markRepo.add(mark);
 }
 
+/**
+ * Points `assetId`'s `asset_reference` entity (creating it if needed) at
+ * `entityId` with a relationship edge, the same two writes the app makes to
+ * link an asset into the entity graph.
+ */
+async function linkAssetToEntity(
+  projectId: string,
+  assetId: string,
+  entityId: string,
+): Promise<Entity> {
+  const reference = await entities.findOrCreateAssetReference(projectId, assetId, {
+    name: 'asset reference',
+  });
+  await relationships.link(projectId, {
+    sourceEntityId: entityId,
+    targetEntityId: reference.id,
+    relation: 'references',
+  });
+  return reference;
+}
+
 describe('asset library read model', () => {
   it('reports an uploaded asset as imported, with no generation at all', async () => {
     const project = await seedProject('Deep Fathom');
@@ -173,6 +204,7 @@ describe('asset library read model', () => {
         markKinds: [],
         selections: [],
         approved: false,
+        linkedEntities: { entities: [], total: 0 },
       },
     ]);
     expect(page.total).toBe(1);
@@ -206,6 +238,7 @@ describe('asset library read model', () => {
         markKinds: [],
         selections: [],
         approved: false,
+        linkedEntities: { entities: [], total: 0 },
       },
     ]);
   });
@@ -742,6 +775,238 @@ describe('asset library read model', () => {
         readModel.listByProject(project.id, { limit: 20, selectionStates: ['approved'] }),
       );
       expect(largeApproved).toBe(smallApproved);
+    });
+  });
+
+  describe('linked entities', () => {
+    it('reports zero linked entities for an asset with no asset_reference entity at all', async () => {
+      const project = await seedProject('Deep Fathom');
+      const asset = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'reference.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+
+      const page = await readModel.listByProject(project.id, {});
+
+      expect(page.summaries[0]).toMatchObject({
+        assetId: asset.id,
+        linkedEntities: { entities: [], total: 0 },
+      });
+    });
+
+    it('reports zero linked entities for an asset whose asset_reference entity relates to nothing', async () => {
+      const project = await seedProject('Deep Fathom');
+      const asset = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'reference.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+      // Creates the `asset_reference` entity but never relates it to anything.
+      await entities.findOrCreateAssetReference(project.id, asset.id, { name: 'asset reference' });
+
+      const page = await readModel.listByProject(project.id, {});
+
+      expect(page.summaries[0]).toMatchObject({
+        assetId: asset.id,
+        linkedEntities: { entities: [], total: 0 },
+      });
+    });
+
+    /**
+     * The naive implementation this guards against: one row per relationship
+     * edge. Two edges relate the same character to the same asset — one in
+     * each direction — so a query that joined without deduping would report
+     * the character twice and a total of two, not one.
+     */
+    it('reports an entity linked by more than one edge once, with a total of one', async () => {
+      const project = await seedProject('Deep Fathom');
+      const asset = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'portrait.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+      const kira = await entities.create(project.id, { type: 'character', name: 'Kira' });
+      const reference = await linkAssetToEntity(project.id, asset.id, kira.id);
+      // A second, independent edge between the same pair, in the other direction.
+      await relationships.link(project.id, {
+        sourceEntityId: reference.id,
+        targetEntityId: kira.id,
+        relation: 'appears_in',
+      });
+
+      const page = await readModel.listByProject(project.id, {});
+
+      expect(page.summaries[0]?.linkedEntities).toEqual({
+        entities: [{ entityId: kira.id, type: 'character', name: 'Kira' }],
+        total: 1,
+      });
+    });
+
+    it('never counts the asset_reference entity itself as a linked entity', async () => {
+      const project = await seedProject('Deep Fathom');
+      const asset = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'portrait.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+      const kira = await entities.create(project.id, { type: 'character', name: 'Kira' });
+      await linkAssetToEntity(project.id, asset.id, kira.id);
+
+      const page = await readModel.listByProject(project.id, {});
+
+      expect(page.summaries[0]?.linkedEntities.total).toBe(1);
+      expect(page.summaries[0]?.linkedEntities.entities.map((entity) => entity.entityId)).toEqual([
+        kira.id,
+      ]);
+    });
+
+    /**
+     * The naive implementation this guards against: reporting only
+     * `ASSET_LINKED_ENTITIES_CAP` rows with no separate count, so an asset
+     * used by more entities than the cap looks identical to one used by
+     * exactly the cap's worth.
+     */
+    it('reports the cap worth of entities plus an accurate total when over the cap', async () => {
+      const project = await seedProject('Deep Fathom');
+      const asset = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'portrait.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+
+      const names = ['Ada', 'Bram', 'Cato', 'Dana', 'Elle', 'Finn'].slice(
+        0,
+        ASSET_LINKED_ENTITIES_CAP + 2,
+      );
+      for (const name of names) {
+        const character = await entities.create(project.id, { type: 'character', name });
+        await linkAssetToEntity(project.id, asset.id, character.id);
+      }
+
+      const page = await readModel.listByProject(project.id, {});
+      const summary = page.summaries[0]?.linkedEntities;
+
+      expect(summary?.total).toBe(names.length);
+      expect(summary?.entities).toHaveLength(ASSET_LINKED_ENTITIES_CAP);
+      expect(summary?.entities.map((entity) => entity.name)).toEqual(
+        [...names].sort().slice(0, ASSET_LINKED_ENTITIES_CAP),
+      );
+    });
+
+    it('never reports another project linked entities', async () => {
+      const [a, b] = [await seedProject('A'), await seedProject('B')];
+      const assetA = await assets.upload(a.id, {
+        kind: 'image',
+        filename: 'a.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+      const assetB = await assets.upload(b.id, {
+        kind: 'image',
+        filename: 'b.png',
+        mimeType: 'image/png',
+        content: Buffer.from('b'),
+      });
+      const characterA = await entities.create(a.id, { type: 'character', name: 'A Character' });
+      const characterB = await entities.create(b.id, { type: 'character', name: 'B Character' });
+      await linkAssetToEntity(a.id, assetA.id, characterA.id);
+      await linkAssetToEntity(b.id, assetB.id, characterB.id);
+
+      const pageA = await readModel.listByProject(a.id, {});
+      const summaryA = pageA.summaries.find((entry) => entry.assetId === assetA.id);
+      expect(summaryA?.linkedEntities).toEqual({
+        entities: [{ entityId: characterA.id, type: 'character', name: 'A Character' }],
+        total: 1,
+      });
+
+      const pageB = await readModel.listByProject(b.id, {});
+      const summaryB = pageB.summaries.find((entry) => entry.assetId === assetB.id);
+      expect(summaryB?.linkedEntities).toEqual({
+        entities: [{ entityId: characterB.id, type: 'character', name: 'B Character' }],
+        total: 1,
+      });
+    });
+
+    describe('linkedEntityId filter', () => {
+      it('narrows to assets reachable from the given entity and reflects it in total', async () => {
+        const project = await seedProject('Deep Fathom');
+        const linked = await assets.upload(project.id, {
+          kind: 'image',
+          filename: 'linked.png',
+          mimeType: 'image/png',
+          content: Buffer.from('a'),
+        });
+        const unlinked = await assets.upload(project.id, {
+          kind: 'image',
+          filename: 'unlinked.png',
+          mimeType: 'image/png',
+          content: Buffer.from('b'),
+        });
+        const kira = await entities.create(project.id, { type: 'character', name: 'Kira' });
+        await linkAssetToEntity(project.id, linked.id, kira.id);
+
+        const page = await readModel.listByProject(project.id, { linkedEntityId: kira.id });
+
+        expect(page.items.map((item) => item.id)).toEqual([linked.id]);
+        expect(page.total).toBe(1);
+        expect(unlinked.id).not.toBe(linked.id);
+      });
+
+      it('never reports another project asset as reachable from one of its entities', async () => {
+        const [a, b] = [await seedProject('A'), await seedProject('B')];
+        const assetA = await assets.upload(a.id, {
+          kind: 'image',
+          filename: 'a.png',
+          mimeType: 'image/png',
+          content: Buffer.from('a'),
+        });
+        const characterA = await entities.create(a.id, { type: 'character', name: 'A Character' });
+        await linkAssetToEntity(a.id, assetA.id, characterA.id);
+
+        const pageB = await readModel.listByProject(b.id, { linkedEntityId: characterA.id });
+
+        expect(pageB.items).toHaveLength(0);
+        expect(pageB.total).toBe(0);
+      });
+    });
+
+    it('issues the same number of queries regardless of how many assets are on the page', async () => {
+      const project = await seedProject('Deep Fathom');
+      const kira = await entities.create(project.id, { type: 'character', name: 'Kira' });
+      for (let i = 0; i < 20; i += 1) {
+        const asset = await assets.upload(project.id, {
+          kind: 'image',
+          filename: `asset-${i}.png`,
+          mimeType: 'image/png',
+          content: Buffer.from(String(i)),
+        });
+        // Every other asset is linked to the same entity.
+        if (i % 2 === 0) {
+          await linkAssetToEntity(project.id, asset.id, kira.id);
+        }
+      }
+
+      const smallPage = await countQueries(client, () =>
+        readModel.listByProject(project.id, { limit: 5 }),
+      );
+      const largePage = await countQueries(client, () =>
+        readModel.listByProject(project.id, { limit: 20 }),
+      );
+      expect(largePage).toBe(smallPage);
+
+      const smallLinked = await countQueries(client, () =>
+        readModel.listByProject(project.id, { limit: 5, linkedEntityId: kira.id }),
+      );
+      const largeLinked = await countQueries(client, () =>
+        readModel.listByProject(project.id, { limit: 20, linkedEntityId: kira.id }),
+      );
+      expect(largeLinked).toBe(smallLinked);
     });
   });
 });

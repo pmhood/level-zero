@@ -2,7 +2,10 @@ import {
   AssetLibraryService,
   AssetService,
   ProjectService,
+  assetReferenceData,
   completeGeneration,
+  createEntity,
+  createEntityRelationship,
   createGeneration,
   createProject,
   dispatchGeneration,
@@ -15,6 +18,8 @@ import {
   InMemoryAssetMarkRepository,
   InMemoryAssetRepository,
   InMemoryAssetSelectionRepository,
+  InMemoryEntityRelationshipRepository,
+  InMemoryEntityRepository,
   InMemoryGenerationRepository,
   InMemoryObjectStorageProvider,
   InMemoryProjectRepository,
@@ -34,6 +39,8 @@ const clock = fixedClock('2026-03-01T09:00:00.000Z');
 let app: INestApplication;
 let projectService: ProjectService;
 let generations: InMemoryGenerationRepository;
+let entities: InMemoryEntityRepository;
+let relationships: InMemoryEntityRelationshipRepository;
 let project: Project;
 let otherProject: Project;
 
@@ -45,10 +52,19 @@ beforeEach(async () => {
   generations = new InMemoryGenerationRepository();
   const marks = new InMemoryAssetMarkRepository();
   const selections = new InMemoryAssetSelectionRepository();
+  entities = new InMemoryEntityRepository();
+  relationships = new InMemoryEntityRelationshipRepository();
   projectService = new ProjectService(projects, deps);
   const assetService = new AssetService(assets, projects, storage, deps);
   const libraryService = new AssetLibraryService(
-    new InMemoryAssetLibraryReadModel(assets, generations, marks, selections),
+    new InMemoryAssetLibraryReadModel(
+      assets,
+      generations,
+      marks,
+      selections,
+      entities,
+      relationships,
+    ),
   );
 
   const moduleRef = await Test.createTestingModule({
@@ -408,6 +424,7 @@ describe('asset library summaries', () => {
         markKinds: [],
         selections: [],
         approved: false,
+        linkedEntities: { entities: [], total: 0 },
       },
     ]);
   });
@@ -434,6 +451,7 @@ describe('asset library summaries', () => {
         markKinds: [],
         selections: [],
         approved: false,
+        linkedEntities: { entities: [], total: 0 },
       },
     ]);
   });
@@ -471,5 +489,83 @@ describe('asset library summaries', () => {
 
   it('rejects an unknown origin', async () => {
     await http().get(`/api/projects/${project.id}/assets`).query({ origin: 'stolen' }).expect(400);
+  });
+});
+
+describe('linked entities', () => {
+  async function uploadAsset(filename: string): Promise<string> {
+    const created = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({ kind: 'image', filename, mimeType: 'image/png', contentBase64: pngBase64 })
+      .expect(201);
+    return created.body.id as string;
+  }
+
+  async function createCharacter(name: string) {
+    const entity = createEntity(
+      { projectId: project.id, type: 'character', name },
+      { clock, ids: sequentialIdGenerator('entity') },
+    );
+    return entities.insert(entity);
+  }
+
+  /** Points a fresh `asset_reference` entity at `assetId` and relates it to `entityId`. */
+  async function linkAssetToEntity(assetId: string, entityId: string): Promise<void> {
+    const reference = createEntity(
+      {
+        projectId: project.id,
+        type: 'asset_reference',
+        name: 'asset reference',
+        data: assetReferenceData(assetId),
+      },
+      { clock, ids: sequentialIdGenerator('reference') },
+    );
+    const inserted = await entities.insert(reference);
+    const relationship = createEntityRelationship(
+      {
+        projectId: project.id,
+        sourceEntityId: entityId,
+        targetEntityId: inserted.id,
+        relation: 'references',
+      },
+      { clock, ids: sequentialIdGenerator('relationship') },
+    );
+    await relationships.insert(relationship);
+  }
+
+  it('reports the entities that reference an asset, with a total', async () => {
+    const assetId = await uploadAsset('kira-portrait.png');
+    const kira = await createCharacter('Kira');
+    await linkAssetToEntity(assetId, kira.id);
+
+    const response = await http()
+      .get(`/api/projects/${project.id}/assets`)
+      .query({ summary: 'true' })
+      .expect(200);
+
+    const summary = response.body.summaries.find(
+      (entry: { assetId: string }) => entry.assetId === assetId,
+    );
+    expect(summary.linkedEntities).toEqual({
+      entities: [{ entityId: kira.id, type: 'character', name: 'Kira' }],
+      total: 1,
+    });
+  });
+
+  it('narrows to assets reachable from the given entity and reflects it in total', async () => {
+    const linkedAssetId = await uploadAsset('linked.png');
+    const unlinkedAssetId = await uploadAsset('unlinked.png');
+    const kira = await createCharacter('Kira');
+    await linkAssetToEntity(linkedAssetId, kira.id);
+
+    const response = await http()
+      .get(`/api/projects/${project.id}/assets`)
+      .query({ linkedEntityId: kira.id })
+      .expect(200);
+
+    expect(response.body.items.map((asset: { id: string }) => asset.id)).toEqual([linkedAssetId]);
+    expect(response.body.total).toBe(1);
+    expect(response.body.summaries).toHaveLength(1);
+    expect(unlinkedAssetId).not.toBe(linkedAssetId);
   });
 });
