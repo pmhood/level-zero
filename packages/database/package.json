@@ -34,7 +34,7 @@
     "pg": "^8.23.0"
   },
   "devDependencies": {
-    "@types/node": "^22.15.0",
+    "@types/node": "^22.20.2",
     "@types/pg": "^8.11.10",
     "drizzle-kit": "^0.31.10",
     "tsx": "^4.23.13",
