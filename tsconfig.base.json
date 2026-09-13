@@ -3,8 +3,14 @@
   "compilerOptions": {
     "target": "ES2023",
     "lib": ["ES2023"],
-    "module": "CommonJS",
-    "moduleResolution": "node",
+    // `nodenext`, not `node16`: NestJS 12 is ESM-only (`"type": "module"`, no
+    // CommonJS build), and `apps/api` compiles to CommonJS because Nest's
+    // constructor injection needs `emitDecoratorMetadata`. Only `nodenext`
+    // models Node's `require()` of ESM, which is what makes that pairing legal
+    // — under `node16` every `@nestjs/*` import is a TS1479 error. Node >=22.12
+    // (see the root `engines`) is what supports it at runtime.
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
