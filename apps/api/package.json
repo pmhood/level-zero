@@ -34,7 +34,7 @@
     "@swc/core": "^1.16.2",
     "@types/express": "^5.0.0",
     "@types/node": "^22.15.0",
-    "@types/supertest": "^6.0.2",
+    "@types/supertest": "^7.2.1",
     "supertest": "^7.1.1",
     "typescript": "~5.9.3",
     "unplugin-swc": "^1.6.0",
