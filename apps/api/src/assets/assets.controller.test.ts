@@ -12,6 +12,7 @@ import {
 } from '@level-zero/domain';
 import {
   InMemoryAssetLibraryReadModel,
+  InMemoryAssetMarkRepository,
   InMemoryAssetRepository,
   InMemoryGenerationRepository,
   InMemoryObjectStorageProvider,
@@ -41,10 +42,11 @@ beforeEach(async () => {
   const assets = new InMemoryAssetRepository();
   const storage = new InMemoryObjectStorageProvider();
   generations = new InMemoryGenerationRepository();
+  const marks = new InMemoryAssetMarkRepository();
   projectService = new ProjectService(projects, deps);
   const assetService = new AssetService(assets, projects, storage, deps);
   const libraryService = new AssetLibraryService(
-    new InMemoryAssetLibraryReadModel(assets, generations),
+    new InMemoryAssetLibraryReadModel(assets, generations, marks),
   );
 
   const moduleRef = await Test.createTestingModule({
@@ -396,7 +398,9 @@ describe('asset library summaries', () => {
       .query({ summary: 'true' })
       .expect(200);
 
-    expect(response.body.summaries).toEqual([{ assetId, origin: 'imported', generation: null }]);
+    expect(response.body.summaries).toEqual([
+      { assetId, origin: 'imported', generation: null, markKinds: [] },
+    ]);
   });
 
   it('reports a generated asset with its generation id, capability, provider and model', async () => {
@@ -418,6 +422,7 @@ describe('asset library summaries', () => {
           provider: 'anthropic',
           model: 'claude',
         },
+        markKinds: [],
       },
     ]);
   });

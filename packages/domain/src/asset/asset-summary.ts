@@ -1,3 +1,5 @@
+import { type AssetMarkKind } from '../selection/asset-mark';
+
 /** Whether an asset was produced by a generation or uploaded directly. */
 export const ASSET_ORIGINS = ['generated', 'imported'] as const;
 export type AssetOrigin = (typeof ASSET_ORIGINS)[number];
@@ -25,6 +27,8 @@ export interface AssetSummary {
   origin: AssetOrigin;
   /** Set only when `origin` is `'generated'`. Null for an imported asset. */
   generation: AssetGenerationOrigin | null;
+  /** The mark kinds on this asset, in ASSET_MARK_KINDS order. Empty array if none. */
+  markKinds: AssetMarkKind[];
 }
 
 /** The minimum a generation candidate needs to carry to be picked between. */
