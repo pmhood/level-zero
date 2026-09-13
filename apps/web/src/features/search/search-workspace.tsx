@@ -1,7 +1,8 @@
 'use client';
 
 import type { EntityType } from '@level-zero/domain';
-import { Button, EmptyState, Input, Tabs, WorkspaceHeader } from '@level-zero/ui';
+import { Button, EmptyState, Input, Tabs, Tag, WorkspaceHeader } from '@level-zero/ui';
+import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
 import { entityTypeLabel } from '@/features/entities/entity-presentation';
@@ -27,11 +28,20 @@ const SCOPES: EntityType[] = ['idea', 'character', 'location', 'mechanic', 'docu
  * were typed, `Related` matches what they mean, so "the mechanic where oxygen
  * limits exploration" can reach a design that never uses those words. Scoping
  * to one entity type is the local, per-tool search the spec describes.
+ *
+ * `?sourceType=asset` seeds an initial "Assets only" scope — the Asset
+ * Library toolbar's (#172) link into content search, since #41's
+ * `search_documents` remains the project's only search index and the library
+ * has no second one of its own. This only seeds the request; there is no
+ * broader source-type picker here; wiring one is more than the small
+ * addition #172 scoped itself to.
  */
 export function SearchWorkspace({ projectId }: { projectId: string }) {
+  const searchParams = useSearchParams();
   const [question, setQuestion] = useState('');
   const [mode, setMode] = useState<NonNullable<SearchParams['mode']>>('keyword');
   const [scope, setScope] = useState<EntityType | null>(null);
+  const [assetsOnly, setAssetsOnly] = useState(() => searchParams.get('sourceType') === 'asset');
 
   const debounced = useDebouncedValue(question, 250);
   const projectQuery = useProject(projectId);
@@ -39,6 +49,7 @@ export function SearchWorkspace({ projectId }: { projectId: string }) {
     q: debounced.trim() || undefined,
     mode,
     entityType: scope ? [scope] : undefined,
+    sourceType: assetsOnly && !scope ? ['asset'] : undefined,
     limit: 50,
   };
   const resultsQuery = useProjectSearch(projectId, params);
@@ -67,7 +78,14 @@ export function SearchWorkspace({ projectId }: { projectId: string }) {
         />
 
         <div className="flex flex-wrap items-center gap-1.5">
-          <ScopeButton label="Everything" active={scope === null} onClick={() => setScope(null)} />
+          <ScopeButton
+            label="Everything"
+            active={scope === null && !assetsOnly}
+            onClick={() => {
+              setScope(null);
+              setAssetsOnly(false);
+            }}
+          />
           {SCOPES.map((type) => (
             <ScopeButton
               key={type}
@@ -76,6 +94,9 @@ export function SearchWorkspace({ projectId }: { projectId: string }) {
               onClick={() => setScope(type)}
             />
           ))}
+          {assetsOnly && !scope && (
+            <Tag onRemove={() => setAssetsOnly(false)}>Assets only</Tag>
+          )}
         </div>
 
         {resultsQuery.isError && (

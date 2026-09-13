@@ -6,9 +6,13 @@ import type {
   AssetLibraryPage,
   AssetMark,
   AssetMarkKind,
+  AssetOrigin,
   AssetSelection,
   AssetSelectionContext,
+  AssetSelectionState,
   AssetSelectionSummary,
+  AssetSortDirection,
+  AssetSortField,
   Comment,
   CommentThread,
   AssetPage,
@@ -450,7 +454,22 @@ export function listAssets(projectId: string, params: ListAssetsParams = {}): Pr
 }
 
 export interface ListAssetLibraryParams {
+  kind?: AssetKind[];
+  /** The part of `mimeType` before the slash: "image", "video", "audio", "application", ... */
+  mimeFamily?: string[];
+  search?: string;
+  /** Generated-vs-imported (#170). */
+  origin?: AssetOrigin;
+  markKinds?: AssetMarkKind[];
+  selectionStates?: AssetSelectionState[];
+  linkedEntityId?: string;
+  /** Inclusive lower bound on `createdAt`, as an ISO date string. */
+  createdAfter?: string;
+  /** Exclusive upper bound on `createdAt`, as an ISO date string. */
+  createdBefore?: string;
   includeArchived?: boolean;
+  sortBy?: AssetSortField;
+  sortDirection?: AssetSortDirection;
   limit?: number;
   offset?: number;
 }
@@ -460,6 +479,9 @@ export interface ListAssetLibraryParams {
  * page `listAssets` returns, plus one `AssetSummary` per item — in the same
  * order — so a grid or table can show a badge without a follow-up request
  * per tile. `summary=true` is what switches the API over to this view.
+ *
+ * Every field here round-trips to the server (#172's toolbar) — there is no
+ * client-side narrowing of an already-fetched page.
  */
 export function listAssetLibrary(
   projectId: string,

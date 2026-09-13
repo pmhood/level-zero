@@ -10,17 +10,20 @@ import {
   WorkspacePage,
   type ViewSwitcherItem,
 } from '@level-zero/ui';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { apiErrorMessage } from '@/lib/api';
 
 import { AssetCompare } from './asset-compare';
 import { AssetGrid, AssetGridSkeleton } from './asset-grid';
 import { AssetInspector } from './asset-inspector';
+import { assetLibraryFiltersToListParams, hasActiveAssetLibraryFilters } from './asset-library-filters';
+import { AssetLibraryToolbar } from './asset-library-toolbar';
 import { AssetList, AssetListSkeleton } from './asset-list';
 import { CollectionsIcon, PipelineIcon } from './asset-view-icons';
-import { ASSET_LIBRARY_PAGE_SIZE, useAssetLibrary } from './use-assets';
+import { useAssetLibraryFilters } from './use-asset-library-filters';
 import { useAssetView, type AssetView } from './use-asset-view';
+import { ASSET_LIBRARY_PAGE_SIZE, useAssetLibrary } from './use-assets';
 
 const VIEW_ITEMS: ViewSwitcherItem<AssetView>[] = [
   { value: 'grid', label: 'Grid', icon: <GridIcon className="size-4" /> },
@@ -40,28 +43,38 @@ const VIEW_ITEMS: ViewSwitcherItem<AssetView>[] = [
 ];
 
 /**
- * The Assets workspace (issue #171): every asset the project has, in one
- * place — the grid and list presentations over #169/#170's read model,
- * reusing #133's `WorkspacePage`/`WorkspaceHeader` rather than a second
- * header implementation.
+ * The Assets workspace (issue #171, with #172's filter/sort/search toolbar):
+ * every asset the project has, in one place — the grid and list
+ * presentations over #169/#170's read model, reusing #133's
+ * `WorkspacePage`/`WorkspaceHeader` rather than a second header
+ * implementation.
  *
  * No cinematic header artwork exists for this workspace yet — only
  * `/headers/world.jpg` is committed — so `image` is left out, the same
  * choice Characters, Mechanics and Moodboards already make. It becomes
  * cinematic the moment an art asset lands, with no code change here.
  *
- * Filters, upload, bulk actions, Collections and the Pipeline are later
- * issues (#172, #178–#179). The selected asset is the inspector's (#173);
- * this workspace decides what to show and how, and never a project-changing
- * action of its own.
+ * Upload, bulk actions, Collections and the Pipeline are later issues
+ * (#178–#179). The toolbar above the grid/list is #172's; the selected
+ * asset is the inspector's (#173) — this workspace decides what to show and
+ * how, never a project-changing action of its own.
  */
 export function AssetsWorkspace({ projectId }: { projectId: string }) {
   const [view, changeView] = useAssetView();
   const [page, setPage] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [comparedWith, setComparedWith] = useState<Asset | null>(null);
+  const { filters, setFilter, clearFilter, clearAll } = useAssetLibraryFilters();
 
-  const libraryQuery = useAssetLibrary(projectId, page);
+  const listParams = assetLibraryFiltersToListParams(filters);
+  const libraryQuery = useAssetLibrary(projectId, page, listParams);
+
+  // A changed filter or sort re-queries a different result set, so a page
+  // number left over from the previous one would ask for rows that may no
+  // longer exist there.
+  useEffect(() => {
+    setPage(0);
+  }, [filters]);
 
   const items = libraryQuery.data?.items ?? [];
   const selectedIndex = items.findIndex((asset) => asset.id === selectedId);
@@ -84,7 +97,21 @@ export function AssetsWorkspace({ projectId }: { projectId: string }) {
       title="Asset Library"
       description="Every image, video, sound and file this project has produced or imported — one place to see what exists."
       toolbar={
-        <ViewSwitcher label="Asset views" items={VIEW_ITEMS} value={view} onChange={switchView} />
+        <AssetLibraryToolbar
+          projectId={projectId}
+          filters={filters}
+          setFilter={setFilter}
+          clearFilter={clearFilter}
+          clearAll={clearAll}
+          viewSwitcher={
+            <ViewSwitcher
+              label="Asset views"
+              items={VIEW_ITEMS}
+              value={view}
+              onChange={switchView}
+            />
+          }
+        />
       }
       inspector={
         selected && (
@@ -123,6 +150,8 @@ export function AssetsWorkspace({ projectId }: { projectId: string }) {
             error={libraryQuery.error}
             onRetry={() => void libraryQuery.refetch()}
             data={libraryQuery.data}
+            hasActiveFilters={hasActiveAssetLibraryFilters(filters)}
+            onClearFilters={clearAll}
           />
         )}
       </div>
@@ -141,6 +170,8 @@ function AssetsBody({
   error,
   onRetry,
   data,
+  hasActiveFilters,
+  onClearFilters,
 }: {
   projectId: string;
   view: AssetView;
@@ -152,6 +183,8 @@ function AssetsBody({
   error: unknown;
   onRetry: () => void;
   data: AssetLibraryPage | undefined;
+  hasActiveFilters: boolean;
+  onClearFilters: () => void;
 }) {
   if (isPending) {
     return view === 'list' ? <AssetListSkeleton /> : <AssetGridSkeleton />;
@@ -168,7 +201,17 @@ function AssetsBody({
   }
 
   if (!data || data.total === 0) {
-    return (
+    return hasActiveFilters ? (
+      <EmptyState
+        title="No assets match these filters"
+        description="Try clearing a filter or two, or the search text — nothing in this project's library fits all of them at once."
+        actions={
+          <Button variant="secondary" onClick={onClearFilters}>
+            Clear filters
+          </Button>
+        }
+      />
+    ) : (
       <EmptyState
         title="No assets yet"
         description="Upload production media or generate it from a workspace — every image, sound and file the project produces lands here."
