@@ -11,6 +11,14 @@
     // (see the root `engines`) is what supports it at runtime.
     "module": "nodenext",
     "moduleResolution": "nodenext",
+    // No `types` default here on purpose. TypeScript 6 dropped automatic
+    // inclusion of `node_modules/@types`, so every config that wants ambient
+    // globals — Node's `process`/`Buffer`/`node:*`, Vitest's bare `describe` —
+    // has to name them. `types` does not merge with an extended config, it
+    // replaces it, so a default set here would vanish silently from any
+    // workspace that declared a `types` of its own. Each workspace lists its
+    // own. Types reached through an import (`@types/pg` behind `pg`) are
+    // unaffected and must not be listed.
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,

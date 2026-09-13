@@ -9,6 +9,10 @@
     "noEmit": true,
     "declaration": false,
     "declarationMap": false,
+    // Node globals for `process.env` in `src/lib/env.ts` and for the config
+    // files this `include` picks up. React and Next types arrive through
+    // imports and through `next-env.d.ts`, so they are not listed here.
+    "types": ["node"],
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./src/*"]
