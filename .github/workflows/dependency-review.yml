@@ -1,0 +1,41 @@
+name: dependency-review
+
+# Fails a pull request that introduces a dependency with a known advisory.
+#
+# This deliberately reviews the *diff*, not the tree: the action compares the
+# dependency graph of the base and head commits and reports only what the pull
+# request adds. That is the difference between this and `pnpm audit`, which
+# reports the whole installed tree and so would fail every unrelated pull
+# request until each pre-existing advisory is resolved or suppressed. A gate
+# that fails on work the author did not do is a gate people learn to ignore.
+#
+# Because it needs two graphs to compare, it is meaningless on push — there is
+# no base — hence pull_request only.
+
+on:
+  pull_request:
+
+concurrency:
+  group: dependency-review-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  # comment-summary-in-pr writes the findings onto the pull request.
+  pull-requests: write
+
+jobs:
+  review:
+    name: Review dependency changes
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/dependency-review-action@v4
+        with:
+          # Moderate and below are reported in the summary but do not fail the
+          # run. Raising this to `moderate` is a one-word change if the noise
+          # turns out to be worth blocking on.
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
