@@ -136,6 +136,16 @@ export class AssetsController {
   ): Promise<Asset> {
     return this.assets.restore(projectId, assetId);
   }
+
+  /**
+   * Queues a thumbnail for every existing source image asset in the project
+   * that does not already have one (#176) — the catch-up for material
+   * uploaded before thumbnail generation existed.
+   */
+  @Post('backfill-thumbnails')
+  async backfillThumbnails(@Param('projectId') projectId: string): Promise<{ queued: number }> {
+    return { queued: await this.assets.backfillThumbnails(projectId) };
+  }
 }
 
 /**

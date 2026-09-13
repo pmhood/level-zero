@@ -442,7 +442,15 @@ export class InMemoryAssetRepository implements AssetRepository {
         return filter.includeArchived === true || asset.status !== 'archived';
       })
       .filter((asset) => !filter.kinds || filter.kinds.includes(asset.kind))
-      .filter((asset) => !filter.variants || filter.variants.includes(asset.variant))
+      .filter((asset) => {
+        // Mirrors the Postgres adapter's `buildAssetWhere`: a derivative
+        // (thumbnail, preview) is not a first-class list result unless the
+        // caller names a variant explicitly or asks for one source's own
+        // derivatives.
+        if (filter.variants) return filter.variants.includes(asset.variant);
+        if (filter.sourceAssetId) return true;
+        return asset.variant === 'source';
+      })
       .filter((asset) => !filter.sourceAssetId || asset.sourceAssetId === filter.sourceAssetId)
       .filter((asset) => !search || asset.filename.toLowerCase().includes(search))
       .filter(
@@ -634,6 +642,7 @@ export class InMemoryAssetLibraryReadModel implements AssetLibraryReadModel {
     );
 
     const linkedEntities = await this.linkedEntitiesByAsset(projectId, unpaged.items);
+    const thumbnails = await this.thumbnailsBySource(projectId);
 
     const summarized = unpaged.items.map((asset) => ({
       asset,
@@ -643,6 +652,7 @@ export class InMemoryAssetLibraryReadModel implements AssetLibraryReadModel {
         allMarks,
         selectionEntries.get(asset.id) ?? [],
         linkedEntities.get(asset.id)?.summary ?? emptyLinkedEntities(),
+        thumbnails.get(asset.id) ?? null,
       ),
     }));
 
@@ -693,6 +703,20 @@ export class InMemoryAssetLibraryReadModel implements AssetLibraryReadModel {
    * summary so `linkedEntityId` can filter on the whole set even when it
    * exceeds `ASSET_LINKED_ENTITIES_CAP`.
    */
+  /** Every source asset's generated thumbnail id (#176), keyed by source asset id. */
+  private async thumbnailsBySource(projectId: string): Promise<Map<string, string>> {
+    const { items: thumbnails } = await this.assets.listByProject(projectId, {
+      variants: ['thumbnail'],
+      includeArchived: true,
+    });
+
+    const bySource = new Map<string, string>();
+    for (const thumbnail of thumbnails) {
+      if (thumbnail.sourceAssetId) bySource.set(thumbnail.sourceAssetId, thumbnail.id);
+    }
+    return bySource;
+  }
+
   private async linkedEntitiesByAsset(
     projectId: string,
     assets: readonly Asset[],
@@ -759,6 +783,7 @@ function summarize(
   marks: readonly AssetMark[],
   selections: readonly AssetSelectionSummaryEntry[],
   linkedEntities: AssetLinkedEntitiesSummary,
+  thumbnailAssetId: string | null,
 ): AssetSummary {
   const matches = generations.filter((candidate) => candidate.outputAssetIds.includes(assetId));
   const winner = pickNewestOrigin(matches);
@@ -796,6 +821,7 @@ function summarize(
     selections: [...selections],
     approved: isApprovedInAnyContext(selections),
     linkedEntities,
+    thumbnailAssetId,
   };
 }
 

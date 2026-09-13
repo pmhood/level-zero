@@ -226,6 +226,7 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
         OBJECT_STORAGE,
         DOMAIN_DEPS,
         SearchIndexService,
+        JobService,
       ],
       useFactory: (
         assets: AssetRepository,
@@ -233,7 +234,8 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
         storage: ObjectStorageProvider,
         deps: EntityServiceDeps,
         search: SearchIndexService,
-      ): AssetService => new AssetService(assets, projects, storage, deps, search),
+        jobs: JobService,
+      ): AssetService => new AssetService(assets, projects, storage, deps, search, jobs),
     },
     {
       provide: ASSET_LIBRARY_READ_MODEL,

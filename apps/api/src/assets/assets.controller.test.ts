@@ -448,6 +448,7 @@ describe('asset library summaries', () => {
         selections: [],
         approved: false,
         linkedEntities: { entities: [], total: 0 },
+        thumbnailAssetId: null,
       },
     ]);
   });
@@ -475,6 +476,7 @@ describe('asset library summaries', () => {
         selections: [],
         approved: false,
         linkedEntities: { entities: [], total: 0 },
+        thumbnailAssetId: null,
       },
     ]);
   });

@@ -29,7 +29,8 @@ export function AssetGrid({ projectId, assets, summaries, selectedId, onSelect }
   return (
     <ul role="list" aria-label="Assets" className={GRID_CLASSNAME}>
       {assets.map((asset) => {
-        const badge = assetStatusBadge(asset, summaries.get(asset.id));
+        const summary = summaries.get(asset.id);
+        const badge = assetStatusBadge(asset, summary);
         return (
           <li key={asset.id}>
             <MediaCard
@@ -37,7 +38,7 @@ export function AssetGrid({ projectId, assets, summaries, selectedId, onSelect }
               selected={asset.id === selectedId}
               onClick={() => onSelect(asset)}
               ariaLabel={asset.filename}
-              media={<AssetPreview projectId={projectId} asset={asset} />}
+              media={<AssetPreview projectId={projectId} asset={asset} summary={summary} />}
               overlay={
                 badge && (
                   <StatusBadge

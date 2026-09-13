@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
 
+import { type JobService } from '../job/job-service';
 import { type ProjectRepository } from '../project/project-repository';
 import { type SearchIndexer } from '../search/search-indexer';
 import { type Clock } from '../shared/clock';
 import { ConflictError, NotFoundError } from '../shared/errors';
 import { type IdGenerator } from '../shared/id';
-import { normalizePaging } from '../shared/paging';
+import { MAX_PAGE_SIZE, normalizePaging } from '../shared/paging';
 import {
   archiveAsset,
   createAsset,
@@ -15,6 +16,7 @@ import {
   type AssetVariant,
 } from './asset';
 import { type AssetListFilter, type AssetPage, type AssetRepository } from './asset-repository';
+import { ASSET_THUMBNAIL_JOB_STEPS } from './asset-thumbnail-job';
 import { type ObjectStorageProvider } from './object-storage';
 
 export interface AssetServiceDeps {
@@ -57,6 +59,7 @@ export class AssetService {
     private readonly storage: ObjectStorageProvider,
     private readonly deps: AssetServiceDeps,
     private readonly search?: SearchIndexer,
+    private readonly jobs?: JobService,
   ) {}
 
   /**
@@ -104,7 +107,9 @@ export class AssetService {
         },
         this.deps,
       );
-      return await this.indexed(await this.assets.insert(asset));
+      const inserted = await this.assets.insert(asset);
+      await this.requestThumbnail(inserted);
+      return await this.indexed(inserted);
     } catch (error) {
       await this.storage.delete(storageKey).catch(() => undefined);
       throw error;
@@ -155,6 +160,68 @@ export class AssetService {
   private async indexed(asset: Asset): Promise<Asset> {
     await this.search?.assetChanged(asset);
     return asset;
+  }
+
+  /**
+   * Queues a thumbnail (and, where the source warrants it, a preview) for a
+   * freshly uploaded image (#176) — never for a derivative, so a thumbnail
+   * never gets a thumbnail of its own.
+   *
+   * Best-effort in the same sense as `indexed`: without a `JobService`, most
+   * tests and any caller that does not care, this is a no-op.
+   */
+  private async requestThumbnail(asset: Asset): Promise<void> {
+    if (!this.jobs || asset.variant !== 'source' || !asset.mimeType.startsWith('image/')) return;
+
+    await this.jobs.enqueue(asset.projectId, {
+      kind: 'thumbnail',
+      targetId: asset.id,
+      totalSteps: ASSET_THUMBNAIL_JOB_STEPS.length,
+    });
+  }
+
+  /**
+   * Queues a thumbnail for every existing source image asset in the project
+   * that does not already have one — the one-off catch-up #176's acceptance
+   * criteria asks for.
+   *
+   * Safe to run more than once: an asset that already has a thumbnail is
+   * left alone, so a second pass only picks up what the first missed (a
+   * project's later uploads, or a thumbnail job that failed for good).
+   */
+  async backfillThumbnails(projectId: string): Promise<number> {
+    const project = await this.projects.findById(projectId);
+    if (!project) throw new NotFoundError('Project', projectId);
+    if (!this.jobs) return 0;
+
+    let queued = 0;
+    for (let offset = 0; ; offset += MAX_PAGE_SIZE) {
+      const { items } = await this.assets.listByProject(projectId, {
+        variants: ['source'],
+        includeArchived: true,
+        limit: MAX_PAGE_SIZE,
+        offset,
+      });
+
+      for (const asset of items) {
+        if (!asset.mimeType.startsWith('image/')) continue;
+        if (await this.hasThumbnail(projectId, asset.id)) continue;
+        await this.requestThumbnail(asset);
+        queued += 1;
+      }
+
+      if (items.length < MAX_PAGE_SIZE) return queued;
+    }
+  }
+
+  private async hasThumbnail(projectId: string, sourceAssetId: string): Promise<boolean> {
+    const { items } = await this.assets.listByProject(projectId, {
+      sourceAssetId,
+      variants: ['thumbnail'],
+      includeArchived: true,
+      limit: 1,
+    });
+    return items.length > 0;
   }
 }
 

@@ -68,6 +68,7 @@ function summary(overrides: Partial<AssetSummary> = {}): AssetSummary {
     selections: [],
     approved: false,
     linkedEntities: { entities: [], total: 0 },
+    thumbnailAssetId: null,
     ...overrides,
   };
 }

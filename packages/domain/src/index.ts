@@ -210,6 +210,11 @@ export {
   type UploadAssetInput,
 } from './asset/asset-service';
 export {
+  ASSET_THUMBNAIL_JOB_STEPS,
+  PREVIEW_MAX_DIMENSION,
+  THUMBNAIL_MAX_DIMENSION,
+} from './asset/asset-thumbnail-job';
+export {
   ASSET_LINKED_ENTITIES_CAP,
   ASSET_ORIGINS,
   isApprovedInAnyContext,
