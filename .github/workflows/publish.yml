@@ -56,7 +56,7 @@ jobs:
             dockerfile: docker/Dockerfile.web
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # workflow_run starts from the default branch, not from the commit
           # that triggered CI — without this the images would be built from
