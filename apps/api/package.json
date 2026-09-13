@@ -36,7 +36,7 @@
     "@types/node": "^22.20.2",
     "@types/supertest": "^7.2.1",
     "supertest": "^7.1.1",
-    "typescript": "~5.9.3",
+    "typescript": "~6.0.3",
     "unplugin-swc": "^1.6.0",
     "vitest": "^5.0.0"
   }
