@@ -2,6 +2,7 @@ import {
   ASSET_KINDS,
   ASSET_MARK_KINDS,
   ASSET_ORIGINS,
+  ASSET_SELECTION_STATES,
   ASSET_SORT_DIRECTIONS,
   ASSET_SORT_FIELDS,
   ASSET_STATUSES,
@@ -9,6 +10,7 @@ import {
   type AssetKind,
   type AssetMarkKind,
   type AssetOrigin,
+  type AssetSelectionState,
   type AssetSortDirection,
   type AssetSortField,
   type AssetStatus,
@@ -134,9 +136,9 @@ export class ListAssetsQueryDto {
 
   /**
    * Opts into the joined library view: items come back with their
-   * `AssetSummary`. A summary-only filter (`origin` or `markKinds`) implies
-   * this, so a caller that only wants one of those filters doesn't also have
-   * to ask.
+   * `AssetSummary`. A summary-only filter (`origin`, `markKinds` or
+   * `selectionStates`) implies this, so a caller that only wants one of
+   * those filters doesn't also have to ask.
    */
   @IsOptional()
   @Transform(({ value }) => toBoolean(value))
@@ -154,6 +156,16 @@ export class ListAssetsQueryDto {
   @IsArray()
   @IsIn(ASSET_MARK_KINDS, { each: true })
   markKinds?: AssetMarkKind[];
+
+  /**
+   * Selection states to filter by. Asset matches when it has a *current*
+   * selection in one of these states, in any context.
+   */
+  @IsOptional()
+  @Transform(({ value }) => toStringArray(value))
+  @IsArray()
+  @IsIn(ASSET_SELECTION_STATES, { each: true })
+  selectionStates?: AssetSelectionState[];
 
   @IsOptional()
   @IsIn(ASSET_SORT_FIELDS)

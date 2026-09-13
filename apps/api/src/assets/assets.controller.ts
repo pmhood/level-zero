@@ -37,9 +37,9 @@ export class AssetsController {
   /**
    * Plain by default, matching every caller that just wants a page of
    * assets (`character-visuals`, `moodboard-rail`). `?summary=true`, or any
-   * summary-only filter such as `origin` or `markKinds`, switches to the joined
-   * library view so a grid can show a badge per tile without a follow-up query
-   * per tile.
+   * summary-only filter such as `origin`, `markKinds` or `selectionStates`,
+   * switches to the joined library view so a grid can show a badge per tile
+   * without a follow-up query per tile.
    */
   @Get()
   list(
@@ -65,12 +65,14 @@ export class AssetsController {
     if (
       query.summary ||
       query.origin !== undefined ||
-      (query.markKinds && query.markKinds.length > 0)
+      (query.markKinds && query.markKinds.length > 0) ||
+      (query.selectionStates && query.selectionStates.length > 0)
     ) {
       return this.library.list(projectId, {
         ...filter,
         origin: query.origin,
         markKinds: query.markKinds,
+        selectionStates: query.selectionStates,
       });
     }
 

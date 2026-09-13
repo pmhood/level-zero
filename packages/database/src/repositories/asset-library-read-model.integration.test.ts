@@ -1,6 +1,10 @@
 import {
+  ActivityService,
+  AssetSelectionService,
   AssetService,
+  EntityService,
   ProjectService,
+  ReviewTargetResolver,
   completeGeneration,
   createAssetMark,
   createGeneration,
@@ -20,11 +24,16 @@ import { type DatabaseClient } from '../postgres/client';
 import { assets as assetsTable } from '../schema/assets';
 import { countQueries } from '../testing/query-counter';
 import { connectTestDatabase, truncateDomainTables } from '../testing/test-database';
+import { DrizzleActivityRepository } from './activity-repository';
 import { buildLibraryWhere, DrizzleAssetLibraryReadModel } from './asset-library-read-model';
 import { DrizzleAssetMarkRepository } from './asset-mark-repository';
 import { DrizzleAssetRepository } from './asset-repository';
+import { DrizzleAssetSelectionRepository } from './asset-selection-repository';
+import { DrizzleEntityRepository } from './entity-repository';
+import { DrizzleEntityVersionRepository } from './entity-version-repository';
 import { DrizzleGenerationRepository } from './generation-repository';
 import { DrizzleProjectRepository } from './project-repository';
+import { DrizzlePrototypeVersionRepository } from './prototype-version-repository';
 
 const deps = { clock: systemClock, ids: uuidIdGenerator };
 
@@ -35,7 +44,9 @@ let generationRepo: DrizzleGenerationRepository;
 let markRepo: DrizzleAssetMarkRepository;
 let readModel: DrizzleAssetLibraryReadModel;
 let projects: ProjectService;
+let entities: EntityService;
 let assets: AssetService;
+let selections: AssetSelectionService;
 let storage: InMemoryObjectStorageProvider;
 
 beforeAll(async () => {
@@ -46,6 +57,23 @@ beforeAll(async () => {
   markRepo = new DrizzleAssetMarkRepository(client.db);
   readModel = new DrizzleAssetLibraryReadModel(client.db);
   projects = new ProjectService(projectRepo, deps);
+
+  const entityRepo = new DrizzleEntityRepository(client.db);
+  const activity = new ActivityService(new DrizzleActivityRepository(client.db), deps);
+  entities = new EntityService(entityRepo, projectRepo, activity, deps);
+
+  const targets = new ReviewTargetResolver(
+    entityRepo,
+    assetRepo,
+    new DrizzlePrototypeVersionRepository(client.db),
+    new DrizzleEntityVersionRepository(client.db),
+  );
+  selections = new AssetSelectionService(
+    new DrizzleAssetSelectionRepository(client.db),
+    markRepo,
+    targets,
+    deps,
+  );
 });
 
 afterAll(async () => {
@@ -138,7 +166,14 @@ describe('asset library read model', () => {
 
     expect(page.items.map((item) => item.id)).toEqual([asset.id]);
     expect(page.summaries).toEqual([
-      { assetId: asset.id, origin: 'imported', generation: null, markKinds: [] },
+      {
+        assetId: asset.id,
+        origin: 'imported',
+        generation: null,
+        markKinds: [],
+        selections: [],
+        approved: false,
+      },
     ]);
     expect(page.total).toBe(1);
   });
@@ -169,6 +204,8 @@ describe('asset library read model', () => {
           model: 'claude-image',
         },
         markKinds: [],
+        selections: [],
+        approved: false,
       },
     ]);
   });
@@ -507,6 +544,204 @@ describe('asset library read model', () => {
         readModel.listByProject(project.id, { limit: 20, markKinds: ['favorite'] }),
       );
       expect(largePage).toBe(smallPage);
+    });
+  });
+
+  describe('selections', () => {
+    it('reports an empty list and unapproved for an asset that was never selected', async () => {
+      const project = await seedProject('Deep Fathom');
+      const asset = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'reference.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+
+      const page = await readModel.listByProject(project.id, {});
+
+      expect(page.summaries[0]).toMatchObject({
+        assetId: asset.id,
+        selections: [],
+        approved: false,
+      });
+    });
+
+    it('reports an approval and a rejection for the same asset in different contexts, both true underneath one summary', async () => {
+      const project = await seedProject('Deep Fathom');
+      const diver = await entities.create(project.id, { type: 'character', name: 'The Diver' });
+      const wreck = await entities.create(project.id, { type: 'location', name: 'The Wreck' });
+      const asset = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'concept.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+
+      const portrait = { entityId: diver.id, purpose: 'portrait' };
+      const backdrop = { entityId: wreck.id, purpose: 'backdrop' };
+      await selections.approve(project.id, { assetId: asset.id, context: portrait, actor: 'ada' });
+      await selections.reject(project.id, { assetId: asset.id, context: backdrop, actor: 'ada' });
+
+      const page = await readModel.listByProject(project.id, {});
+      const summary = page.summaries.find((entry) => entry.assetId === asset.id);
+
+      expect(summary?.approved).toBe(true);
+      expect(summary?.selections).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ context: portrait, state: 'approved' }),
+          expect.objectContaining({ context: backdrop, state: 'rejected' }),
+        ]),
+      );
+      expect(summary?.selections).toHaveLength(2);
+
+      const approvedOnly = await readModel.listByProject(project.id, {
+        selectionStates: ['approved'],
+      });
+      expect(approvedOnly.items.map((item) => item.id)).toEqual([asset.id]);
+
+      const rejectedOnly = await readModel.listByProject(project.id, {
+        selectionStates: ['rejected'],
+      });
+      expect(rejectedOnly.items.map((item) => item.id)).toEqual([asset.id]);
+    });
+
+    /**
+     * The naive implementation this guards against: "does an approved row
+     * exist for this asset?" That query would still see `assetA`'s original
+     * approval — it is never deleted — and wrongly report it as currently
+     * approved and match the `approved` filter. Folding to the newest row
+     * per context first (what `hasSelectionInStates` and `selectionsFor` both
+     * do, via `latestSelectionByAsset`) is what makes `assetA` read as
+     * `superseded` instead, and drop out of the `approved` filter.
+     */
+    it('reports superseded, not approved, for an asset whose approval was replaced — and does not match the approved filter on it', async () => {
+      const project = await seedProject('Deep Fathom');
+      const diver = await entities.create(project.id, { type: 'character', name: 'The Diver' });
+      const context = { entityId: diver.id, purpose: 'portrait' };
+      const [assetA, assetB] = await Promise.all([
+        assets.upload(project.id, {
+          kind: 'image',
+          filename: 'a.png',
+          mimeType: 'image/png',
+          content: Buffer.from('a'),
+        }),
+        assets.upload(project.id, {
+          kind: 'image',
+          filename: 'b.png',
+          mimeType: 'image/png',
+          content: Buffer.from('b'),
+        }),
+      ]);
+
+      await selections.approve(project.id, { assetId: assetA!.id, context, actor: 'ada' });
+      await selections.approve(project.id, {
+        assetId: assetB!.id,
+        context,
+        actor: 'ada',
+        supersedes: [assetA!.id],
+      });
+
+      const page = await readModel.listByProject(project.id, {});
+      const summaryA = page.summaries.find((entry) => entry.assetId === assetA!.id);
+      const summaryB = page.summaries.find((entry) => entry.assetId === assetB!.id);
+
+      expect(summaryA?.selections).toEqual([
+        expect.objectContaining({ context, state: 'superseded' }),
+      ]);
+      expect(summaryA?.approved).toBe(false);
+      expect(summaryB?.selections).toEqual([
+        expect.objectContaining({ context, state: 'approved' }),
+      ]);
+      expect(summaryB?.approved).toBe(true);
+
+      const approvedOnly = await readModel.listByProject(project.id, {
+        selectionStates: ['approved'],
+      });
+      expect(approvedOnly.items.map((item) => item.id)).toEqual([assetB!.id]);
+      expect(approvedOnly.total).toBe(1);
+
+      const supersededOnly = await readModel.listByProject(project.id, {
+        selectionStates: ['superseded'],
+      });
+      expect(supersededOnly.items.map((item) => item.id)).toEqual([assetA!.id]);
+      expect(supersededOnly.total).toBe(1);
+    });
+
+    it('never reports another project selections', async () => {
+      const [a, b] = [await seedProject('A'), await seedProject('B')];
+      const [entityA, entityB] = await Promise.all([
+        entities.create(a.id, { type: 'character', name: 'A Character' }),
+        entities.create(b.id, { type: 'character', name: 'B Character' }),
+      ]);
+      const [assetA, assetB] = await Promise.all([
+        assets.upload(a.id, {
+          kind: 'image',
+          filename: 'a.png',
+          mimeType: 'image/png',
+          content: Buffer.from('a'),
+        }),
+        assets.upload(b.id, {
+          kind: 'image',
+          filename: 'b.png',
+          mimeType: 'image/png',
+          content: Buffer.from('b'),
+        }),
+      ]);
+      await selections.approve(a.id, {
+        assetId: assetA.id,
+        context: { entityId: entityA.id, purpose: 'portrait' },
+        actor: 'ada',
+      });
+      await selections.approve(b.id, {
+        assetId: assetB.id,
+        context: { entityId: entityB.id, purpose: 'portrait' },
+        actor: 'ada',
+      });
+
+      const pageA = await readModel.listByProject(a.id, { selectionStates: ['approved'] });
+      expect(pageA.items.map((item) => item.id)).toEqual([assetA.id]);
+      expect(pageA.total).toBe(1);
+
+      const pageB = await readModel.listByProject(b.id, { selectionStates: ['approved'] });
+      expect(pageB.items.map((item) => item.id)).toEqual([assetB.id]);
+      expect(pageB.total).toBe(1);
+    });
+
+    it('issues the same number of queries regardless of how many assets are on the page when filtering by selection state', async () => {
+      const project = await seedProject('Deep Fathom');
+      const diver = await entities.create(project.id, { type: 'character', name: 'The Diver' });
+      for (let i = 0; i < 20; i += 1) {
+        const asset = await assets.upload(project.id, {
+          kind: 'image',
+          filename: `asset-${i}.png`,
+          mimeType: 'image/png',
+          content: Buffer.from(String(i)),
+        });
+        // Every other asset is approved for the same context.
+        if (i % 2 === 0) {
+          await selections.approve(project.id, {
+            assetId: asset.id,
+            context: { entityId: diver.id, purpose: 'portrait' },
+            actor: 'ada',
+          });
+        }
+      }
+
+      const smallPage = await countQueries(client, () =>
+        readModel.listByProject(project.id, { limit: 5 }),
+      );
+      const largePage = await countQueries(client, () =>
+        readModel.listByProject(project.id, { limit: 20 }),
+      );
+      expect(largePage).toBe(smallPage);
+
+      const smallApproved = await countQueries(client, () =>
+        readModel.listByProject(project.id, { limit: 5, selectionStates: ['approved'] }),
+      );
+      const largeApproved = await countQueries(client, () =>
+        readModel.listByProject(project.id, { limit: 20, selectionStates: ['approved'] }),
+      );
+      expect(largeApproved).toBe(smallApproved);
     });
   });
 });

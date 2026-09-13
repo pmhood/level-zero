@@ -18,7 +18,13 @@ import {
   type AssetSortField,
 } from '../asset/asset-repository';
 import { referencedAssetId } from '../asset/asset-reference';
-import { pickNewestOrigin, type AssetSummary } from '../asset/asset-summary';
+import {
+  isApprovedInAnyContext,
+  pickNewestOrigin,
+  summarizeCurrentSelections,
+  type AssetSelectionSummaryEntry,
+  type AssetSummary,
+} from '../asset/asset-summary';
 import {
   type GetUrlOptions,
   type ObjectStorageProvider,
@@ -597,6 +603,7 @@ export class InMemoryAssetLibraryReadModel implements AssetLibraryReadModel {
     private readonly assets: AssetRepository,
     private readonly generations: GenerationRepository,
     private readonly marks: AssetMarkRepository,
+    private readonly selections: AssetSelectionRepository,
   ) {}
 
   async listByProject(projectId: string, filter: AssetLibraryFilter): Promise<AssetLibraryPage> {
@@ -608,9 +615,23 @@ export class InMemoryAssetLibraryReadModel implements AssetLibraryReadModel {
     const { items: allGenerations } = await this.generations.listByProject(projectId, {});
     const allMarks = await this.marks.listByProject(projectId);
 
+    // One `listByAsset` per asset rather than a project-wide read: the port
+    // has no such method (nothing else needs one), and this is a test
+    // double, not the query-count-sensitive path — that guarantee is the
+    // Postgres adapter's, covered by its own integration test.
+    const selectionEntries = new Map(
+      await Promise.all(
+        unpaged.items.map(async (asset) => {
+          const rows = await this.selections.listByAsset(projectId, asset.id);
+          const summarized = summarizeCurrentSelections(rows);
+          return [asset.id, summarized.get(asset.id) ?? []] as const;
+        }),
+      ),
+    );
+
     const summarized = unpaged.items.map((asset) => ({
       asset,
-      summary: summarize(asset.id, allGenerations, allMarks),
+      summary: summarize(asset.id, allGenerations, allMarks, selectionEntries.get(asset.id) ?? []),
     }));
 
     let filtered = filter.origin
@@ -620,6 +641,14 @@ export class InMemoryAssetLibraryReadModel implements AssetLibraryReadModel {
     if (filter.markKinds && filter.markKinds.length > 0) {
       filtered = filtered.filter((entry) =>
         filter.markKinds!.some((kind) => entry.summary.markKinds.includes(kind)),
+      );
+    }
+
+    if (filter.selectionStates && filter.selectionStates.length > 0) {
+      filtered = filtered.filter((entry) =>
+        entry.summary.selections.some((selection) =>
+          filter.selectionStates!.includes(selection.state),
+        ),
       );
     }
 
@@ -639,6 +668,7 @@ function summarize(
   assetId: string,
   generations: readonly Generation[],
   marks: readonly AssetMark[],
+  selections: readonly AssetSelectionSummaryEntry[],
 ): AssetSummary {
   const matches = generations.filter((candidate) => candidate.outputAssetIds.includes(assetId));
   const winner = pickNewestOrigin(matches);
@@ -670,7 +700,12 @@ function summarize(
         generation: null,
       };
 
-  return { ...baseSummary, markKinds };
+  return {
+    ...baseSummary,
+    markKinds,
+    selections: [...selections],
+    approved: isApprovedInAnyContext(selections),
+  };
 }
 
 /**

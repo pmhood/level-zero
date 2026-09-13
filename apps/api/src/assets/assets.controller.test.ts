@@ -14,6 +14,7 @@ import {
   InMemoryAssetLibraryReadModel,
   InMemoryAssetMarkRepository,
   InMemoryAssetRepository,
+  InMemoryAssetSelectionRepository,
   InMemoryGenerationRepository,
   InMemoryObjectStorageProvider,
   InMemoryProjectRepository,
@@ -43,10 +44,11 @@ beforeEach(async () => {
   const storage = new InMemoryObjectStorageProvider();
   generations = new InMemoryGenerationRepository();
   const marks = new InMemoryAssetMarkRepository();
+  const selections = new InMemoryAssetSelectionRepository();
   projectService = new ProjectService(projects, deps);
   const assetService = new AssetService(assets, projects, storage, deps);
   const libraryService = new AssetLibraryService(
-    new InMemoryAssetLibraryReadModel(assets, generations, marks),
+    new InMemoryAssetLibraryReadModel(assets, generations, marks, selections),
   );
 
   const moduleRef = await Test.createTestingModule({
@@ -399,7 +401,14 @@ describe('asset library summaries', () => {
       .expect(200);
 
     expect(response.body.summaries).toEqual([
-      { assetId, origin: 'imported', generation: null, markKinds: [] },
+      {
+        assetId,
+        origin: 'imported',
+        generation: null,
+        markKinds: [],
+        selections: [],
+        approved: false,
+      },
     ]);
   });
 
@@ -423,6 +432,8 @@ describe('asset library summaries', () => {
           model: 'claude',
         },
         markKinds: [],
+        selections: [],
+        approved: false,
       },
     ]);
   });
