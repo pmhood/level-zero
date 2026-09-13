@@ -3,6 +3,7 @@ import type {
   ApproveAssetResult,
   Asset,
   AssetKind,
+  AssetLibraryPage,
   AssetMark,
   AssetMarkKind,
   AssetSelection,
@@ -444,6 +445,27 @@ export interface ListAssetsParams {
  */
 export function listAssets(projectId: string, params: ListAssetsParams = {}): Promise<AssetPage> {
   return apiFetch(`/api/projects/${projectId}/assets${toQueryString(params)}`);
+}
+
+export interface ListAssetLibraryParams {
+  includeArchived?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * The asset library's joined read model (#169/#170): the same project-scoped
+ * page `listAssets` returns, plus one `AssetSummary` per item — in the same
+ * order — so a grid or table can show a badge without a follow-up request
+ * per tile. `summary=true` is what switches the API over to this view.
+ */
+export function listAssetLibrary(
+  projectId: string,
+  params: ListAssetLibraryParams = {},
+): Promise<AssetLibraryPage> {
+  return apiFetch(
+    `/api/projects/${projectId}/assets${toQueryString({ ...params, summary: true })}`,
+  );
 }
 
 /**

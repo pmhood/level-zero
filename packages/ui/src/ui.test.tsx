@@ -7,10 +7,13 @@ import { Button } from './button';
 import { cn } from './cn';
 import { EmptyState } from './empty-state';
 import { EntityCard } from './entity-card';
+import { MediaCard, MediaCardSkeleton } from './media-card';
 import { PromoteAction } from './promote-action';
 import { StatusBadge } from './status-badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './table';
 import { Tabs } from './tabs';
 import { Tag } from './tag';
+import { ViewSwitcher, type ViewSwitcherItem } from './view-switcher';
 
 describe('cn', () => {
   it('joins conditional class names', () => {
@@ -199,6 +202,107 @@ describe('EntityCard', () => {
     expect(card.className).toContain('border-primary');
     expect(screen.getByText('Draft')).not.toBeNull();
     expect(screen.getByText('Sci-Fi')).not.toBeNull();
+  });
+});
+
+describe('MediaCard', () => {
+  it('calls onClick and reflects the selected state, with the overlay over the media', () => {
+    const onClick = vi.fn();
+    render(
+      <MediaCard
+        aspect="square"
+        media={<img src="/kael.png" alt="" />}
+        overlay={<StatusBadge tone="success">Approved</StatusBadge>}
+        title="Kael Salvage Suit"
+        subtitle="Image"
+        meta="2h ago"
+        selected
+        onClick={onClick}
+        ariaLabel="Kael Salvage Suit"
+      />,
+    );
+
+    const card = screen.getByRole('button', { name: 'Kael Salvage Suit' });
+    card.click();
+
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(card.className).toContain('border-primary');
+    expect(screen.getByText('Approved')).not.toBeNull();
+    expect(screen.getByText('2h ago')).not.toBeNull();
+  });
+
+  it('renders as a plain container rather than a button when there is nothing to click', () => {
+    render(<MediaCard media={<div />} title="Reference plate" />);
+
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(screen.getByText('Reference plate')).not.toBeNull();
+  });
+});
+
+describe('MediaCardSkeleton', () => {
+  it('is a placeholder, so it is hidden from assistive technology', () => {
+    const { container } = render(<MediaCardSkeleton />);
+
+    expect(container.firstElementChild?.getAttribute('aria-hidden')).toBe('true');
+  });
+});
+
+describe('Table', () => {
+  it('renders rows and cells, and highlights the selected one', () => {
+    const onClick = vi.fn();
+    render(
+      <Table aria-label="Assets">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Filename</TableHead>
+            <TableHead>Kind</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          <TableRow selected onClick={onClick}>
+            <TableCell>kael-suit.png</TableCell>
+            <TableCell>Image</TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>,
+    );
+
+    expect(screen.getByRole('columnheader', { name: 'Filename' })).not.toBeNull();
+    const row = screen.getByText('kael-suit.png').closest('tr')!;
+    expect(row.getAttribute('aria-selected')).toBe('true');
+
+    row.click();
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+});
+
+describe('ViewSwitcher', () => {
+  const items: ViewSwitcherItem<'grid' | 'list' | 'pipeline'>[] = [
+    { value: 'grid', label: 'Grid', icon: <span /> },
+    { value: 'list', label: 'List', icon: <span /> },
+    { value: 'pipeline', label: 'Pipeline', icon: <span />, disabled: true },
+  ];
+
+  it('marks the active position and switches on click', () => {
+    const onChange = vi.fn();
+    render(<ViewSwitcher label="Asset views" items={items} value="grid" onChange={onChange} />);
+
+    expect(screen.getByRole('group', { name: 'Asset views' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Grid' }).getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'List' }));
+    expect(onChange).toHaveBeenCalledWith('list');
+  });
+
+  it('disables a reserved position rather than omitting it', () => {
+    const onChange = vi.fn();
+    render(<ViewSwitcher label="Asset views" items={items} value="grid" onChange={onChange} />);
+
+    const pipeline = screen.getByRole('button', { name: 'Pipeline' }) as HTMLButtonElement;
+    expect(pipeline.disabled).toBe(true);
+
+    fireEvent.click(pipeline);
+    expect(onChange).not.toHaveBeenCalled();
   });
 });
 
