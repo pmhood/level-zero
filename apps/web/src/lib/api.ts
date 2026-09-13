@@ -437,6 +437,8 @@ export interface ListAssetsParams {
   kind?: AssetKind[];
   status?: AssetStatus[];
   search?: string;
+  /** The asset a derivative was made from — thumbnails and previews of one file. */
+  sourceAssetId?: string;
   includeArchived?: boolean;
   limit?: number;
   offset?: number;
@@ -511,6 +513,22 @@ export function getAsset(projectId: string, assetId: string): Promise<Asset> {
 /** The asset's bytes, streamed by the API — usable directly as an `<img src>`. */
 export function assetContentUrl(projectId: string, assetId: string): string {
   return `${env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/assets/${assetId}/content`;
+}
+
+/**
+ * The same bytes, asked for as a file: the API answers with a
+ * `Content-Disposition`, so the browser saves it rather than navigating to it.
+ */
+export function assetDownloadUrl(projectId: string, assetId: string): string {
+  return `${assetContentUrl(projectId, assetId)}?download=true`;
+}
+
+export function archiveAsset(projectId: string, assetId: string): Promise<Asset> {
+  return post(`/api/projects/${projectId}/assets/${assetId}/archive`);
+}
+
+export function restoreAsset(projectId: string, assetId: string): Promise<Asset> {
+  return post(`/api/projects/${projectId}/assets/${assetId}/restore`);
 }
 
 // --- Generations ----------------------------------------------------------

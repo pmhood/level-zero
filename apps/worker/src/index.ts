@@ -50,6 +50,7 @@ import { createConsistencyScanJobHandler } from './consistency-scan-job';
 import { createGenerationJobHandler } from './generation-job';
 import { createWorkerRuntime, type WorkerProbe } from './runtime';
 import { createSearchIndexJobHandler } from './search-index-job';
+import { createThumbnailJobHandler } from './thumbnail-job';
 
 async function main(): Promise<void> {
   loadDotEnv(__dirname);
@@ -106,6 +107,7 @@ async function main(): Promise<void> {
     new LocalObjectStorageProvider({ rootDir: env.STORAGE_LOCAL_ROOT }),
     deps,
     search,
+    jobs,
   );
   const generations = new GenerationService(
     generationRepository,
@@ -155,6 +157,7 @@ async function main(): Promise<void> {
       logger: console,
     }),
     search_index: createSearchIndexJobHandler({ jobs, search, logger: console }),
+    thumbnail: createThumbnailJobHandler({ jobs, assets: assetService, logger: console }),
     consistency_scan: createConsistencyScanJobHandler({
       jobs,
       consistency,

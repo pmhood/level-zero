@@ -71,11 +71,12 @@ export class DrizzleAssetLibraryReadModel implements AssetLibraryReadModel {
     ]);
 
     const assetIds = rows.map((row) => row.id);
-    const [origins, marks, selections, linkedEntities] = await Promise.all([
+    const [origins, marks, selections, linkedEntities, thumbnails] = await Promise.all([
       this.originsFor(projectId, assetIds),
       this.marksFor(projectId, assetIds),
       this.selectionsFor(projectId, assetIds),
       this.linkedEntitiesFor(projectId, assetIds),
+      this.thumbnailsFor(projectId, assetIds),
     ]);
 
     return {
@@ -90,10 +91,37 @@ export class DrizzleAssetLibraryReadModel implements AssetLibraryReadModel {
           selections: entries,
           approved: isApprovedInAnyContext(entries),
           linkedEntities: linkedEntities.get(row.id) ?? { entities: [], total: 0 },
+          thumbnailAssetId: thumbnails.get(row.id) ?? null,
         };
       }),
       total: totals?.value ?? 0,
     };
+  }
+
+  /**
+   * The page's generated thumbnails (#176), keyed by source asset id. One
+   * query for the whole page, not one per asset: every `thumbnail` variant
+   * in the project whose `sourceAssetId` is on this page.
+   */
+  private async thumbnailsFor(projectId: string, assetIds: string[]): Promise<Map<string, string>> {
+    const bySource = new Map<string, string>();
+    if (assetIds.length === 0) return bySource;
+
+    const rows = await this.db
+      .select({ id: assets.id, sourceAssetId: assets.sourceAssetId })
+      .from(assets)
+      .where(
+        and(
+          eq(assets.projectId, projectId),
+          eq(assets.variant, 'thumbnail'),
+          inArray(assets.sourceAssetId, assetIds),
+        ),
+      );
+
+    for (const row of rows) {
+      if (row.sourceAssetId) bySource.set(row.sourceAssetId, row.id);
+    }
+    return bySource;
   }
 
   /**
@@ -106,11 +134,20 @@ export class DrizzleAssetLibraryReadModel implements AssetLibraryReadModel {
     projectId: string,
     assetIds: string[],
   ): Promise<
-    Map<string, Omit<AssetSummary, 'markKinds' | 'selections' | 'approved' | 'linkedEntities'>>
+    Map<
+      string,
+      Omit<
+        AssetSummary,
+        'markKinds' | 'selections' | 'approved' | 'linkedEntities' | 'thumbnailAssetId'
+      >
+    >
   > {
     const summaries = new Map<
       string,
-      Omit<AssetSummary, 'markKinds' | 'selections' | 'approved' | 'linkedEntities'>
+      Omit<
+        AssetSummary,
+        'markKinds' | 'selections' | 'approved' | 'linkedEntities' | 'thumbnailAssetId'
+      >
     >();
     if (assetIds.length === 0) return summaries;
 
@@ -294,7 +331,10 @@ export class DrizzleAssetLibraryReadModel implements AssetLibraryReadModel {
 
 function importedSummary(
   assetId: string,
-): Omit<AssetSummary, 'markKinds' | 'selections' | 'approved' | 'linkedEntities'> {
+): Omit<
+  AssetSummary,
+  'markKinds' | 'selections' | 'approved' | 'linkedEntities' | 'thumbnailAssetId'
+> {
   return { assetId, origin: 'imported', generation: null };
 }
 

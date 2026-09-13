@@ -69,7 +69,8 @@ export interface AssetLinkedEntitiesSummary {
  * The facts about an asset that don't live on the `assets` row itself,
  * joined in from the aggregates that record them — one flat field per facet.
  * #170 landed `origin`, #200 added `markKinds`, #201 added
- * `selections`/`approved`, and this issue (#202) adds `linkedEntities`.
+ * `selections`/`approved`, #202 added `linkedEntities`, and this issue
+ * (#176) adds `thumbnailAssetId`.
  */
 export interface AssetSummary {
   assetId: string;
@@ -98,6 +99,14 @@ export interface AssetSummary {
    * it relates to nothing.
    */
   linkedEntities: AssetLinkedEntitiesSummary;
+  /**
+   * The id of this asset's generated thumbnail (#176), when it has one. Null
+   * covers every reason it might not: the thumbnail job has not finished
+   * yet, this kind of asset never gets one, or the upload predates the
+   * backfill — the grid falls back to the source's own bytes in every case,
+   * so null is the normal path here, not an error one.
+   */
+  thumbnailAssetId: string | null;
 }
 
 /** Project-wide "approved": true when the asset is approved in at least one context. */

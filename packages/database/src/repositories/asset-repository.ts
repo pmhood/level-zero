@@ -94,6 +94,12 @@ export function buildAssetWhere(projectId: string, filter: AssetListFilter): SQL
 
   if (filter.variants?.length) {
     conditions.push(inArray(assets.variant, [...filter.variants]));
+  } else if (!filter.sourceAssetId) {
+    // A derivative (thumbnail, preview) is not a first-class list result —
+    // the library and every asset picker see only sources — unless the
+    // caller names a variant explicitly or is asking for one source's own
+    // derivatives via `sourceAssetId` below.
+    conditions.push(eq(assets.variant, 'source'));
   }
 
   if (filter.sourceAssetId) {

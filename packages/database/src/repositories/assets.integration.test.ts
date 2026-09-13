@@ -215,6 +215,52 @@ describe('project scoping', () => {
 
     await expect(assets.archive(b.id, asset.id)).rejects.toThrow(NotFoundError);
   });
+
+  it('never creates a derivative naming a source from a different project (#176)', async () => {
+    const [a, b] = [await seedProject('A'), await seedProject('B')];
+    const source = await assets.upload(a.id, {
+      kind: 'image',
+      filename: 'kael.png',
+      mimeType: 'image/png',
+      content: Buffer.from('x'),
+    });
+
+    await expect(
+      assets.upload(b.id, {
+        kind: 'image',
+        filename: 'kael-thumb.png',
+        mimeType: 'image/webp',
+        content: Buffer.from('thumb bytes'),
+        variant: 'thumbnail',
+        sourceAssetId: source.id,
+      }),
+    ).rejects.toThrow(NotFoundError);
+  });
+
+  it('always scopes a derivative to the same project as its source (#176)', async () => {
+    const project = await seedProject('Deep Fathom');
+    const source = await assets.upload(project.id, {
+      kind: 'image',
+      filename: 'kael.png',
+      mimeType: 'image/png',
+      content: Buffer.from('source bytes'),
+    });
+
+    const thumbnail = await assets.upload(project.id, {
+      kind: 'image',
+      filename: 'kael-thumb.png',
+      mimeType: 'image/webp',
+      content: Buffer.from('thumb bytes'),
+      variant: 'thumbnail',
+      sourceAssetId: source.id,
+    });
+
+    expect(thumbnail.projectId).toBe(source.projectId);
+    await expect(assetRepo.findById(project.id, thumbnail.id)).resolves.toMatchObject({
+      projectId: project.id,
+      sourceAssetId: source.id,
+    });
+  });
 });
 
 describe('retrieval', () => {

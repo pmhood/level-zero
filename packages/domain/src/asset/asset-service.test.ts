@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { JobService } from '../job/job-service';
 import { createProject } from '../project/project';
 import { fixedClock } from '../shared/clock';
 import { ConflictError, NotFoundError, ValidationError } from '../shared/errors';
 import { sequentialIdGenerator } from '../shared/id';
 import {
   InMemoryAssetRepository,
+  InMemoryJobEvents,
+  InMemoryJobQueue,
+  InMemoryJobRepository,
   InMemoryObjectStorageProvider,
   InMemoryProjectRepository,
 } from '../testing';
@@ -106,6 +110,17 @@ describe('upload', () => {
     ).rejects.toThrow(NotFoundError);
   });
 
+  it('rejects a derivative whose declared source belongs to a different project', async () => {
+    const otherProject = await projects.insert(
+      createProject({ name: 'Sky Wreck' }, { clock, ids: sequentialIdGenerator('project-b') }),
+    );
+    const source = await service.upload(otherProject.id, uploadInput());
+
+    await expect(
+      service.upload(projectId, uploadInput({ variant: 'thumbnail', sourceAssetId: source.id })),
+    ).rejects.toThrow(NotFoundError);
+  });
+
   it('cleans up the uploaded object when the metadata insert fails', async () => {
     let putKey: string | undefined;
     const observedStorage: ObjectStorageProvider = {
@@ -135,6 +150,115 @@ describe('upload', () => {
 
     expect(putKey).toBeDefined();
     await expect(observedStorage.get(putKey!)).rejects.toThrow(NotFoundError);
+  });
+});
+
+describe('thumbnails', () => {
+  let queue: InMemoryJobQueue;
+  let withJobs: AssetService;
+
+  beforeEach(() => {
+    queue = new InMemoryJobQueue();
+    const jobs = new JobService(
+      new InMemoryJobRepository(),
+      projects,
+      queue,
+      new InMemoryJobEvents(),
+      { clock, ids: sequentialIdGenerator('job') },
+    );
+    withJobs = new AssetService(
+      assets,
+      projects,
+      storage,
+      { clock, ids: sequentialIdGenerator('asset') },
+      undefined,
+      jobs,
+    );
+  });
+
+  it('queues a thumbnail job for an uploaded image', async () => {
+    const asset = await withJobs.upload(projectId, uploadInput());
+
+    expect(queue.enqueued).toMatchObject([{ kind: 'thumbnail', targetId: asset.id, projectId }]);
+  });
+
+  it('does not queue a thumbnail for a non-image upload', async () => {
+    await withJobs.upload(projectId, uploadInput({ kind: 'export', mimeType: 'application/pdf' }));
+
+    expect(queue.enqueued).toHaveLength(0);
+  });
+
+  it('does not queue a thumbnail for a derivative, so a thumbnail never gets a thumbnail of its own', async () => {
+    const source = await withJobs.upload(projectId, uploadInput());
+    queue.enqueued.length = 0;
+
+    await withJobs.upload(
+      projectId,
+      uploadInput({ variant: 'thumbnail', sourceAssetId: source.id }),
+    );
+
+    expect(queue.enqueued).toHaveLength(0);
+  });
+
+  it('does nothing when no job service is wired up', async () => {
+    await expect(service.upload(projectId, uploadInput())).resolves.toBeTruthy();
+  });
+});
+
+describe('backfilling thumbnails', () => {
+  let queue: InMemoryJobQueue;
+  let withJobs: AssetService;
+
+  beforeEach(() => {
+    queue = new InMemoryJobQueue();
+    const jobs = new JobService(
+      new InMemoryJobRepository(),
+      projects,
+      queue,
+      new InMemoryJobEvents(),
+      { clock, ids: sequentialIdGenerator('job') },
+    );
+    withJobs = new AssetService(
+      assets,
+      projects,
+      storage,
+      { clock, ids: sequentialIdGenerator('asset') },
+      undefined,
+      jobs,
+    );
+  });
+
+  it('queues a thumbnail for every existing source image that has none yet', async () => {
+    const withThumbnail = await withJobs.upload(projectId, uploadInput());
+    await withJobs.upload(
+      projectId,
+      uploadInput({
+        filename: 'existing-thumb.png',
+        variant: 'thumbnail',
+        sourceAssetId: withThumbnail.id,
+      }),
+    );
+    const withoutThumbnail = await withJobs.upload(
+      projectId,
+      uploadInput({ filename: 'needs-a-thumbnail.png' }),
+    );
+    await withJobs.upload(projectId, uploadInput({ kind: 'export', mimeType: 'application/pdf' }));
+    queue.enqueued.length = 0;
+
+    const queued = await withJobs.backfillThumbnails(projectId);
+
+    expect(queued).toBe(1);
+    expect(queue.enqueued).toMatchObject([{ kind: 'thumbnail', targetId: withoutThumbnail.id }]);
+  });
+
+  it('is a no-op without a job service', async () => {
+    await service.upload(projectId, uploadInput());
+
+    await expect(service.backfillThumbnails(projectId)).resolves.toBe(0);
+  });
+
+  it('rejects a project that does not exist', async () => {
+    await expect(withJobs.backfillThumbnails('missing')).rejects.toThrow(NotFoundError);
   });
 });
 

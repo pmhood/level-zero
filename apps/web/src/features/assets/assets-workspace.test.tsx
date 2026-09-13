@@ -24,6 +24,24 @@ vi.mock('@/lib/api', () => ({
   getEntity: vi.fn(),
   assetContentUrl: (projectId: string, assetId: string) =>
     `https://api.test/projects/${projectId}/assets/${assetId}/content`,
+  assetDownloadUrl: (projectId: string, assetId: string) =>
+    `https://api.test/projects/${projectId}/assets/${assetId}/content?download=true`,
+  // Read by the inspector the moment a tile is selected.
+  listGenerationsForAsset: vi.fn(),
+  listGenerations: vi.fn(),
+  getGeneration: vi.fn(),
+  getGenerationProvenance: vi.fn(),
+  getAsset: vi.fn(),
+  listAssets: vi.fn(),
+  archiveAsset: vi.fn(),
+  restoreAsset: vi.fn(),
+  listAssetSelectionsForAsset: vi.fn(),
+  getAssetSelectionSummary: vi.fn(),
+  listAssetMarks: vi.fn(),
+  approveAssetSelection: vi.fn(),
+  rejectAssetSelection: vi.fn(),
+  markAsset: vi.fn(),
+  unmarkAsset: vi.fn(),
 }));
 
 const api = await import('@/lib/api');
@@ -61,6 +79,7 @@ function summary(overrides: Partial<AssetSummary> = {}): AssetSummary {
     selections: [],
     approved: false,
     linkedEntities: { entities: [], total: 0 },
+    thumbnailAssetId: null,
     ...overrides,
   };
 }
@@ -93,6 +112,11 @@ describe('Assets workspace', () => {
     vi.mocked(api.listAssetLibrary).mockResolvedValue(libraryPage([], []));
     vi.mocked(api.listEntities).mockResolvedValue({ items: [], total: 0 });
     vi.mocked(api.getEntity).mockRejectedValue(new Error('not found'));
+    vi.mocked(api.listGenerationsForAsset).mockResolvedValue({ items: [], total: 0 });
+    vi.mocked(api.listGenerations).mockResolvedValue({ items: [], total: 0 });
+    vi.mocked(api.listAssets).mockResolvedValue({ items: [], total: 0 });
+    vi.mocked(api.listAssetSelectionsForAsset).mockResolvedValue([]);
+    vi.mocked(api.listAssetMarks).mockResolvedValue([]);
   });
 
   afterEach(cleanup);
@@ -245,6 +269,20 @@ describe('Assets workspace', () => {
 
     fireEvent.click(tile);
     expect(tile.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('opens the inspector beside the grid for the selected asset, and closes it again', async () => {
+    vi.mocked(api.listAssetLibrary).mockResolvedValue(libraryPage([asset()], [summary()]));
+
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: 'kael-suit.png' }));
+
+    const inspector = await screen.findByRole('complementary');
+    expect(within(inspector).getByRole('heading', { name: 'kael-suit.png' })).toBeDefined();
+    expect(within(inspector).getByRole('tab', { name: 'Overview' })).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close inspector' }));
+    expect(screen.queryByRole('complementary')).toBeNull();
   });
 
   it('pages server-side rather than slicing a fetched list on the client', async () => {

@@ -222,6 +222,29 @@ describe('retrieving an asset', () => {
 
     expect(response.headers['content-type']).toContain('image/png');
     expect(response.body).toEqual(Buffer.from('pretend png bytes'));
+    // No disposition unless one is asked for: this URL is also an `<img src>`.
+    expect(response.headers['content-disposition']).toBeUndefined();
+  });
+
+  it('asks the browser to save the file when the download flag is set', async () => {
+    const created = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'kael dräkt.png',
+        mimeType: 'image/png',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+
+    const response = await http()
+      .get(`/api/projects/${project.id}/assets/${created.body.id}/content?download=true`)
+      .expect(200);
+
+    expect(response.headers['content-disposition']).toBe(
+      `attachment; filename="kael dr_kt.png"; filename*=UTF-8''kael%20dr%C3%A4kt.png`,
+    );
+    expect(response.body).toEqual(Buffer.from('pretend png bytes'));
   });
 
   it('never lists another project assets', async () => {
@@ -425,6 +448,7 @@ describe('asset library summaries', () => {
         selections: [],
         approved: false,
         linkedEntities: { entities: [], total: 0 },
+        thumbnailAssetId: null,
       },
     ]);
   });
@@ -452,6 +476,7 @@ describe('asset library summaries', () => {
         selections: [],
         approved: false,
         linkedEntities: { entities: [], total: 0 },
+        thumbnailAssetId: null,
       },
     ]);
   });

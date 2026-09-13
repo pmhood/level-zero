@@ -40,8 +40,13 @@ export type JobStatus = (typeof JOB_STATUSES)[number];
  * docs/decisions/consistency-findings.md §8) — a project-wide read plus a
  * batch of writes, queued on demand only and never as a side effect of an
  * ordinary write, the way `search_index` is.
+ *
+ * `thumbnail` generates a source image's thumbnail (and, when downscaling
+ * actually helps, a preview) as derivative `Asset` rows — queued whenever an
+ * image is uploaded or produced by a generation, never for a derivative
+ * itself (#176).
  */
-export const JOB_KINDS = ['generation', 'search_index', 'consistency_scan'] as const;
+export const JOB_KINDS = ['generation', 'search_index', 'consistency_scan', 'thumbnail'] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 
 /**

@@ -205,6 +205,7 @@ describe('asset library read model', () => {
         selections: [],
         approved: false,
         linkedEntities: { entities: [], total: 0 },
+        thumbnailAssetId: null,
       },
     ]);
     expect(page.total).toBe(1);
@@ -239,8 +240,32 @@ describe('asset library read model', () => {
         selections: [],
         approved: false,
         linkedEntities: { entities: [], total: 0 },
+        thumbnailAssetId: null,
       },
     ]);
+  });
+
+  it("carries a source's thumbnail id and excludes the thumbnail as a row of its own (#176)", async () => {
+    const project = await seedProject('Deep Fathom');
+    const source = await assets.upload(project.id, {
+      kind: 'image',
+      filename: 'portrait.png',
+      mimeType: 'image/png',
+      content: Buffer.from('a'),
+    });
+    const thumbnail = await assets.upload(project.id, {
+      kind: 'image',
+      filename: 'portrait-thumb.webp',
+      mimeType: 'image/webp',
+      content: Buffer.from('thumb'),
+      variant: 'thumbnail',
+      sourceAssetId: source.id,
+    });
+
+    const page = await readModel.listByProject(project.id, {});
+
+    expect(page.items.map((item) => item.id)).toEqual([source.id]);
+    expect(page.summaries[0]?.thumbnailAssetId).toBe(thumbnail.id);
   });
 
   it('reports the most recently created generation deterministically when more than one produced the asset', async () => {
