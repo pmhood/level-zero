@@ -72,9 +72,6 @@ importers:
       class-validator:
         specifier: ^0.15.1
         version: 0.15.1
-      express:
-        specifier: ^5.0.0
-        version: 5.2.1
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2

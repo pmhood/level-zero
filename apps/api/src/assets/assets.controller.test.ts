@@ -25,10 +25,10 @@ import {
   InMemoryObjectStorageProvider,
   InMemoryProjectRepository,
 } from '@level-zero/domain/testing';
-import { ValidationPipe, type INestApplication } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
+import { type NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
-import { json, urlencoded } from 'express';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -39,7 +39,7 @@ import { AssetsController } from './assets.controller';
 
 const clock = fixedClock('2026-03-01T09:00:00.000Z');
 
-let app: INestApplication;
+let app: NestExpressApplication;
 let projectService: ProjectService;
 let generations: InMemoryGenerationRepository;
 let entities: InMemoryEntityRepository;
@@ -82,9 +82,9 @@ beforeEach(async () => {
 
   // Mirrors main.ts's bootstrap so this suite exercises the raised limit
   // (#174) rather than Nest's 100kb-JSON default.
-  app = moduleRef.createNestApplication({ bodyParser: false });
-  app.use(json({ limit: MAX_JSON_BODY_BYTES }));
-  app.use(urlencoded({ extended: true, limit: MAX_JSON_BODY_BYTES }));
+  app = moduleRef.createNestApplication<NestExpressApplication>({ bodyParser: false });
+  app.useBodyParser('json', { limit: MAX_JSON_BODY_BYTES });
+  app.useBodyParser('urlencoded', { limit: MAX_JSON_BODY_BYTES, extended: true });
   app.setGlobalPrefix('api');
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.init();
