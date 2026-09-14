@@ -20,4 +20,9 @@ export class AssetLibraryService {
     const { limit, offset } = normalizePaging(filter.limit, filter.offset);
     return this.readModel.listByProject(projectId, { ...filter, limit, offset });
   }
+
+  /** Active member counts for every collection in the project that has at least one. */
+  async collectionCounts(projectId: string): Promise<Record<string, number>> {
+    return this.readModel.countsByCollection(projectId);
+  }
 }

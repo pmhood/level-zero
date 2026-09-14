@@ -22,6 +22,7 @@ const ENTITY_TYPE_LABELS: Record<EntityType, string> = {
   asset_reference: 'Asset Reference',
   scene: 'Scene',
   moodboard: 'Moodboard',
+  asset_collection: 'Collection',
   document: 'Document',
   prototype: 'Prototype',
   build: 'Build',

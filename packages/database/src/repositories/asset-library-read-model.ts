@@ -99,6 +99,34 @@ export class DrizzleAssetLibraryReadModel implements AssetLibraryReadModel {
   }
 
   /**
+   * Active member counts for every collection in the project that has at
+   * least one, in one grouped read — the rail's counts, not one
+   * `listForEntity` call per collection. A collection with no active
+   * members is simply absent, the same as a `group by` with no rows to
+   * group.
+   */
+  async countsByCollection(projectId: string): Promise<Record<string, number>> {
+    const result = await this.db.execute<{ collectionId: string; count: number }>(sql`
+      select ${entityRelationships.sourceEntityId} as "collectionId", count(*)::int as count
+        from ${entityRelationships}
+        join ${entities}
+          on ${entities.id} = ${entityRelationships.targetEntityId}
+          and ${entities.projectId} = ${entityRelationships.projectId}
+        join ${assets}
+          on ${assets.id} = (${entities.data} ->> ${ASSET_REFERENCE_ASSET_ID_KEY})::uuid
+       where ${entityRelationships.projectId} = ${projectId}
+         and ${entityRelationships.relation} = 'contains'
+         and ${entities.type} = 'asset_reference'
+         and ${assets.status} = 'active'
+       group by ${entityRelationships.sourceEntityId}
+    `);
+
+    const counts: Record<string, number> = {};
+    for (const row of result.rows) counts[row.collectionId] = row.count;
+    return counts;
+  }
+
+  /**
    * The page's generated thumbnails (#176), keyed by source asset id. One
    * query for the whole page, not one per asset: every `thumbnail` variant
    * in the project whose `sourceAssetId` is on this page.
@@ -413,6 +441,28 @@ function isLinkedToEntity(entityId: string): SQL {
   )`;
 }
 
+/**
+ * Correlated existence check for "this asset's `asset_reference` entity has
+ * a `contains` edge from `collectionId`" — the same two hops `isLinkedToEntity`
+ * follows, narrowed to one direction and one relation.
+ */
+function isInCollection(collectionId: string): SQL {
+  return sql`exists (
+    select 1
+    from ${entities}
+    where ${entities.projectId} = ${assets.projectId}
+      and ${entities.type} = 'asset_reference'
+      and (${entities.data} ->> ${ASSET_REFERENCE_ASSET_ID_KEY})::uuid = ${assets.id}
+      and exists (
+        select 1 from ${entityRelationships}
+        where ${entityRelationships.projectId} = ${entities.projectId}
+          and ${entityRelationships.relation} = 'contains'
+          and ${entityRelationships.targetEntityId} = ${entities.id}
+          and ${entityRelationships.sourceEntityId} = ${collectionId}
+      )
+  )`;
+}
+
 /** Exported so a test can assert the origin filter compiles to an index-friendly plan. */
 export function buildLibraryWhere(projectId: string, filter: AssetLibraryFilter): SQL {
   const conditions: SQL[] = [buildAssetWhere(projectId, filter)];
@@ -433,6 +483,10 @@ export function buildLibraryWhere(projectId: string, filter: AssetLibraryFilter)
 
   if (filter.linkedEntityId) {
     conditions.push(isLinkedToEntity(filter.linkedEntityId));
+  }
+
+  if (filter.collectionId) {
+    conditions.push(isInCollection(filter.collectionId));
   }
 
   return and(...conditions) as SQL;

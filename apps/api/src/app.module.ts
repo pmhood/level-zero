@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { ActivityModule } from './activity/activity.module';
+import { AssetCollectionsModule } from './asset-collections/asset-collections.module';
 import { AssetsModule } from './assets/assets.module';
 import { ApiConfigModule } from './config/config.module';
 import { DocumentsModule } from './documents/documents.module';
@@ -51,6 +52,7 @@ import { VersionsModule } from './versions/versions.module';
     VersionsModule,
     DocumentsModule,
     AssetsModule,
+    AssetCollectionsModule,
     GenerationsModule,
     PrototypesModule,
     PlaytestsModule,

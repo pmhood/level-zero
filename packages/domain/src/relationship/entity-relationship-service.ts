@@ -99,6 +99,21 @@ export class EntityRelationshipService {
     return relationship;
   }
 
+  /**
+   * The edge from `sourceEntityId` to `targetEntityId` with this `relation`,
+   * or `null`. The read equivalent of the duplicate check `link` runs before
+   * inserting, exposed for a caller that needs to find a known edge to
+   * remove rather than to refuse creating a second one.
+   */
+  async findEdge(
+    projectId: string,
+    sourceEntityId: string,
+    targetEntityId: string,
+    relation: RelationType,
+  ): Promise<EntityRelationship | null> {
+    return this.relationships.findDuplicate(projectId, sourceEntityId, targetEntityId, relation);
+  }
+
   async listForEntity(
     projectId: string,
     entityId: string,

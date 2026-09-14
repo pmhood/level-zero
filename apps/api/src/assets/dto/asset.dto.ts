@@ -136,9 +136,9 @@ export class ListAssetsQueryDto {
 
   /**
    * Opts into the joined library view: items come back with their
-   * `AssetSummary`. A summary-only filter (`origin`, `markKinds` or
-   * `selectionStates`) implies this, so a caller that only wants one of
-   * those filters doesn't also have to ask.
+   * `AssetSummary`. A summary-only filter (`origin`, `markKinds`,
+   * `selectionStates`, `linkedEntityId` or `collectionId`) implies this, so
+   * a caller that only wants one of those filters doesn't also have to ask.
    */
   @IsOptional()
   @Transform(({ value }) => toBoolean(value))
@@ -174,6 +174,11 @@ export class ListAssetsQueryDto {
   @IsOptional()
   @IsString()
   linkedEntityId?: string;
+
+  /** Narrows to assets whose `asset_reference` entity is a member of this collection. */
+  @IsOptional()
+  @IsString()
+  collectionId?: string;
 
   @IsOptional()
   @IsIn(ASSET_SORT_FIELDS)

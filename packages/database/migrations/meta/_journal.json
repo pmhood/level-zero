@@ -169,6 +169,13 @@
       "when": 1789332265849,
       "tag": "0023_living_master_chief",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789346832197,
+      "tag": "0024_worried_gideon",
+      "breakpoints": true
     }
   ]
 }

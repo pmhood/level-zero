@@ -594,3 +594,76 @@ describe('linked entities', () => {
     expect(unlinkedAssetId).not.toBe(linkedAssetId);
   });
 });
+
+describe('collectionId filter', () => {
+  async function uploadAsset(filename: string): Promise<string> {
+    const created = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({ kind: 'image', filename, mimeType: 'image/png', contentBase64: pngBase64 })
+      .expect(201);
+    return created.body.id as string;
+  }
+
+  async function createCollection(name: string) {
+    const entity = createEntity(
+      { projectId: project.id, type: 'asset_collection', name },
+      { clock, ids: sequentialIdGenerator('collection') },
+    );
+    return entities.insert(entity);
+  }
+
+  /** Files `assetId` into `collectionId` with a `contains` edge, as `AssetCollectionService.addAsset` would. */
+  async function addAssetToCollection(assetId: string, collectionId: string): Promise<void> {
+    const reference = createEntity(
+      {
+        projectId: project.id,
+        type: 'asset_reference',
+        name: 'asset reference',
+        data: assetReferenceData(assetId),
+      },
+      { clock, ids: sequentialIdGenerator('reference') },
+    );
+    const inserted = await entities.insert(reference);
+    const relationship = createEntityRelationship(
+      {
+        projectId: project.id,
+        sourceEntityId: collectionId,
+        targetEntityId: inserted.id,
+        relation: 'contains',
+      },
+      { clock, ids: sequentialIdGenerator('relationship') },
+    );
+    await relationships.insert(relationship);
+  }
+
+  it('narrows to assets filed in the given collection and reflects it in total', async () => {
+    const inCollectionId = await uploadAsset('in.png');
+    const notInCollectionId = await uploadAsset('out.png');
+    const collection = await createCollection('Props & Gear');
+    await addAssetToCollection(inCollectionId, collection.id);
+
+    const response = await http()
+      .get(`/api/projects/${project.id}/assets`)
+      .query({ collectionId: collection.id })
+      .expect(200);
+
+    expect(response.body.items.map((asset: { id: string }) => asset.id)).toEqual([
+      inCollectionId,
+    ]);
+    expect(response.body.total).toBe(1);
+    expect(notInCollectionId).not.toBe(inCollectionId);
+  });
+
+  it('implies summary=true when only collectionId is given', async () => {
+    const assetId = await uploadAsset('in.png');
+    const collection = await createCollection('Props & Gear');
+    await addAssetToCollection(assetId, collection.id);
+
+    const response = await http()
+      .get(`/api/projects/${project.id}/assets`)
+      .query({ collectionId: collection.id })
+      .expect(200);
+
+    expect(response.body.summaries).toHaveLength(1);
+  });
+});
