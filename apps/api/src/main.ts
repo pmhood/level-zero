@@ -3,14 +3,21 @@ import 'reflect-metadata';
 import { loadDotEnv, type ApiEnv } from '@level-zero/config';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { json, urlencoded } from 'express';
 
 import { AppModule } from './app.module';
+import { MAX_JSON_BODY_BYTES } from './common/body-limit';
 import { API_ENV } from './config/config.module';
 
 async function bootstrap(): Promise<void> {
   loadDotEnv(__dirname);
 
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  // `bodyParser: false` stops Nest installing its own default-limit parsers
+  // ahead of the ones below.
+  const app = await NestFactory.create(AppModule, { bufferLogs: true, bodyParser: false });
+  app.use(json({ limit: MAX_JSON_BODY_BYTES }));
+  app.use(urlencoded({ extended: true, limit: MAX_JSON_BODY_BYTES }));
+
   const env = app.get<ApiEnv>(API_ENV);
 
   app.setGlobalPrefix('api');

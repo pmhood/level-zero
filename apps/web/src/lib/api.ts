@@ -510,6 +510,80 @@ export function getAsset(projectId: string, assetId: string): Promise<Asset> {
   return apiFetch(`/api/projects/${projectId}/assets/${assetId}`);
 }
 
+export interface UploadAssetInput {
+  kind: AssetKind;
+  filename: string;
+  mimeType: string;
+  contentBase64: string;
+  width?: number;
+  height?: number;
+  durationSeconds?: number;
+}
+
+export interface UploadAssetOptions {
+  /** Fraction of the request body sent so far, 0–1. */
+  onProgress?: (fraction: number) => void;
+  signal?: AbortSignal;
+}
+
+/**
+ * Imports a file into the project as an ordinary asset (#174). Goes through
+ * `XMLHttpRequest` rather than `fetch`, which has no cross-browser way to
+ * report how much of a request body has actually gone out — the one thing
+ * `apiFetch` doesn't need to do for anything else in this file.
+ */
+export function uploadAsset(
+  projectId: string,
+  input: UploadAssetInput,
+  options: UploadAssetOptions = {},
+): Promise<Asset> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('POST', `${env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/assets`);
+    request.setRequestHeader('Content-Type', 'application/json');
+
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable) options.onProgress?.(event.loaded / event.total);
+    };
+
+    request.onload = () => {
+      let body: ApiErrorBody | Asset | undefined;
+      try {
+        body = request.responseText ? JSON.parse(request.responseText) : undefined;
+      } catch {
+        body = undefined;
+      }
+
+      if (request.status >= 200 && request.status < 300) {
+        resolve(body as Asset);
+      } else {
+        const error = (body ?? {}) as ApiErrorBody;
+        reject(
+          new ApiRequestError(
+            error.message ?? `Request failed (${request.status})`,
+            request.status,
+            error.error,
+            error.details,
+          ),
+        );
+      }
+    };
+
+    request.onerror = () => reject(new ApiRequestError('Network error while uploading', 0));
+    request.onabort = () => reject(new ApiRequestError('Upload cancelled', 0));
+
+    if (options.signal) {
+      if (options.signal.aborted) {
+        request.abort();
+        return;
+      }
+      options.signal.addEventListener('abort', () => request.abort());
+    }
+
+    request.send(JSON.stringify(input));
+  });
+}
+
 /** The asset's bytes, streamed by the API — usable directly as an `<img src>`. */
 export function assetContentUrl(projectId: string, assetId: string): string {
   return `${env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}/assets/${assetId}/content`;

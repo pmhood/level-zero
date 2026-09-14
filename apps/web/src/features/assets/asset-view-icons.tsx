@@ -1,11 +1,11 @@
 import type { SVGProps } from 'react';
 
 /**
- * The two icons the Assets view switcher needs for the positions #178
- * (Collections) and #179 (Pipeline) will fill — not views of their own yet,
- * just labelled, disabled slots the switcher reserves (issue #171). Drawn
- * from the design package's own set (`assets/icons/*.svg`), 24×24, 1.8px
- * rounded stroke, `currentColor`.
+ * Icons the Assets workspace needs: the Assets view switcher's slots for
+ * #178 (Collections) and #179 (Pipeline) — not views of their own yet, just
+ * labelled, disabled slots the switcher reserves (issue #171) — plus the
+ * upload button's icon (#174). Drawn from the design package's own set
+ * (`assets/icons/*.svg`), 24×24, 1.8px rounded stroke, `currentColor`.
  *
  * Feature-local until a second workspace wants them, matching
  * `character-icons.tsx`'s convention.
@@ -42,6 +42,16 @@ export function PipelineIcon(props: SVGProps<SVGSVGElement>) {
       <path d="M14 4c3 0 5.8 1.3 7 3.5-1.2 3.7-4 6.5-7.7 7.7L9 19.5 4.5 15l4.3-4.3C10 7 12 4 14 4Z" />
       <path d="M8.5 15.5 5 19l-2 2 .8-4.8L7 13" />
       <circle cx="15.5" cy="9.5" r="1.8" />
+    </svg>
+  );
+}
+
+/** `assets/icons/upload.svg`, for #174's upload button. */
+export function UploadIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...iconProps(props)}>
+      <path d="M12 16V4M7.5 8.5 12 4l4.5 4.5" />
+      <path d="M5 14v5h14v-5" />
     </svg>
   );
 }

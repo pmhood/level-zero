@@ -35,6 +35,7 @@ vi.mock('@/lib/api', () => ({
   listAssets: vi.fn(),
   archiveAsset: vi.fn(),
   restoreAsset: vi.fn(),
+  uploadAsset: vi.fn(),
   listAssetSelectionsForAsset: vi.fn(),
   getAssetSelectionSummary: vi.fn(),
   listAssetMarks: vi.fn(),
@@ -42,6 +43,15 @@ vi.mock('@/lib/api', () => ({
   rejectAssetSelection: vi.fn(),
   markAsset: vi.fn(),
   unmarkAsset: vi.fn(),
+}));
+
+// The real module decodes images/media through browser APIs jsdom doesn't
+// implement; the workspace's own job is wiring the drop target and button to
+// the queue, so these tests stub the decoding rather than faking it.
+vi.mock('./asset-upload', () => ({
+  checkFile: vi.fn(() => ({ kind: 'image' })),
+  readFileMetadata: vi.fn(async () => ({})),
+  readFileAsBase64: vi.fn(async () => 'cHJldGVuZCBieXRlcw=='),
 }));
 
 const api = await import('@/lib/api');
@@ -386,6 +396,64 @@ describe('Assets workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
 
     await screen.findByText('No assets yet');
+  });
+
+  it('uploads a file dropped onto the library and shows it in the grid without a full reload', async () => {
+    vi.mocked(api.listAssetLibrary).mockResolvedValue(libraryPage([], []));
+    renderWorkspace();
+    await screen.findByText('No assets yet');
+
+    const uploaded = asset({ id: 'ast_new', filename: 'new-concept.png' });
+    vi.mocked(api.uploadAsset).mockResolvedValue(uploaded);
+    vi.mocked(api.listAssetLibrary).mockResolvedValue(
+      libraryPage([uploaded], [summary({ assetId: 'ast_new' })]),
+    );
+
+    const dropZone = screen.getByTestId('asset-library-dropzone');
+    const file = new File(['bytes'], 'new-concept.png', { type: 'image/png' });
+    fireEvent.drop(dropZone, { dataTransfer: { files: [file], types: ['Files'] } });
+
+    await screen.findByText('Uploaded');
+    // The queue drove the same query key `useArchiveAsset`/`useRestoreAsset`
+    // invalidate — a fresh fetch, not a client-side splice of the old page —
+    // so the new asset shows up as its own grid tile, not just a queue row.
+    await screen.findByRole('button', { name: 'new-concept.png' });
+  });
+
+  it('uploads a file chosen through the picker button', async () => {
+    vi.mocked(api.listAssetLibrary).mockResolvedValue(libraryPage([], []));
+    renderWorkspace();
+    await screen.findByText('No assets yet');
+
+    vi.mocked(api.uploadAsset).mockResolvedValue(asset({ filename: 'picked.png' }));
+
+    const file = new File(['bytes'], 'picked.png', { type: 'image/png' });
+    const input = screen.getByLabelText('Upload files', { selector: 'input' });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => expect(api.uploadAsset).toHaveBeenCalled());
+    expect(vi.mocked(api.uploadAsset).mock.calls[0]![0]).toBe('prj_1');
+    expect(vi.mocked(api.uploadAsset).mock.calls[0]![1]).toMatchObject({ filename: 'picked.png' });
+  });
+
+  it('keeps a failed upload visible with its own error, retryable, without losing other uploads', async () => {
+    vi.mocked(api.listAssetLibrary).mockResolvedValue(libraryPage([], []));
+    renderWorkspace();
+    await screen.findByText('No assets yet');
+
+    vi.mocked(api.uploadAsset).mockRejectedValueOnce(new Error('Service unavailable'));
+
+    const dropZone = screen.getByTestId('asset-library-dropzone');
+    const file = new File(['bytes'], 'flaky.png', { type: 'image/png' });
+    fireEvent.drop(dropZone, { dataTransfer: { files: [file], types: ['Files'] } });
+
+    await screen.findByText('Service unavailable');
+    expect(screen.getByText('Failed')).toBeDefined();
+
+    vi.mocked(api.uploadAsset).mockResolvedValueOnce(asset({ filename: 'flaky.png' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await screen.findByText('Uploaded');
   });
 });
 
