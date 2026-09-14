@@ -151,9 +151,11 @@ never rendered HTML. Markdown is an import/export format only.
 - Issues carry `effort:` and `model:` labels that drive the `/do` and `/do-next` pipelines, and
   `needs-review` means the issue has open questions and should not be worked unattended. Many issue
   bodies list `Depends on: #N` — check those are closed before starting.
-- **CI is disabled, not broken.** Actions is blocked at the GitHub account level, so jobs failed
-  in ~3s having executed zero steps — the account, not the diff — and the `CI` workflow was
-  manually disabled on 2026-09-09 to stop every push collecting a red X.
-  `.github/workflows/ci.yml` is intact; re-enable with `gh workflow enable CI` once that is
-  resolved. Until then run `pnpm typecheck && pnpm lint && pnpm test` locally — nothing else is
-  checking.
+- **CI is running again.** The account-level Actions block that caused ~3s zero-step failures is
+  resolved and the `CI` workflow was re-enabled; as of 2026-09-14 it executes every step against
+  service containers. Check with `gh workflow list` before assuming otherwise.
+- **`pnpm format:check` is CI's first step, so it gates everything after it** — build, lint,
+  typecheck, `db:migrate` and test never run if Prettier is unhappy. A branch merged without
+  formatting therefore breaks CI on _every_ open PR, which reads as "all the Dependabot PRs are
+  failing" rather than as a formatting problem on main. Run `pnpm format:check` before merging,
+  and when a batch of unrelated PRs all fail the same check, look at `main` before the diffs.
