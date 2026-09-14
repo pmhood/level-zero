@@ -81,21 +81,30 @@ export class DrizzleEntityRepository implements EntityRepository {
 
       // Another request won the race for `entities_asset_reference_asset_id_key`:
       // the constraint that just fired is what guarantees this row exists to find.
-      const [existing] = await this.db
-        .select()
-        .from(entities)
-        .where(
-          and(
-            eq(entities.projectId, entity.projectId),
-            eq(entities.type, 'asset_reference'),
-            sql`${entities.data} ->> ${ASSET_REFERENCE_ASSET_ID_KEY} = ${assetId}`,
-          ),
-        )
-        .limit(1);
-
+      const existing = await this.selectAssetReference(entity.projectId, assetId);
       if (!existing) throw error;
-      return { entity: toEntity(existing), created: false };
+      return { entity: existing, created: false };
     }
+  }
+
+  async findAssetReference(projectId: string, assetId: string): Promise<Entity | null> {
+    return this.selectAssetReference(projectId, assetId);
+  }
+
+  private async selectAssetReference(projectId: string, assetId: string): Promise<Entity | null> {
+    const [row] = await this.db
+      .select()
+      .from(entities)
+      .where(
+        and(
+          eq(entities.projectId, projectId),
+          eq(entities.type, 'asset_reference'),
+          sql`${entities.data} ->> ${ASSET_REFERENCE_ASSET_ID_KEY} = ${assetId}`,
+        ),
+      )
+      .limit(1);
+
+    return row ? toEntity(row) : null;
   }
 }
 

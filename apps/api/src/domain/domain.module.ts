@@ -21,6 +21,7 @@ import {
 } from '@level-zero/database';
 import {
   ActivityService,
+  AssetCollectionService,
   AssetLibraryService,
   AssetSelectionService,
   AssetService,
@@ -248,6 +249,15 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
       inject: [ASSET_LIBRARY_READ_MODEL],
       useFactory: (readModel: AssetLibraryReadModel): AssetLibraryService =>
         new AssetLibraryService(readModel),
+    },
+    {
+      provide: AssetCollectionService,
+      inject: [EntityService, EntityRelationshipService, ASSET_REPOSITORY],
+      useFactory: (
+        entities: EntityService,
+        relationships: EntityRelationshipService,
+        assets: AssetRepository,
+      ): AssetCollectionService => new AssetCollectionService(entities, relationships, assets),
     },
     {
       provide: GENERATION_REPOSITORY,
@@ -545,6 +555,7 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
     LineageService,
     AssetService,
     AssetLibraryService,
+    AssetCollectionService,
     GenerationService,
     PrototypeService,
     PlaytestService,

@@ -7,8 +7,8 @@ import { type AssetSelectionState } from '../selection/asset-selection';
 /**
  * `AssetListFilter` plus the facets the library's joined view can narrow by.
  * Every #169 filter and sort keeps working unchanged; #170 added `origin`,
- * #200 added `markKinds`, #201 added `selectionStates`, and this issue
- * (#202) adds `linkedEntityId`.
+ * #200 added `markKinds`, #201 added `selectionStates`, #202 added
+ * `linkedEntityId`, and #226 adds `collectionId`.
  */
 export interface AssetLibraryFilter extends AssetListFilter {
   origin?: AssetOrigin;
@@ -26,6 +26,11 @@ export interface AssetLibraryFilter extends AssetListFilter {
    * either direction.
    */
   linkedEntityId?: string;
+  /**
+   * Asset matches when its `asset_reference` entity has a `contains` edge
+   * from this collection.
+   */
+  collectionId?: string;
 }
 
 export interface AssetLibraryPage {
@@ -48,4 +53,13 @@ export interface AssetLibraryPage {
  */
 export interface AssetLibraryReadModel {
   listByProject(projectId: string, filter: AssetLibraryFilter): Promise<AssetLibraryPage>;
+
+  /**
+   * Active member counts for every collection in the project that has at
+   * least one, keyed by collection id — the rail's counts, one grouped read
+   * rather than one `listForEntity` call per collection. A collection with
+   * no active members (including one with none at all) is simply absent
+   * from the result rather than present with `0`.
+   */
+  countsByCollection(projectId: string): Promise<Record<string, number>>;
 }

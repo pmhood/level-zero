@@ -357,3 +357,30 @@ describe('unlinking', () => {
     await expect(relationships.unlink(projectB.id, edge.id)).rejects.toThrow(NotFoundError);
   });
 });
+
+describe('finding a known edge', () => {
+  it('returns the edge for a source/target/relation triple', async () => {
+    const [kael, station] = [
+      await entity(projectA, 'character', 'Kael'),
+      await entity(projectA, 'location', 'Fathom Station'),
+    ];
+    const edge = await relationships.link(projectA.id, {
+      sourceEntityId: kael.id,
+      targetEntityId: station.id,
+      relation: 'appears_in',
+    });
+
+    const found = await relationships.findEdge(projectA.id, kael.id, station.id, 'appears_in');
+
+    expect(found?.id).toBe(edge.id);
+  });
+
+  it('returns null when no such edge exists', async () => {
+    const [kael, station] = [
+      await entity(projectA, 'character', 'Kael'),
+      await entity(projectA, 'location', 'Fathom Station'),
+    ];
+
+    expect(await relationships.findEdge(projectA.id, kael.id, station.id, 'appears_in')).toBeNull();
+  });
+});

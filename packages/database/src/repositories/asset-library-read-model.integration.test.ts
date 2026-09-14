@@ -183,6 +183,26 @@ async function linkAssetToEntity(
   return reference;
 }
 
+/**
+ * Files `assetId` into `collectionId`, the same two writes
+ * `AssetCollectionService.addAsset` makes: find-or-create the asset's
+ * reference, then a `contains` edge from the collection to it.
+ */
+async function addAssetToCollection(
+  projectId: string,
+  collectionId: string,
+  assetId: string,
+): Promise<void> {
+  const reference = await entities.findOrCreateAssetReference(projectId, assetId, {
+    name: 'asset reference',
+  });
+  await relationships.link(projectId, {
+    sourceEntityId: collectionId,
+    targetEntityId: reference.id,
+    relation: 'contains',
+  });
+}
+
 describe('asset library read model', () => {
   it('reports an uploaded asset as imported, with no generation at all', async () => {
     const project = await seedProject('Deep Fathom');
@@ -1032,6 +1052,180 @@ describe('asset library read model', () => {
         readModel.listByProject(project.id, { limit: 20, linkedEntityId: kira.id }),
       );
       expect(largeLinked).toBe(smallLinked);
+    });
+  });
+
+  describe('collectionId filter', () => {
+    it('narrows to assets filed in the given collection and reflects it in total', async () => {
+      const project = await seedProject('Deep Fathom');
+      const propsCollection = await entities.create(project.id, {
+        type: 'asset_collection',
+        name: 'Props & Gear',
+      });
+      const inCollection = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'in.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+      const notInCollection = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'out.png',
+        mimeType: 'image/png',
+        content: Buffer.from('b'),
+      });
+      await addAssetToCollection(project.id, propsCollection.id, inCollection.id);
+
+      const page = await readModel.listByProject(project.id, {
+        collectionId: propsCollection.id,
+      });
+
+      expect(page.items.map((item) => item.id)).toEqual([inCollection.id]);
+      expect(page.total).toBe(1);
+      expect(notInCollection.id).not.toBe(inCollection.id);
+    });
+
+    it('reports the same asset as a member of two collections', async () => {
+      const project = await seedProject('Deep Fathom');
+      const propsCollection = await entities.create(project.id, {
+        type: 'asset_collection',
+        name: 'Props & Gear',
+      });
+      const uiCollection = await entities.create(project.id, {
+        type: 'asset_collection',
+        name: 'UI & HUD',
+      });
+      const asset = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'icon.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+      await addAssetToCollection(project.id, propsCollection.id, asset.id);
+      await addAssetToCollection(project.id, uiCollection.id, asset.id);
+
+      const [inProps, inUi] = await Promise.all([
+        readModel.listByProject(project.id, { collectionId: propsCollection.id }),
+        readModel.listByProject(project.id, { collectionId: uiCollection.id }),
+      ]);
+
+      expect(inProps.items.map((item) => item.id)).toEqual([asset.id]);
+      expect(inUi.items.map((item) => item.id)).toEqual([asset.id]);
+    });
+
+    it('never reports another project asset as a member of one of its collections', async () => {
+      const [a, b] = [await seedProject('A'), await seedProject('B')];
+      const collectionA = await entities.create(a.id, {
+        type: 'asset_collection',
+        name: 'Collection A',
+      });
+      const assetA = await assets.upload(a.id, {
+        kind: 'image',
+        filename: 'a.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+      await addAssetToCollection(a.id, collectionA.id, assetA.id);
+
+      const pageB = await readModel.listByProject(b.id, { collectionId: collectionA.id });
+
+      expect(pageB.items).toHaveLength(0);
+      expect(pageB.total).toBe(0);
+    });
+  });
+
+  describe('countsByCollection', () => {
+    it('counts active members per collection in one grouped read', async () => {
+      const project = await seedProject('Deep Fathom');
+      const propsCollection = await entities.create(project.id, {
+        type: 'asset_collection',
+        name: 'Props & Gear',
+      });
+      const uiCollection = await entities.create(project.id, {
+        type: 'asset_collection',
+        name: 'UI & HUD',
+      });
+      const [first, second, third] = await Promise.all([
+        assets.upload(project.id, {
+          kind: 'image',
+          filename: 'a.png',
+          mimeType: 'image/png',
+          content: Buffer.from('a'),
+        }),
+        assets.upload(project.id, {
+          kind: 'image',
+          filename: 'b.png',
+          mimeType: 'image/png',
+          content: Buffer.from('b'),
+        }),
+        assets.upload(project.id, {
+          kind: 'image',
+          filename: 'c.png',
+          mimeType: 'image/png',
+          content: Buffer.from('c'),
+        }),
+      ]);
+      await addAssetToCollection(project.id, propsCollection.id, first.id);
+      await addAssetToCollection(project.id, propsCollection.id, second.id);
+      await addAssetToCollection(project.id, uiCollection.id, third.id);
+
+      const counts = await readModel.countsByCollection(project.id);
+
+      expect(counts).toEqual({
+        [propsCollection.id]: 2,
+        [uiCollection.id]: 1,
+      });
+    });
+
+    it('excludes an archived member from its collection count', async () => {
+      const project = await seedProject('Deep Fathom');
+      const propsCollection = await entities.create(project.id, {
+        type: 'asset_collection',
+        name: 'Props & Gear',
+      });
+      const asset = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'a.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+      await addAssetToCollection(project.id, propsCollection.id, asset.id);
+      await assets.archive(project.id, asset.id);
+
+      const counts = await readModel.countsByCollection(project.id);
+
+      expect(counts[propsCollection.id]).toBeUndefined();
+    });
+
+    it('omits a collection with no active members rather than reporting zero', async () => {
+      const project = await seedProject('Deep Fathom');
+      const emptyCollection = await entities.create(project.id, {
+        type: 'asset_collection',
+        name: 'Empty',
+      });
+
+      const counts = await readModel.countsByCollection(project.id);
+
+      expect(counts[emptyCollection.id]).toBeUndefined();
+    });
+
+    it('never counts another project into this one', async () => {
+      const [a, b] = [await seedProject('A'), await seedProject('B')];
+      const collectionA = await entities.create(a.id, {
+        type: 'asset_collection',
+        name: 'Collection A',
+      });
+      const assetA = await assets.upload(a.id, {
+        kind: 'image',
+        filename: 'a.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+      await addAssetToCollection(a.id, collectionA.id, assetA.id);
+
+      const countsB = await readModel.countsByCollection(b.id);
+
+      expect(countsB).toEqual({});
     });
   });
 });

@@ -147,6 +147,15 @@ export class EntityService {
     return this.indexed(entity);
   }
 
+  /**
+   * The `asset_reference` entity for `assetId` in `projectId`, or `null` if
+   * the project has none — a plain read, never creating one. See
+   * `findOrCreateAssetReference` for the atomic lookup-or-insert.
+   */
+  async findAssetReference(projectId: string, assetId: string): Promise<Entity | null> {
+    return this.entities.findAssetReference(projectId, assetId);
+  }
+
   async archive(projectId: string, entityId: string): Promise<Entity> {
     const entity = await this.getById(projectId, entityId);
     const archived = await this.entities.save(archiveEntity(entity, this.deps));

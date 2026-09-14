@@ -263,13 +263,22 @@ export class InMemoryEntityRepository implements EntityRepository {
     entity: Entity,
     assetId: string,
   ): Promise<FindOrCreateAssetReferenceResult> {
-    const existing = [...this.rows.values()].find(
-      (row) => row.projectId === entity.projectId && referencedAssetId(row) === assetId,
-    );
+    const existing = this.findReference(entity.projectId, assetId);
     if (existing) return { entity: structuredClone(existing), created: false };
 
     this.rows.set(entity.id, structuredClone(entity));
     return { entity: structuredClone(entity), created: true };
+  }
+
+  async findAssetReference(projectId: string, assetId: string): Promise<Entity | null> {
+    const existing = this.findReference(projectId, assetId);
+    return existing ? structuredClone(existing) : null;
+  }
+
+  private findReference(projectId: string, assetId: string): Entity | undefined {
+    return [...this.rows.values()].find(
+      (row) => row.projectId === projectId && referencedAssetId(row) === assetId,
+    );
   }
 }
 
@@ -681,6 +690,11 @@ export class InMemoryAssetLibraryReadModel implements AssetLibraryReadModel {
       );
     }
 
+    if (filter.collectionId) {
+      const memberAssetIds = await this.assetIdsInCollection(projectId, filter.collectionId);
+      filtered = filtered.filter((entry) => memberAssetIds.has(entry.asset.id));
+    }
+
     const offset = filter.offset ?? 0;
     const limit = filter.limit ?? filtered.length;
     const page = filtered.slice(offset, offset + limit);
@@ -690,6 +704,45 @@ export class InMemoryAssetLibraryReadModel implements AssetLibraryReadModel {
       summaries: page.map((entry) => entry.summary),
       total: filtered.length,
     };
+  }
+
+  async countsByCollection(projectId: string): Promise<Record<string, number>> {
+    const { items: collections } = await this.entities.listByProject(projectId, {
+      types: ['asset_collection'],
+      includeArchived: true,
+    });
+
+    const counts: Record<string, number> = {};
+    for (const collection of collections) {
+      const memberAssetIds = await this.assetIdsInCollection(projectId, collection.id);
+      let count = 0;
+      for (const assetId of memberAssetIds) {
+        const asset = await this.assets.findById(projectId, assetId);
+        if (asset?.status === 'active') count += 1;
+      }
+      if (count > 0) counts[collection.id] = count;
+    }
+    return counts;
+  }
+
+  /** Every asset id an asset_reference under `collectionId`'s `contains` edges points at. */
+  private async assetIdsInCollection(
+    projectId: string,
+    collectionId: string,
+  ): Promise<Set<string>> {
+    const { items: edges } = await this.relationships.listForEntity(projectId, collectionId, {
+      direction: 'outgoing',
+      relations: ['contains'],
+    });
+
+    const assetIds = new Set<string>();
+    for (const edge of edges) {
+      const reference = await this.entities.findById(projectId, edge.targetEntityId);
+      if (reference?.type !== 'asset_reference') continue;
+      const assetId = referencedAssetId(reference);
+      if (assetId) assetIds.add(assetId);
+    }
+    return assetIds;
   }
 
   /**
