@@ -12,6 +12,7 @@ import {
 } from '@level-zero/ui';
 import { useEffect, useState } from 'react';
 
+import { GenerationQueuePanel } from '@/features/generation/generation-queue-panel';
 import { apiErrorMessage } from '@/lib/api';
 
 import { AssetCompare } from './asset-compare';
@@ -129,6 +130,11 @@ export function AssetsWorkspace({ projectId }: { projectId: string }) {
       }
     >
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 xl:p-5 2xl:p-6">
+        {/* Generations in flight for this project (#180) — what is
+            generating now, not the pipeline or Collections views this
+            workspace's view switcher still has disabled. */}
+        <GenerationQueuePanel projectId={projectId} />
+
         {/* A comparison needs both panes side by side, so it takes the body
             rather than the 320px inspector that asked for it. */}
         {selected && comparedWith ? (
