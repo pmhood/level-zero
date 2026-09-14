@@ -20,7 +20,7 @@
     "@level-zero/database": "workspace:*",
     "@level-zero/domain": "workspace:*",
     "@level-zero/storage": "workspace:*",
-    "sharp": "^0.34.5"
+    "sharp": "^0.35.4"
   },
   "devDependencies": {
     "@types/node": "^22.20.2",
