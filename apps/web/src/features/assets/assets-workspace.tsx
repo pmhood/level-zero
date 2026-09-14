@@ -10,7 +10,7 @@ import {
   WorkspacePage,
   type ViewSwitcherItem,
 } from '@level-zero/ui';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type DragEvent } from 'react';
 
 import { GenerationQueuePanel } from '@/features/generation/generation-queue-panel';
 import { apiErrorMessage } from '@/lib/api';
@@ -21,8 +21,11 @@ import { AssetInspector } from './asset-inspector';
 import { assetLibraryFiltersToListParams, hasActiveAssetLibraryFilters } from './asset-library-filters';
 import { AssetLibraryToolbar } from './asset-library-toolbar';
 import { AssetList, AssetListSkeleton } from './asset-list';
+import { AssetUploadButton } from './asset-upload-button';
+import { AssetUploadQueue } from './asset-upload-queue';
 import { CollectionsIcon, PipelineIcon } from './asset-view-icons';
 import { useAssetLibraryFilters } from './use-asset-library-filters';
+import { useAssetUpload } from './use-asset-upload';
 import { useAssetView, type AssetView } from './use-asset-view';
 import { ASSET_LIBRARY_PAGE_SIZE, useAssetLibrary } from './use-assets';
 
@@ -55,17 +58,20 @@ const VIEW_ITEMS: ViewSwitcherItem<AssetView>[] = [
  * choice Characters, Mechanics and Moodboards already make. It becomes
  * cinematic the moment an art asset lands, with no code change here.
  *
- * Upload, bulk actions, Collections and the Pipeline are later issues
- * (#178–#179). The toolbar above the grid/list is #172's; the selected
- * asset is the inspector's (#173) — this workspace decides what to show and
- * how, never a project-changing action of its own.
+ * Bulk actions, Collections and the Pipeline are later issues (#178–#179).
+ * The toolbar above the grid/list is #172's; the selected asset is the
+ * inspector's (#173); uploading (#174) is the drop target and file picker
+ * below — this workspace decides what to show and how, never a
+ * project-changing action beyond importing a file.
  */
 export function AssetsWorkspace({ projectId }: { projectId: string }) {
   const [view, changeView] = useAssetView();
   const [page, setPage] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [comparedWith, setComparedWith] = useState<Asset | null>(null);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const { filters, setFilter, clearFilter, clearAll } = useAssetLibraryFilters();
+  const upload = useAssetUpload(projectId);
 
   const listParams = assetLibraryFiltersToListParams(filters);
   const libraryQuery = useAssetLibrary(projectId, page, listParams);
@@ -93,10 +99,36 @@ export function AssetsWorkspace({ projectId }: { projectId: string }) {
     setPage(0);
   }
 
+  // Files dragged from outside the browser carry a "Files" type; the
+  // library's own drag-and-drop (moodboard tiles, reordering) never does, so
+  // this never lights up for anything already inside the app.
+  function isFileDrag(event: DragEvent) {
+    return event.dataTransfer.types.includes('Files');
+  }
+
+  function handleDragOver(event: DragEvent) {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    setIsDraggingFiles(true);
+  }
+
+  function handleDragLeave(event: DragEvent) {
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setIsDraggingFiles(false);
+  }
+
+  function handleDrop(event: DragEvent) {
+    if (!isFileDrag(event)) return;
+    event.preventDefault();
+    setIsDraggingFiles(false);
+    if (event.dataTransfer.files.length > 0) upload.addFiles(event.dataTransfer.files);
+  }
+
   return (
     <WorkspacePage
       title="Asset Library"
       description="Every image, video, sound and file this project has produced or imported — one place to see what exists."
+      actions={<AssetUploadButton onFilesSelected={upload.addFiles} />}
       toolbar={
         <AssetLibraryToolbar
           projectId={projectId}
@@ -129,11 +161,25 @@ export function AssetsWorkspace({ projectId }: { projectId: string }) {
         )
       }
     >
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 xl:p-5 2xl:p-6">
+      <div
+        data-testid="asset-library-dropzone"
+        className="relative flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 xl:p-5 2xl:p-6"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {isDraggingFiles && (
+          <div className="pointer-events-none absolute inset-2 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-[var(--lz-blue-muted)]">
+            <p className="text-sm font-semibold text-foreground">Drop to upload</p>
+          </div>
+        )}
+
         {/* Generations in flight for this project (#180) — what is
             generating now, not the pipeline or Collections views this
             workspace's view switcher still has disabled. */}
         <GenerationQueuePanel projectId={projectId} />
+
+        <AssetUploadQueue items={upload.items} onRetry={upload.retry} onDismiss={upload.dismiss} />
 
         {/* A comparison needs both panes side by side, so it takes the body
             rather than the 320px inspector that asked for it. */}

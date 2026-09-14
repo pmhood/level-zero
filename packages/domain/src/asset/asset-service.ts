@@ -4,13 +4,14 @@ import { type JobService } from '../job/job-service';
 import { type ProjectRepository } from '../project/project-repository';
 import { type SearchIndexer } from '../search/search-indexer';
 import { type Clock } from '../shared/clock';
-import { ConflictError, NotFoundError } from '../shared/errors';
+import { ConflictError, NotFoundError, ValidationError } from '../shared/errors';
 import { type IdGenerator } from '../shared/id';
 import { MAX_PAGE_SIZE, normalizePaging } from '../shared/paging';
 import {
   archiveAsset,
   createAsset,
   restoreAsset,
+  MAX_ASSET_UPLOAD_BYTES,
   type Asset,
   type AssetKind,
   type AssetVariant,
@@ -74,6 +75,13 @@ export class AssetService {
     if (!project) throw new NotFoundError('Project', projectId);
     if (project.status === 'archived') {
       throw new ConflictError('Cannot add assets to an archived project', { projectId });
+    }
+
+    if (input.content.byteLength > MAX_ASSET_UPLOAD_BYTES) {
+      throw new ValidationError(
+        `File exceeds the ${MAX_ASSET_UPLOAD_BYTES / (1024 * 1024)}MB upload limit`,
+        { field: 'content', maxBytes: MAX_ASSET_UPLOAD_BYTES, byteSize: input.content.byteLength },
+      );
     }
 
     if (input.sourceAssetId) {

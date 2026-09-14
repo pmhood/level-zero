@@ -44,6 +44,16 @@ export const MAX_ASSET_CHECKSUM_LENGTH = 128;
 export const MAX_ASSET_CREATED_BY_LENGTH = 200;
 
 /**
+ * Ceiling on an uploaded file's raw size (issue #174), shared by the upload
+ * form (`apps/web`) and `AssetService.upload` so both sides refuse the same
+ * file for the same stated reason. The base64 JSON contract
+ * (`CreateAssetDto`) costs about a third more in transfer, so
+ * `apps/api/src/main.ts`'s body limit is set well above this, not equal to
+ * it.
+ */
+export const MAX_ASSET_UPLOAD_BYTES = 50 * 1024 * 1024;
+
+/**
  * A reusable, project-scoped file: an image, a video, an audio clip, a 3D
  * file, a reference, an export, or a build artifact.
  *

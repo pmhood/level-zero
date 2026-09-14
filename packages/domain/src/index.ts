@@ -174,6 +174,7 @@ export {
   MAX_ASSET_FILENAME_LENGTH,
   MAX_ASSET_MIME_TYPE_LENGTH,
   MAX_ASSET_STORAGE_KEY_LENGTH,
+  MAX_ASSET_UPLOAD_BYTES,
   archiveAsset,
   createAsset,
   restoreAsset,

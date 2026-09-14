@@ -13,6 +13,7 @@ import {
   InMemoryObjectStorageProvider,
   InMemoryProjectRepository,
 } from '../testing';
+import { MAX_ASSET_UPLOAD_BYTES } from './asset';
 import { type AssetRepository } from './asset-repository';
 import { AssetService, type UploadAssetInput } from './asset-service';
 import { type ObjectStorageProvider } from './object-storage';
@@ -85,6 +86,23 @@ describe('upload', () => {
     await projects.save({ ...project!, status: 'archived' });
 
     await expect(service.upload(projectId, uploadInput())).rejects.toThrow(ConflictError);
+  });
+
+  it('rejects a file over the stated upload limit, without writing it to storage', async () => {
+    const oversized = Buffer.alloc(MAX_ASSET_UPLOAD_BYTES + 1);
+
+    await expect(service.upload(projectId, uploadInput({ content: oversized }))).rejects.toThrow(
+      ValidationError,
+    );
+    expect(await assets.listByProject(projectId, {})).toMatchObject({ total: 0 });
+  });
+
+  it('accepts a file exactly at the stated upload limit', async () => {
+    const atLimit = Buffer.alloc(MAX_ASSET_UPLOAD_BYTES);
+
+    const asset = await service.upload(projectId, uploadInput({ content: atLimit }));
+
+    expect(asset.byteSize).toBe(MAX_ASSET_UPLOAD_BYTES);
   });
 
   it('links a derivative to its source asset', async () => {

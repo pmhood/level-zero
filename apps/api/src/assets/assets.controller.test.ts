@@ -1,6 +1,7 @@
 import {
   AssetLibraryService,
   AssetService,
+  MAX_ASSET_UPLOAD_BYTES,
   ProjectService,
   assetReferenceData,
   completeGeneration,
@@ -24,19 +25,21 @@ import {
   InMemoryObjectStorageProvider,
   InMemoryProjectRepository,
 } from '@level-zero/domain/testing';
-import { ValidationPipe, type INestApplication } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
+import { type NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { MAX_JSON_BODY_BYTES } from '../common/body-limit';
 import { DomainExceptionFilter } from '../common/domain-exception.filter';
 import { ProjectsController } from '../projects/projects.controller';
 import { AssetsController } from './assets.controller';
 
 const clock = fixedClock('2026-03-01T09:00:00.000Z');
 
-let app: INestApplication;
+let app: NestExpressApplication;
 let projectService: ProjectService;
 let generations: InMemoryGenerationRepository;
 let entities: InMemoryEntityRepository;
@@ -77,7 +80,11 @@ beforeEach(async () => {
     ],
   }).compile();
 
-  app = moduleRef.createNestApplication();
+  // Mirrors main.ts's bootstrap so this suite exercises the raised limit
+  // (#174) rather than Nest's 100kb-JSON default.
+  app = moduleRef.createNestApplication<NestExpressApplication>({ bodyParser: false });
+  app.useBodyParser('json', { limit: MAX_JSON_BODY_BYTES });
+  app.useBodyParser('urlencoded', { limit: MAX_JSON_BODY_BYTES, extended: true });
   app.setGlobalPrefix('api');
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.init();
@@ -151,6 +158,42 @@ describe('uploading an asset', () => {
       .expect(409);
 
     expect(response.body).toMatchObject({ error: 'conflict' });
+  });
+
+  // The previous 100kb JSON default (Express's, never raised before #174)
+  // would have rejected this with a raw 413 before it reached the
+  // controller at all.
+  it('accepts a realistic-size file that the previous 100kb JSON default would have rejected', async () => {
+    const halfMegabyte = Buffer.alloc(512 * 1024, 'x').toString('base64');
+
+    const response = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'reference-sheet.png',
+        mimeType: 'image/png',
+        contentBase64: halfMegabyte,
+      })
+      .expect(201);
+
+    expect(response.body.byteSize).toBe(512 * 1024);
+  });
+
+  it('rejects a file over the stated upload limit with a clear message, not a raw 413', async () => {
+    const overLimit = Buffer.alloc(MAX_ASSET_UPLOAD_BYTES + 1).toString('base64');
+
+    const response = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'too-big.png',
+        mimeType: 'image/png',
+        contentBase64: overLimit,
+      })
+      .expect(400);
+
+    expect(response.body).toMatchObject({ error: 'validation_failed' });
+    expect(response.body.message).toContain('upload limit');
   });
 });
 

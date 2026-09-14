@@ -11,7 +11,8 @@ export const ASSET_LIBRARY_PAGE_SIZE = 60;
 /** How many re-rolls of one generation the inspector's lineage list reads. */
 const REROLL_LIMIT = 20;
 
-const assetKeys = {
+/** Exported so `use-asset-upload.ts` can invalidate the same cache entries an archive/restore does. */
+export const assetKeys = {
   all: (projectId: string) => ['projects', projectId, 'assets'] as const,
   library: (projectId: string, page: number, params: api.ListAssetLibraryParams) =>
     ['projects', projectId, 'assets', 'library', page, params] as const,
