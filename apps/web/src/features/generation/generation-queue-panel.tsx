@@ -109,7 +109,9 @@ function GenerationQueueRow({
       <div className="flex min-w-0 items-center gap-2.5">
         <SparklesIcon className="size-4 shrink-0 text-ai-foreground" />
         <div className="min-w-0">
-          <p className="truncate text-sm text-foreground">{capabilityLabel(generation.capability)}</p>
+          <p className="truncate text-sm text-foreground">
+            {capabilityLabel(generation.capability)}
+          </p>
           {failed ? (
             <p className="truncate text-xs text-error">{failureText(generation)}</p>
           ) : (
@@ -121,19 +123,15 @@ function GenerationQueueRow({
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        {!failed && <StatusBadge tone="neutral">{elapsedLabel(elapsedSince(generation))}</StatusBadge>}
+        {!failed && (
+          <StatusBadge tone="neutral">{elapsedLabel(elapsedSince(generation))}</StatusBadge>
+        )}
         {failed ? (
           <Button type="button" variant="secondary" size="sm" onClick={onDismiss}>
             Dismiss
           </Button>
         ) : (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={cancelling}
-            onClick={onCancel}
-          >
+          <Button type="button" variant="ghost" size="sm" disabled={cancelling} onClick={onCancel}>
             {cancelling ? 'Cancelling…' : 'Cancel'}
           </Button>
         )}

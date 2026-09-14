@@ -690,9 +690,7 @@ describe('collectionId filter', () => {
       .query({ collectionId: collection.id })
       .expect(200);
 
-    expect(response.body.items.map((asset: { id: string }) => asset.id)).toEqual([
-      inCollectionId,
-    ]);
+    expect(response.body.items.map((asset: { id: string }) => asset.id)).toEqual([inCollectionId]);
     expect(response.body.total).toBe(1);
     expect(notInCollectionId).not.toBe(inCollectionId);
   });

@@ -99,7 +99,12 @@ export class AssetCollectionService {
     const reference = await this.entities.findAssetReference(projectId, assetId);
     if (!reference) return;
 
-    const edge = await this.relationships.findEdge(projectId, collectionId, reference.id, 'contains');
+    const edge = await this.relationships.findEdge(
+      projectId,
+      collectionId,
+      reference.id,
+      'contains',
+    );
     if (!edge) return;
 
     await this.relationships.unlink(projectId, edge.id);

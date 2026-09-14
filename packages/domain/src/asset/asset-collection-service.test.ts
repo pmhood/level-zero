@@ -105,9 +105,7 @@ describe('renaming a collection', () => {
   it('rejects an id from another project', async () => {
     const board = await collection();
 
-    await expect(collections.rename(otherProject.id, board.id, 'x')).rejects.toThrow(
-      NotFoundError,
-    );
+    await expect(collections.rename(otherProject.id, board.id, 'x')).rejects.toThrow(NotFoundError);
   });
 });
 

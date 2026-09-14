@@ -142,9 +142,7 @@ describe('the queue panel', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
 
-    await waitFor(() =>
-      expect(api.cancelGeneration).toHaveBeenCalledWith('prj_1', 'gen_running'),
-    );
+    await waitFor(() => expect(api.cancelGeneration).toHaveBeenCalledWith('prj_1', 'gen_running'));
   });
 
   it('links View All to the generations already surfaced in Search, not a new history view', async () => {
@@ -164,7 +162,9 @@ describe('the queue panel', () => {
 
     renderPanel('prj_b');
 
-    await waitFor(() => expect(api.listGenerations).toHaveBeenCalledWith('prj_b', expect.anything()));
+    await waitFor(() =>
+      expect(api.listGenerations).toHaveBeenCalledWith('prj_b', expect.anything()),
+    );
     expect(screen.getByText('Nothing generating')).toBeTruthy();
   });
 });

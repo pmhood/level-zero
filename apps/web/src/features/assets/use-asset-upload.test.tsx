@@ -86,7 +86,10 @@ describe('useAssetUpload', () => {
         width: 800,
         height: 600,
       },
-      expect.objectContaining({ signal: expect.any(AbortSignal), onProgress: expect.any(Function) }),
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        onProgress: expect.any(Function),
+      }),
     );
   });
 

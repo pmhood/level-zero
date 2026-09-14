@@ -164,7 +164,10 @@ describe('queuePollInterval', () => {
   });
 
   it('keeps polling if even one of several is still active', () => {
-    const items = [generation({ id: 'gen_failed', status: 'failed' }), generation({ id: 'gen_running', status: 'running' })];
+    const items = [
+      generation({ id: 'gen_failed', status: 'failed' }),
+      generation({ id: 'gen_running', status: 'running' }),
+    ];
     expect(queuePollInterval(items)).toBe(QUEUE_POLL_INTERVAL_MS);
   });
 });

@@ -116,7 +116,12 @@ describe('assetLibraryFiltersToListParams', () => {
 
   it('wraps single-choice filters in the arrays the API filter expects', () => {
     const params = assetLibraryFiltersToListParams(
-      filters({ kind: 'image', mimeFamily: 'image', markKind: 'favorite', selectionState: 'approved' }),
+      filters({
+        kind: 'image',
+        mimeFamily: 'image',
+        markKind: 'favorite',
+        selectionState: 'approved',
+      }),
     );
 
     expect(params.kind).toEqual(['image']);

@@ -107,7 +107,9 @@ export function AssetLibraryToolbar({
           <Select
             id="asset-filter-kind"
             value={filters.kind ?? ''}
-            onChange={(event) => setFilter('kind', (event.target.value || null) as AssetKind | null)}
+            onChange={(event) =>
+              setFilter('kind', (event.target.value || null) as AssetKind | null)
+            }
             className="w-36"
           >
             <option value="">All Types</option>
@@ -204,7 +206,10 @@ export function AssetLibraryToolbar({
             id="asset-filter-selection"
             value={filters.selectionState ?? ''}
             onChange={(event) =>
-              setFilter('selectionState', (event.target.value || null) as AssetSelectionState | null)
+              setFilter(
+                'selectionState',
+                (event.target.value || null) as AssetSelectionState | null,
+              )
             }
             className="w-36"
           >
@@ -257,10 +262,14 @@ export function AssetLibraryToolbar({
       {active && (
         <div className="flex flex-wrap items-center gap-2">
           {filters.search.trim() && (
-            <Tag onRemove={() => clearFilter('search')}>{`Filename: "${filters.search.trim()}"`}</Tag>
+            <Tag
+              onRemove={() => clearFilter('search')}
+            >{`Filename: "${filters.search.trim()}"`}</Tag>
           )}
           {filters.kind && (
-            <Tag onRemove={() => clearFilter('kind')}>{`Type: ${assetKindLabel(filters.kind)}`}</Tag>
+            <Tag
+              onRemove={() => clearFilter('kind')}
+            >{`Type: ${assetKindLabel(filters.kind)}`}</Tag>
           )}
           {filters.mimeFamily && (
             <Tag onRemove={() => clearFilter('mimeFamily')}>
@@ -291,7 +300,9 @@ export function AssetLibraryToolbar({
             <Tag onRemove={() => clearFilter('createdAfter')}>{`From ${filters.createdAfter}`}</Tag>
           )}
           {filters.createdBefore && (
-            <Tag onRemove={() => clearFilter('createdBefore')}>{`Until ${filters.createdBefore}`}</Tag>
+            <Tag
+              onRemove={() => clearFilter('createdBefore')}
+            >{`Until ${filters.createdBefore}`}</Tag>
           )}
           {filters.includeArchived && (
             <Tag onRemove={() => clearFilter('includeArchived')}>Including archived</Tag>

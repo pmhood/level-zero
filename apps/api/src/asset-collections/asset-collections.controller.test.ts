@@ -153,9 +153,11 @@ describe('archiving a collection', () => {
   it('archives the collection and leaves member assets untouched', async () => {
     const board = await collection();
     const asset = await image();
-    await http().post(collectionsPath(project.id, `/${board.id}/assets`)).send({
-      assetId: asset.id,
-    });
+    await http()
+      .post(collectionsPath(project.id, `/${board.id}/assets`))
+      .send({
+        assetId: asset.id,
+      });
 
     const response = await http()
       .post(collectionsPath(project.id, `/${board.id}/archive`))
@@ -188,7 +190,9 @@ describe('membership', () => {
       .send({ assetId: asset.id })
       .expect(201);
 
-    await http().delete(collectionsPath(project.id, `/${board.id}/assets/${asset.id}`)).expect(204);
+    await http()
+      .delete(collectionsPath(project.id, `/${board.id}/assets/${asset.id}`))
+      .expect(204);
 
     const untouched = await assets.getById(project.id, asset.id);
     expect(untouched.status).toBe('active');
