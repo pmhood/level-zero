@@ -51,4 +51,15 @@ export interface EntityRepository {
     entity: Entity,
     assetId: string,
   ): Promise<FindOrCreateAssetReferenceResult>;
+
+  /**
+   * The `asset_reference` entity for `assetId` in `projectId` (active or
+   * archived), or `null` if the project has none.
+   *
+   * The read half of `findOrCreateAssetReference`, for a caller that must
+   * not risk materializing a reference just to discover there is nothing to
+   * find — `AssetCollectionService.removeAsset` locating a membership edge
+   * to delete is the case this exists for.
+   */
+  findAssetReference(projectId: string, assetId: string): Promise<Entity | null>;
 }

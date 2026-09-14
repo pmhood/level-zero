@@ -315,3 +315,29 @@ describe('finding or creating an asset reference', () => {
     ).rejects.toThrow(ConflictError);
   });
 });
+
+describe('finding an asset reference without creating one', () => {
+  it('returns null when the project has no reference for the asset', async () => {
+    expect(await entityService.findAssetReference(projectA.id, 'asset-1')).toBeNull();
+  });
+
+  it('returns the existing reference, never creating a second one', async () => {
+    const reference = await entityService.findOrCreateAssetReference(projectA.id, 'asset-1', {
+      name: 'portrait.png',
+    });
+
+    const found = await entityService.findAssetReference(projectA.id, 'asset-1');
+
+    expect(found?.id).toBe(reference.id);
+    const page = await entityService.listByProject(projectA.id, { types: ['asset_reference'] });
+    expect(page.total).toBe(1);
+  });
+
+  it('never resolves a reference belonging to another project', async () => {
+    await entityService.findOrCreateAssetReference(projectA.id, 'shared-asset-id', {
+      name: 'portrait.png',
+    });
+
+    expect(await entityService.findAssetReference(projectB.id, 'shared-asset-id')).toBeNull();
+  });
+});

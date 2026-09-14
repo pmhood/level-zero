@@ -45,6 +45,7 @@ describe('entity types', () => {
       'asset_reference',
       'scene',
       'moodboard',
+      'asset_collection',
       'document',
       'prototype',
       'build',

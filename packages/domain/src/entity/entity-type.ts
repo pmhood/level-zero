@@ -24,6 +24,7 @@ export const ENTITY_TYPES = [
   'asset_reference',
   'scene',
   'moodboard',
+  'asset_collection',
   'document',
   'prototype',
   'build',

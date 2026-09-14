@@ -1,14 +1,16 @@
 'use client';
 
-import type { Job } from '@level-zero/domain';
+import type { Generation, Job } from '@level-zero/domain';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 import * as api from '@/lib/api';
 
 import {
   buildGenerationRequest,
+  isGenerationRunning,
   isImageGeneration,
+  queuePollInterval,
   type BuildGenerationRequest,
 } from './generation';
 
@@ -18,6 +20,7 @@ const RECENT_LIMIT = 20;
 const generationKeys = {
   all: (projectId: string) => ['projects', projectId, 'generations'] as const,
   running: (projectId: string) => ['projects', projectId, 'generations', 'running'] as const,
+  queue: (projectId: string) => ['projects', projectId, 'generations', 'queue'] as const,
   one: (projectId: string, generationId: string) =>
     ['projects', projectId, 'generations', generationId] as const,
   provenance: (projectId: string, generationId: string) =>
@@ -49,6 +52,56 @@ export function useRunningImageGenerations(projectId: string) {
     },
     enabled: Boolean(projectId),
   });
+}
+
+/**
+ * What the Generation Queue panel (#180) shows: queued and running work, plus
+ * a failed generation until it is dismissed. `Generation` is the only thing
+ * read here — never the job behind it, let alone BullMQ — matching the
+ * issue's settled scope.
+ *
+ * There is no websocket or SSE layer for this: `refetchInterval` polls at a
+ * modest, fixed interval for as long as anything is queued or running, and
+ * stops the moment nothing is. Starting or cancelling a generation anywhere
+ * in the app invalidates `generationKeys.all`, which this key falls under, so
+ * a poll restarts as soon as there is new work to show even while stopped.
+ *
+ * A generation that drops out of the active set between polls (it completed,
+ * failed or was cancelled) has already written any outputs it is going to, so
+ * the asset library is invalidated right here — the panel's outputs appear
+ * without a reload, without the panel reaching into a library it doesn't own.
+ */
+export function useGenerationQueue(projectId: string) {
+  const queryClient = useQueryClient();
+  const previousActiveIds = useRef<ReadonlySet<string>>(new Set());
+
+  const query = useQuery({
+    queryKey: generationKeys.queue(projectId),
+    queryFn: async (): Promise<Generation[]> => {
+      const page = await api.listGenerations(projectId, {
+        status: ['queued', 'running', 'failed'],
+        limit: RECENT_LIMIT,
+      });
+      return page.items;
+    },
+    enabled: Boolean(projectId),
+    refetchInterval: (query) => queuePollInterval(query.state.data),
+  });
+
+  useEffect(() => {
+    const items = query.data;
+    if (!items) return;
+
+    const activeIds = new Set(items.filter(isGenerationRunning).map((item) => item.id));
+    const justFinished = [...previousActiveIds.current].some((id) => !activeIds.has(id));
+    previousActiveIds.current = activeIds;
+
+    if (justFinished) {
+      queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'assets'] });
+    }
+  }, [query.data, projectId, queryClient]);
+
+  return query;
 }
 
 export function useGeneration(projectId: string, generationId: string | null) {

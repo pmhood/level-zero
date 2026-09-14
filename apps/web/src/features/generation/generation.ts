@@ -67,6 +67,20 @@ export function isGenerationRunning(generation: Generation): boolean {
   return generation.status === 'queued' || generation.status === 'running';
 }
 
+/** How often the Generation Queue panel (#180) polls while it has running work. */
+export const QUEUE_POLL_INTERVAL_MS = 4_000;
+
+/**
+ * `useQuery`'s `refetchInterval`, kept as a plain function so the poll/stop
+ * decision is testable without a clock: poll for as long as anything queued
+ * or running is in view, stop the moment nothing is. There is no websocket or
+ * SSE layer behind the queue panel — this fixed interval is the whole
+ * mechanism (#180's settled scope).
+ */
+export function queuePollInterval(items: readonly Generation[] | undefined): number | false {
+  return (items ?? []).some(isGenerationRunning) ? QUEUE_POLL_INTERVAL_MS : false;
+}
+
 export interface BuildGenerationRequest {
   mode: GenerationMode;
   prompt: string;
@@ -157,4 +171,40 @@ export function failureText(generation: Generation): string | null {
 export function generationSummary(generation: Generation): string {
   const producer = generation.model ?? generation.provider ?? 'pending';
   return `${generation.capability} · ${producer}`;
+}
+
+/** `image.generate` as "Image · Generate" — a queue row names what is being made, not the wire format. */
+export function capabilityLabel(capability: string): string {
+  return capability
+    .split('.')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' · ');
+}
+
+/**
+ * "How long it has been going" (#180), read off the record rather than a
+ * ticking clock: `startedAt` once a worker has picked the job up, `createdAt`
+ * while it is still queued.
+ */
+export function elapsedSince(generation: Generation): Date {
+  return generation.startedAt ?? generation.createdAt;
+}
+
+const ELAPSED_UNITS: readonly [string, number][] = [
+  ['d', 60 * 60 * 24],
+  ['h', 60 * 60],
+  ['m', 60],
+];
+
+/** "2m", "12m", "18m" — the mockup's elapsed-time format, coarse to the minute past a minute. */
+export function elapsedLabel(since: Date, now: Date = new Date()): string {
+  const totalSeconds = Math.max(0, Math.floor((now.getTime() - since.getTime()) / 1000));
+
+  for (const [unit, unitSeconds] of ELAPSED_UNITS) {
+    if (totalSeconds >= unitSeconds) {
+      return `${Math.floor(totalSeconds / unitSeconds)}${unit}`;
+    }
+  }
+  return `${totalSeconds}s`;
 }

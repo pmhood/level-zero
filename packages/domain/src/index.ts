@@ -235,6 +235,10 @@ export {
   type AssetLibraryReadModel,
 } from './asset/asset-library-read-model';
 export { AssetLibraryService } from './asset/asset-library-service';
+export {
+  AssetCollectionService,
+  type CreateAssetCollectionInput,
+} from './asset/asset-collection-service';
 
 export {
   DEFAULT_GENERATION_FAILURE_CODE,

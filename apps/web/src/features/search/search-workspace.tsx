@@ -1,6 +1,6 @@
 'use client';
 
-import type { EntityType } from '@level-zero/domain';
+import type { EntityType, SearchSourceType } from '@level-zero/domain';
 import { Button, EmptyState, Input, Tabs, Tag, WorkspaceHeader } from '@level-zero/ui';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
@@ -21,6 +21,13 @@ const MODES: { value: NonNullable<SearchParams['mode']>; label: string }[] = [
 /** The entity types worth offering as a scope; the rest are reachable unscoped. */
 const SCOPES: EntityType[] = ['idea', 'character', 'location', 'mechanic', 'document'];
 
+/** `sourceType` values a link elsewhere in the app may seed this page with. */
+const SEEDABLE_SOURCE_TYPES: SearchSourceType[] = ['asset', 'generation'];
+const SOURCE_TYPE_TAG_LABEL: Partial<Record<SearchSourceType, string>> = {
+  asset: 'Assets only',
+  generation: 'Generations only',
+};
+
 /**
  * One way in to everything in the project (spec section 58).
  *
@@ -29,19 +36,23 @@ const SCOPES: EntityType[] = ['idea', 'character', 'location', 'mechanic', 'docu
  * limits exploration" can reach a design that never uses those words. Scoping
  * to one entity type is the local, per-tool search the spec describes.
  *
- * `?sourceType=asset` seeds an initial "Assets only" scope — the Asset
- * Library toolbar's (#172) link into content search, since #41's
- * `search_documents` remains the project's only search index and the library
- * has no second one of its own. This only seeds the request; there is no
- * broader source-type picker here; wiring one is more than the small
- * addition #172 scoped itself to.
+ * `?sourceType=asset` or `?sourceType=generation` seeds an initial "only"
+ * scope — the Asset Library toolbar's (#172) link into content search, and
+ * the Generation Queue panel's (#180) "View All", since #41's
+ * `search_documents` remains the project's only search index and neither
+ * surface has a second one of its own. This only seeds the request; there is
+ * no broader source-type picker here; wiring one is more than either small
+ * addition scoped itself to.
  */
 export function SearchWorkspace({ projectId }: { projectId: string }) {
   const searchParams = useSearchParams();
   const [question, setQuestion] = useState('');
   const [mode, setMode] = useState<NonNullable<SearchParams['mode']>>('keyword');
   const [scope, setScope] = useState<EntityType | null>(null);
-  const [assetsOnly, setAssetsOnly] = useState(() => searchParams.get('sourceType') === 'asset');
+  const [sourceTypeOnly, setSourceTypeOnly] = useState<SearchSourceType | null>(() => {
+    const seeded = searchParams.get('sourceType');
+    return SEEDABLE_SOURCE_TYPES.find((sourceType) => sourceType === seeded) ?? null;
+  });
 
   const debounced = useDebouncedValue(question, 250);
   const projectQuery = useProject(projectId);
@@ -49,7 +60,7 @@ export function SearchWorkspace({ projectId }: { projectId: string }) {
     q: debounced.trim() || undefined,
     mode,
     entityType: scope ? [scope] : undefined,
-    sourceType: assetsOnly && !scope ? ['asset'] : undefined,
+    sourceType: sourceTypeOnly && !scope ? [sourceTypeOnly] : undefined,
     limit: 50,
   };
   const resultsQuery = useProjectSearch(projectId, params);
@@ -80,10 +91,10 @@ export function SearchWorkspace({ projectId }: { projectId: string }) {
         <div className="flex flex-wrap items-center gap-1.5">
           <ScopeButton
             label="Everything"
-            active={scope === null && !assetsOnly}
+            active={scope === null && !sourceTypeOnly}
             onClick={() => {
               setScope(null);
-              setAssetsOnly(false);
+              setSourceTypeOnly(null);
             }}
           />
           {SCOPES.map((type) => (
@@ -94,8 +105,10 @@ export function SearchWorkspace({ projectId }: { projectId: string }) {
               onClick={() => setScope(type)}
             />
           ))}
-          {assetsOnly && !scope && (
-            <Tag onRemove={() => setAssetsOnly(false)}>Assets only</Tag>
+          {sourceTypeOnly && !scope && (
+            <Tag onRemove={() => setSourceTypeOnly(null)}>
+              {SOURCE_TYPE_TAG_LABEL[sourceTypeOnly]}
+            </Tag>
           )}
         </div>
 

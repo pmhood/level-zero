@@ -367,6 +367,46 @@ describe('DrizzleEntityRepository.findOrCreateAssetReference', () => {
   });
 });
 
+describe('DrizzleEntityRepository.findAssetReference', () => {
+  function candidate(project: Project, assetId: string, name = 'portrait.png'): Entity {
+    return createEntity(
+      {
+        projectId: project.id,
+        type: 'asset_reference',
+        name,
+        status: 'active',
+        data: assetReferenceData(assetId),
+      },
+      deps,
+    );
+  }
+
+  it('returns null when the project has no reference for the asset', async () => {
+    const project = await seedProject('Deep Fathom');
+
+    expect(await entityRepo.findAssetReference(project.id, 'asset-1')).toBeNull();
+  });
+
+  it('finds the existing reference without creating a second one', async () => {
+    const project = await seedProject('Deep Fathom');
+    const { entity: reference } = await entityRepo.findOrCreateAssetReference(
+      candidate(project, 'asset-1'),
+      'asset-1',
+    );
+
+    const found = await entityRepo.findAssetReference(project.id, 'asset-1');
+
+    expect(found?.id).toBe(reference.id);
+  });
+
+  it('never resolves a reference belonging to another project', async () => {
+    const [a, b] = [await seedProject('A'), await seedProject('B')];
+    await entityRepo.findOrCreateAssetReference(candidate(a, 'shared-asset'), 'shared-asset');
+
+    expect(await entityRepo.findAssetReference(b.id, 'shared-asset')).toBeNull();
+  });
+});
+
 describe('referential integrity', () => {
   it('removes a project entities when the project row is deleted', async () => {
     const project = await seedProject('Deep Fathom');

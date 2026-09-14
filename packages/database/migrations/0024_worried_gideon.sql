@@ -1,0 +1,1 @@
+ALTER TYPE "public"."entity_type" ADD VALUE 'asset_collection' BEFORE 'document';

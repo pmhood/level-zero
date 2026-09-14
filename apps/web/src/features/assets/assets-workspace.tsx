@@ -12,6 +12,7 @@ import {
 } from '@level-zero/ui';
 import { useEffect, useState, type DragEvent } from 'react';
 
+import { GenerationQueuePanel } from '@/features/generation/generation-queue-panel';
 import { apiErrorMessage } from '@/lib/api';
 
 import { AssetCompare } from './asset-compare';
@@ -172,6 +173,11 @@ export function AssetsWorkspace({ projectId }: { projectId: string }) {
             <p className="text-sm font-semibold text-foreground">Drop to upload</p>
           </div>
         )}
+
+        {/* Generations in flight for this project (#180) — what is
+            generating now, not the pipeline or Collections views this
+            workspace's view switcher still has disabled. */}
+        <GenerationQueuePanel projectId={projectId} />
 
         <AssetUploadQueue items={upload.items} onRetry={upload.retry} onDismiss={upload.dismiss} />
 

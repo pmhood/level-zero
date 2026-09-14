@@ -4,6 +4,9 @@ import { describe, expect, it } from 'vitest';
 import {
   buildGenerationRequest,
   canStart,
+  capabilityLabel,
+  elapsedLabel,
+  elapsedSince,
   failureText,
   generationProgress,
   generationTone,
@@ -11,7 +14,9 @@ import {
   isImageGeneration,
   modeNeedsSource,
   progressLabel,
+  queuePollInterval,
   MODE_CAPABILITY,
+  QUEUE_POLL_INTERVAL_MS,
 } from './generation';
 
 function generation(overrides: Partial<Generation> = {}): Generation {
@@ -145,6 +150,25 @@ describe('status', () => {
   });
 });
 
+describe('queuePollInterval', () => {
+  it('polls while anything is queued or running', () => {
+    expect(queuePollInterval([generation({ status: 'queued' })])).toBe(QUEUE_POLL_INTERVAL_MS);
+    expect(queuePollInterval([generation({ status: 'running' })])).toBe(QUEUE_POLL_INTERVAL_MS);
+  });
+
+  it('stops the moment nothing is — a terminal-only list, or none fetched yet', () => {
+    expect(queuePollInterval([generation({ status: 'failed' })])).toBe(false);
+    expect(queuePollInterval([generation({ status: 'complete' })])).toBe(false);
+    expect(queuePollInterval([])).toBe(false);
+    expect(queuePollInterval(undefined)).toBe(false);
+  });
+
+  it('keeps polling if even one of several is still active', () => {
+    const items = [generation({ id: 'gen_failed', status: 'failed' }), generation({ id: 'gen_running', status: 'running' })];
+    expect(queuePollInterval(items)).toBe(QUEUE_POLL_INTERVAL_MS);
+  });
+});
+
 describe('failureText', () => {
   it('keeps the provider code alongside the message', () => {
     const failed = generation({
@@ -157,5 +181,46 @@ describe('failureText', () => {
 
   it('is null for a generation that did not fail', () => {
     expect(failureText(generation())).toBeNull();
+  });
+});
+
+describe('capabilityLabel', () => {
+  it('names what is being generated, not the wire format', () => {
+    expect(capabilityLabel('image.generate')).toBe('Image · Generate');
+    expect(capabilityLabel('text.generate')).toBe('Text · Generate');
+  });
+});
+
+describe('elapsedSince', () => {
+  it('is when a worker picked the job up, once one has', () => {
+    const started = new Date('2026-09-01T10:05:00Z');
+    expect(elapsedSince(generation({ startedAt: started }))).toEqual(started);
+  });
+
+  it('is when the generation was queued, before a worker has', () => {
+    const created = new Date('2026-09-01T10:00:00Z');
+    expect(elapsedSince(generation({ createdAt: created, startedAt: null }))).toEqual(created);
+  });
+});
+
+describe('elapsedLabel', () => {
+  const now = new Date('2026-09-01T10:00:00Z');
+
+  it('reads in seconds under a minute', () => {
+    expect(elapsedLabel(new Date('2026-09-01T09:59:45Z'), now)).toBe('15s');
+  });
+
+  it('reads in minutes under an hour, matching the mockup', () => {
+    expect(elapsedLabel(new Date('2026-09-01T09:58:00Z'), now)).toBe('2m');
+    expect(elapsedLabel(new Date('2026-09-01T09:48:00Z'), now)).toBe('12m');
+  });
+
+  it('reads in hours, then days, once a generation has run that long', () => {
+    expect(elapsedLabel(new Date('2026-09-01T07:00:00Z'), now)).toBe('3h');
+    expect(elapsedLabel(new Date('2026-08-30T10:00:00Z'), now)).toBe('2d');
+  });
+
+  it('never goes negative for a clock that has not ticked yet', () => {
+    expect(elapsedLabel(new Date('2026-09-01T10:00:05Z'), now)).toBe('0s');
   });
 });

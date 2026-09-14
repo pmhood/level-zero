@@ -128,9 +128,9 @@ describe('ENTITY_DETAIL_BODIES', () => {
     expect(Object.keys(ENTITY_DETAIL_BODIES).sort()).toEqual([...BESPOKE_TYPES].sort());
   });
 
-  it('leaves the other seven types to the fallback', () => {
+  it('leaves the other eight types to the fallback', () => {
     const fallbackTypes = ENTITY_TYPES.filter((type) => !BESPOKE_TYPES.includes(type));
-    expect(fallbackTypes).toHaveLength(7);
+    expect(fallbackTypes).toHaveLength(8);
 
     for (const type of fallbackTypes) {
       expect(ENTITY_DETAIL_BODIES[type]).toBeUndefined();
