@@ -111,6 +111,7 @@ const REEF: Asset = {
   variant: 'source',
   sourceAssetId: null,
   status: 'active',
+  pipelineStage: 'concept',
   createdAt: new Date(),
   updatedAt: new Date(),
   archivedAt: null,

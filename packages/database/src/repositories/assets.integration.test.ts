@@ -1,4 +1,5 @@
 import {
+  ActivityService,
   AssetService,
   NotFoundError,
   ProjectService,
@@ -13,6 +14,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { type DatabaseClient } from '../postgres/client';
 import { connectTestDatabase, truncateDomainTables } from '../testing/test-database';
+import { DrizzleActivityRepository } from './activity-repository';
 import { DrizzleAssetRepository } from './asset-repository';
 import { DrizzleProjectRepository } from './project-repository';
 
@@ -44,6 +46,7 @@ let client: DatabaseClient;
 let projectRepo: DrizzleProjectRepository;
 let assetRepo: DrizzleAssetRepository;
 let projects: ProjectService;
+let activity: ActivityService;
 let assets: AssetService;
 let storage: InMemoryObjectStorageProvider;
 
@@ -52,6 +55,7 @@ beforeAll(async () => {
   projectRepo = new DrizzleProjectRepository(client.db);
   assetRepo = new DrizzleAssetRepository(client.db);
   projects = new ProjectService(projectRepo, deps);
+  activity = new ActivityService(new DrizzleActivityRepository(client.db), deps);
 });
 
 afterAll(async () => {
@@ -61,7 +65,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await truncateDomainTables(client);
   storage = new InMemoryObjectStorageProvider();
-  assets = new AssetService(assetRepo, projectRepo, storage, deps);
+  assets = new AssetService(assetRepo, projectRepo, storage, activity, deps);
 });
 
 async function seedProject(name: string): Promise<Project> {
@@ -74,7 +78,7 @@ async function seedProject(name: string): Promise<Project> {
  * timing between uploads.
  */
 function assetsAt(instant: string): AssetService {
-  return new AssetService(assetRepo, projectRepo, storage, {
+  return new AssetService(assetRepo, projectRepo, storage, activity, {
     clock: fixedClock(instant),
     ids: uuidIdGenerator,
   });
@@ -396,6 +400,74 @@ describe('mime-family filter', () => {
 
     const page = await assets.listByProject(a.id, { mimeFamilies: ['image'] });
     expect(page.items.map((asset) => asset.filename)).toEqual(['a.png']);
+  });
+});
+
+describe('pipeline stage', () => {
+  it('defaults every asset to concept, including ones that existed before the migration', async () => {
+    const project = await seedProject('Deep Fathom');
+
+    const asset = await assets.upload(project.id, {
+      kind: 'image',
+      filename: 'kael-portrait.png',
+      mimeType: 'image/png',
+      content: Buffer.from('pretend png bytes'),
+    });
+
+    expect(asset.pipelineStage).toBe('concept');
+    const reread = await assets.getById(project.id, asset.id);
+    expect(reread.pipelineStage).toBe('concept');
+  });
+
+  it('narrows by pipelineStages, in SQL, scoped to the project', async () => {
+    const [a, b] = [await seedProject('A'), await seedProject('B')];
+
+    const concept = await assets.upload(a.id, {
+      kind: 'image',
+      filename: 'concept.png',
+      mimeType: 'image/png',
+      content: Buffer.from('a'),
+    });
+    const inProgress = await assets.upload(a.id, {
+      kind: 'image',
+      filename: 'in-progress.png',
+      mimeType: 'image/png',
+      content: Buffer.from('b'),
+    });
+    await assets.setPipelineStage(a.id, inProgress.id, 'in_progress');
+    const otherProjectAsset = await assets.upload(b.id, {
+      kind: 'image',
+      filename: 'other-project.png',
+      mimeType: 'image/png',
+      content: Buffer.from('c'),
+    });
+    await assets.setPipelineStage(b.id, otherProjectAsset.id, 'in_progress');
+
+    const page = await assets.listByProject(a.id, { pipelineStages: ['in_progress'] });
+    expect(page.items.map((asset) => asset.id)).toEqual([inProgress.id]);
+    expect(page.total).toBe(1);
+
+    const both = await assets.listByProject(a.id, {
+      pipelineStages: ['concept', 'in_progress'],
+    });
+    expect(both.items.map((asset) => asset.id).sort()).toEqual([concept.id, inProgress.id].sort());
+  });
+
+  it('moves any stage to any other, writing the column', async () => {
+    const project = await seedProject('Deep Fathom');
+    const asset = await assets.upload(project.id, {
+      kind: 'image',
+      filename: 'kael-suit.png',
+      mimeType: 'image/png',
+      content: Buffer.from('a'),
+    });
+
+    await assets.setPipelineStage(project.id, asset.id, 'production_ready');
+    const sentBack = await assets.setPipelineStage(project.id, asset.id, 'concept');
+
+    expect(sentBack.pipelineStage).toBe('concept');
+    const reread = await assets.getById(project.id, asset.id);
+    expect(reread.pipelineStage).toBe('concept');
   });
 });
 

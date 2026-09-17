@@ -26,6 +26,7 @@ export const ACTIVITY_TYPES = [
   'generation_failed',
   'prototype_version_created',
   'playtest_completed',
+  'asset_stage_changed',
 ] as const;
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];
 
@@ -36,6 +37,7 @@ export const ACTIVITY_SUBJECT_TYPES = [
   'generation',
   'prototype_version',
   'playtest',
+  'asset',
 ] as const;
 export type ActivitySubjectType = (typeof ACTIVITY_SUBJECT_TYPES)[number];
 

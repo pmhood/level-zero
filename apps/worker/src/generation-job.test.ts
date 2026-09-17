@@ -91,7 +91,13 @@ beforeEach(async () => {
 
   const activity = new ActivityService(new InMemoryActivityRepository(), deps);
   entities = new EntityService(entityRepo, projectRepo, activity, deps);
-  assets = new AssetService(assetRepo, projectRepo, new InMemoryObjectStorageProvider(), deps);
+  assets = new AssetService(
+    assetRepo,
+    projectRepo,
+    new InMemoryObjectStorageProvider(),
+    activity,
+    deps,
+  );
   jobs = new JobService(
     new InMemoryJobRepository(),
     projectRepo,

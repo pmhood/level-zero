@@ -4,7 +4,7 @@ import {
   type ActivityPage,
   type ActivityRepository,
 } from '../activity/activity-repository';
-import { type Asset } from '../asset/asset';
+import { type Asset, type AssetPipelineStage } from '../asset/asset';
 import {
   type AssetLibraryFilter,
   type AssetLibraryPage,
@@ -469,6 +469,9 @@ export class InMemoryAssetRepository implements AssetRepository {
       )
       .filter((asset) => !filter.createdAfter || asset.createdAt >= filter.createdAfter)
       .filter((asset) => !filter.createdBefore || asset.createdAt < filter.createdBefore)
+      .filter(
+        (asset) => !filter.pipelineStages || filter.pipelineStages.includes(asset.pipelineStage),
+      )
       .sort(byAssetSort(filter.sortBy ?? 'createdAt', filter.sortDirection ?? 'desc'));
 
     const offset = filter.offset ?? 0;
@@ -695,6 +698,10 @@ export class InMemoryAssetLibraryReadModel implements AssetLibraryReadModel {
       filtered = filtered.filter((entry) => memberAssetIds.has(entry.asset.id));
     }
 
+    // `pipelineStages` is a plain column filter, already applied by
+    // `this.assets.listByProject` above via `unpaged` — the same reason
+    // `kinds`/`statuses` need no second pass here.
+
     const offset = filter.offset ?? 0;
     const limit = filter.limit ?? filtered.length;
     const page = filtered.slice(offset, offset + limit);
@@ -721,6 +728,17 @@ export class InMemoryAssetLibraryReadModel implements AssetLibraryReadModel {
         if (asset?.status === 'active') count += 1;
       }
       if (count > 0) counts[collection.id] = count;
+    }
+    return counts;
+  }
+
+  /** Active source assets only — mirrors `DrizzleAssetLibraryReadModel.countsByStage`. */
+  async countsByStage(projectId: string): Promise<Partial<Record<AssetPipelineStage, number>>> {
+    const { items } = await this.assets.listByProject(projectId, { variants: ['source'] });
+
+    const counts: Partial<Record<AssetPipelineStage, number>> = {};
+    for (const asset of items) {
+      counts[asset.pipelineStage] = (counts[asset.pipelineStage] ?? 0) + 1;
     }
     return counts;
   }

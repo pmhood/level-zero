@@ -1,4 +1,9 @@
-import { ASSET_KINDS, ASSET_STATUSES, ASSET_VARIANTS } from '@level-zero/domain';
+import {
+  ASSET_KINDS,
+  ASSET_PIPELINE_STAGES,
+  ASSET_STATUSES,
+  ASSET_VARIANTS,
+} from '@level-zero/domain';
 import { sql } from 'drizzle-orm';
 import {
   bigint,
@@ -19,6 +24,7 @@ import { projects } from './projects';
 export const assetKindEnum = pgEnum('asset_kind', ASSET_KINDS);
 export const assetVariantEnum = pgEnum('asset_variant', ASSET_VARIANTS);
 export const assetStatusEnum = pgEnum('asset_status', ASSET_STATUSES);
+export const assetPipelineStageEnum = pgEnum('asset_pipeline_stage', ASSET_PIPELINE_STAGES);
 
 /**
  * A reusable, project-scoped file: an image, a video, an audio clip, a 3D
@@ -54,6 +60,7 @@ export const assets = pgTable(
       onDelete: 'set null',
     }),
     status: assetStatusEnum('status').notNull().default('active'),
+    pipelineStage: assetPipelineStageEnum('pipeline_stage').notNull().default('concept'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
@@ -65,6 +72,9 @@ export const assets = pgTable(
     index('assets_project_idx').on(table.projectId),
     index('assets_project_kind_idx').on(table.projectId, table.kind),
     index('assets_project_status_idx').on(table.projectId, table.status),
+    // The strip's per-stage counts and the stage filter both scope by
+    // project first, matching every other index here.
+    index('assets_project_pipeline_stage_idx').on(table.projectId, table.pipelineStage),
     // Trailing `id` matches the default sort's tiebreak, so paging never
     // drops or repeats a row when two assets share a `created_at`.
     index('assets_project_created_at_idx').on(table.projectId, table.createdAt, table.id),

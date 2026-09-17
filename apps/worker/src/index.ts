@@ -105,6 +105,7 @@ async function main(): Promise<void> {
     assets,
     projects,
     new LocalObjectStorageProvider({ rootDir: env.STORAGE_LOCAL_ROOT }),
+    activity,
     deps,
     search,
     jobs,

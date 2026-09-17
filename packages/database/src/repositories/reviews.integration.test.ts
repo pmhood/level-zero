@@ -65,7 +65,13 @@ beforeAll(async () => {
   projects = new ProjectService(projectRepo, deps);
   entities = new EntityService(entityRepo, projectRepo, activity, deps);
   versions = new EntityVersionService(versionRepo, entityRepo, activity, deps);
-  assets = new AssetService(assetRepo, projectRepo, new InMemoryObjectStorageProvider(), deps);
+  assets = new AssetService(
+    assetRepo,
+    projectRepo,
+    new InMemoryObjectStorageProvider(),
+    activity,
+    deps,
+  );
   prototypes = new PrototypeService(
     prototypeRepo,
     entities,

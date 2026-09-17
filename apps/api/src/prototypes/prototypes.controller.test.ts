@@ -54,7 +54,13 @@ beforeEach(async () => {
   const activity = new ActivityService(new InMemoryActivityRepository(), deps);
   entities = new EntityService(entityRepo, projects, activity, deps);
   versions = new EntityVersionService(versionRepo, entityRepo, activity, deps);
-  assets = new AssetService(assetRepo, projects, new InMemoryObjectStorageProvider(), deps);
+  assets = new AssetService(
+    assetRepo,
+    projects,
+    new InMemoryObjectStorageProvider(),
+    activity,
+    deps,
+  );
   const relationships = new EntityRelationshipService(
     new InMemoryEntityRelationshipRepository(),
     entityRepo,

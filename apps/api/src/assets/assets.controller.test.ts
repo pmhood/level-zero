@@ -1,4 +1,5 @@
 import {
+  ActivityService,
   AssetLibraryService,
   AssetService,
   MAX_ASSET_UPLOAD_BYTES,
@@ -15,6 +16,7 @@ import {
   type Project,
 } from '@level-zero/domain';
 import {
+  InMemoryActivityRepository,
   InMemoryAssetLibraryReadModel,
   InMemoryAssetMarkRepository,
   InMemoryAssetRepository,
@@ -58,7 +60,8 @@ beforeEach(async () => {
   entities = new InMemoryEntityRepository();
   relationships = new InMemoryEntityRelationshipRepository();
   projectService = new ProjectService(projects, deps);
-  const assetService = new AssetService(assets, projects, storage, deps);
+  const activity = new ActivityService(new InMemoryActivityRepository(), deps);
+  const assetService = new AssetService(assets, projects, storage, activity, deps);
   const libraryService = new AssetLibraryService(
     new InMemoryAssetLibraryReadModel(
       assets,
@@ -442,6 +445,134 @@ describe('archiving and restoring an asset', () => {
     await http()
       .post(`/api/projects/${otherProject.id}/assets/${created.body.id}/archive`)
       .expect(404);
+  });
+});
+
+describe('pipeline stage', () => {
+  it('defaults a freshly uploaded asset to concept', async () => {
+    const created = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'kael.png',
+        mimeType: 'image/png',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+
+    expect(created.body.pipelineStage).toBe('concept');
+  });
+
+  it('moves an asset to a new stage and records it in the project feed', async () => {
+    const created = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'kael.png',
+        mimeType: 'image/png',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+
+    const moved = await http()
+      .post(`/api/projects/${project.id}/assets/${created.body.id}/pipeline-stage`)
+      .send({ stage: 'in_progress', actor: 'pete' })
+      .expect(201);
+
+    expect(moved.body.pipelineStage).toBe('in_progress');
+  });
+
+  it('allows a production-ready asset to move back to concept', async () => {
+    const created = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'kael.png',
+        mimeType: 'image/png',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+    await http()
+      .post(`/api/projects/${project.id}/assets/${created.body.id}/pipeline-stage`)
+      .send({ stage: 'production_ready' })
+      .expect(201);
+
+    const sentBack = await http()
+      .post(`/api/projects/${project.id}/assets/${created.body.id}/pipeline-stage`)
+      .send({ stage: 'concept' })
+      .expect(201);
+
+    expect(sentBack.body.pipelineStage).toBe('concept');
+  });
+
+  it('rejects an unknown stage', async () => {
+    const created = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'kael.png',
+        mimeType: 'image/png',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+
+    await http()
+      .post(`/api/projects/${project.id}/assets/${created.body.id}/pipeline-stage`)
+      .send({ stage: 'approved_concept' })
+      .expect(400);
+  });
+
+  it('refuses a transition through another project', async () => {
+    const created = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'kael.png',
+        mimeType: 'image/png',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+
+    await http()
+      .post(`/api/projects/${otherProject.id}/assets/${created.body.id}/pipeline-stage`)
+      .send({ stage: 'in_progress' })
+      .expect(404);
+  });
+
+  it('narrows by pipelineStages and reflects it in total', async () => {
+    const inConcept = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'concept.png',
+        mimeType: 'image/png',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+    const inProgress = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'in-progress.png',
+        mimeType: 'image/png',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+    await http()
+      .post(`/api/projects/${project.id}/assets/${inProgress.body.id}/pipeline-stage`)
+      .send({ stage: 'in_progress' })
+      .expect(201);
+
+    const filtered = await http()
+      .get(`/api/projects/${project.id}/assets`)
+      .query({ pipelineStages: ['in_progress'] })
+      .expect(200);
+
+    expect(filtered.body.items.map((item: { id: string }) => item.id)).toEqual([
+      inProgress.body.id,
+    ]);
+    expect(filtered.body.total).toBe(1);
+    expect(inConcept.body.id).not.toBe(inProgress.body.id);
   });
 });
 

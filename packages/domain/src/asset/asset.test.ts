@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { fixedClock } from '../shared/clock';
 import { ValidationError } from '../shared/errors';
 import { sequentialIdGenerator } from '../shared/id';
-import { archiveAsset, createAsset, restoreAsset } from './asset';
+import { archiveAsset, changeAssetPipelineStage, createAsset, restoreAsset } from './asset';
 
 const clock = fixedClock('2026-03-01T09:00:00.000Z');
 const later = fixedClock('2026-03-05T09:00:00.000Z');
@@ -118,5 +118,39 @@ describe('archiveAsset / restoreAsset', () => {
     expect(() => restoreAsset(asset, { clock: later })).toThrow(ValidationError);
     const archived = archiveAsset(asset, { clock: later });
     expect(() => archiveAsset(archived, { clock: later })).toThrow(ValidationError);
+  });
+});
+
+describe('changeAssetPipelineStage', () => {
+  it('defaults a new asset to concept', () => {
+    const asset = createAsset(baseInput, deps());
+
+    expect(asset.pipelineStage).toBe('concept');
+  });
+
+  it('moves to any other stage', () => {
+    const asset = createAsset(baseInput, deps());
+
+    const inProgress = changeAssetPipelineStage(asset, 'in_progress', { clock: later });
+    expect(inProgress).toMatchObject({ pipelineStage: 'in_progress' });
+    expect(inProgress.updatedAt).toEqual(later.now());
+
+    const productionReady = changeAssetPipelineStage(inProgress, 'production_ready', {
+      clock: later,
+    });
+    expect(productionReady).toMatchObject({ pipelineStage: 'production_ready' });
+
+    // A production-ready asset sent back for rework is an ordinary event —
+    // any stage may move to any other, so this is not rejected.
+    const backToConcept = changeAssetPipelineStage(productionReady, 'concept', { clock: later });
+    expect(backToConcept).toMatchObject({ pipelineStage: 'concept' });
+  });
+
+  it('rejects a stage outside the fixed three', () => {
+    const asset = createAsset(baseInput, deps());
+
+    expect(() =>
+      changeAssetPipelineStage(asset, 'approved_concept' as never, { clock: later }),
+    ).toThrow(ValidationError);
   });
 });

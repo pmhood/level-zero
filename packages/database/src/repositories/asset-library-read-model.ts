@@ -10,6 +10,7 @@ import {
   type AssetLibraryReadModel,
   type AssetLinkedEntitiesSummary,
   type AssetMarkKind,
+  type AssetPipelineStage,
   type AssetSelectionState,
   type AssetSelectionSummaryEntry,
   type AssetSummary,
@@ -123,6 +124,30 @@ export class DrizzleAssetLibraryReadModel implements AssetLibraryReadModel {
 
     const counts: Record<string, number> = {};
     for (const row of result.rows) counts[row.collectionId] = row.count;
+    return counts;
+  }
+
+  /**
+   * Active asset counts per pipeline stage, in one grouped read — the
+   * strip's counts, not one `listByProject` call per stage. Rides
+   * `assets_project_pipeline_stage_idx`, the same index the stage filter
+   * uses.
+   */
+  async countsByStage(projectId: string): Promise<Partial<Record<AssetPipelineStage, number>>> {
+    const rows = await this.db
+      .select({ stage: assets.pipelineStage, value: count() })
+      .from(assets)
+      .where(
+        and(
+          eq(assets.projectId, projectId),
+          eq(assets.status, 'active'),
+          eq(assets.variant, 'source'),
+        ),
+      )
+      .groupBy(assets.pipelineStage);
+
+    const counts: Partial<Record<AssetPipelineStage, number>> = {};
+    for (const row of rows) counts[row.stage] = row.value;
     return counts;
   }
 

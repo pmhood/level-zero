@@ -95,6 +95,7 @@ beforeEach(async () => {
     assetRepo,
     projectRepo,
     new InMemoryObjectStorageProvider(),
+    activity,
     deps,
     index,
   );

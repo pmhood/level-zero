@@ -98,6 +98,7 @@ function asset(overrides: Partial<Asset> = {}): Asset {
     variant: 'source',
     sourceAssetId: null,
     status: 'active',
+    pipelineStage: 'concept',
     createdAt: new Date(),
     updatedAt: new Date(),
     archivedAt: null,
