@@ -118,7 +118,7 @@ beforeEach(async () => {
     activity,
     deps,
   );
-  documents = new DocumentService(entities, versions);
+  documents = new DocumentService(entities, versions, deps.ids);
   generations = new GenerationService(
     generationRepo,
     projects,

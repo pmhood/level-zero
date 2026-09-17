@@ -8,29 +8,53 @@ import * as api from '@/lib/api';
  * One target, one cache key. Everything about a target — its threads, its state
  * and its history — invalidates together, because resolving a thread and
  * approving the work are two halves of the same screen.
+ *
+ * `all` is the prefix every anchor hangs off, so approving one GDD section also
+ * refreshes the document's own state and the anchored listings that summarise
+ * every section at once.
  */
 const reviewKeys = {
+  all: (projectId: string, target: api.AnchoredTargetParams) =>
+    ['projects', projectId, 'review', target.targetType, target.targetId] as const,
   target: (projectId: string, target: api.ReviewTargetParams) =>
-    [
-      'projects',
-      projectId,
-      'review',
-      target.targetType,
-      target.targetId,
-      target.anchor ?? null,
-    ] as const,
+    [...reviewKeys.all(projectId, target), target.anchor ?? null] as const,
   threads: (projectId: string, target: api.ReviewTargetParams) =>
     [...reviewKeys.target(projectId, target), 'threads'] as const,
   status: (projectId: string, target: api.ReviewTargetParams) =>
     [...reviewKeys.target(projectId, target), 'status'] as const,
   history: (projectId: string, target: api.ReviewTargetParams) =>
     [...reviewKeys.target(projectId, target), 'history'] as const,
+  anchoredThreads: (projectId: string, target: api.AnchoredTargetParams) =>
+    [...reviewKeys.all(projectId, target), 'anchored', 'threads'] as const,
+  anchoredStatuses: (projectId: string, target: api.AnchoredTargetParams) =>
+    [...reviewKeys.all(projectId, target), 'anchored', 'statuses'] as const,
 };
 
 export function useCommentThreads(projectId: string, target: api.ReviewTargetParams) {
   return useQuery({
     queryKey: reviewKeys.threads(projectId, target),
     queryFn: () => api.listCommentThreads(projectId, target),
+    enabled: Boolean(projectId) && Boolean(target.targetId),
+  });
+}
+
+/**
+ * Every thread anchored inside the target, whichever section — a GDD's whole
+ * conversation in one read, orphaned threads included.
+ */
+export function useAnchoredCommentThreads(projectId: string, target: api.AnchoredTargetParams) {
+  return useQuery({
+    queryKey: reviewKeys.anchoredThreads(projectId, target),
+    queryFn: () => api.listAnchoredCommentThreads(projectId, target),
+    enabled: Boolean(projectId) && Boolean(target.targetId),
+  });
+}
+
+/** Where each anchored section of the target stands. */
+export function useAnchoredReviewStatuses(projectId: string, target: api.AnchoredTargetParams) {
+  return useQuery({
+    queryKey: reviewKeys.anchoredStatuses(projectId, target),
+    queryFn: () => api.listAnchoredReviewStatuses(projectId, target),
     enabled: Boolean(projectId) && Boolean(target.targetId),
   });
 }
@@ -114,7 +138,7 @@ function useTargetMutation<TInput, TResult>(
   return useMutation({
     mutationFn,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: reviewKeys.target(projectId, target) });
+      queryClient.invalidateQueries({ queryKey: reviewKeys.all(projectId, target) });
     },
   });
 }

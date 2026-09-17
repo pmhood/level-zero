@@ -2,6 +2,7 @@ import { snapshotEntity, type Entity } from '../entity/entity';
 import { type EntityListFilter, type EntityPage } from '../entity/entity-repository';
 import { type EntityService } from '../entity/entity-service';
 import { ValidationError } from '../shared/errors';
+import { type IdGenerator } from '../shared/id';
 import { optionalText, requireOneOf } from '../shared/validation';
 import { diffSnapshots, type FieldChange } from '../version/compare';
 import { type EntityVersion, type VersionReason } from '../version/entity-version';
@@ -21,6 +22,7 @@ import {
   type DocumentContent,
   type DocumentVersionReason,
 } from './document';
+import { assignSectionIds } from './document-section';
 
 /** How the body reads as a comparison field, e.g. `data.content`. */
 const CONTENT_FIELD = `data.${DOCUMENT_CONTENT_KEY}`;
@@ -128,13 +130,21 @@ export class DocumentService {
   constructor(
     private readonly entities: EntityService,
     private readonly versions: EntityVersionService,
+    /**
+     * Mints the section ids a body's headings are addressed by. The editor
+     * mints as the writer types; this is the backstop for every other writer
+     * (docs/decisions/gdd-section-identity.md §3.3).
+     */
+    private readonly ids: IdGenerator,
   ) {}
 
   async create(projectId: string, input: CreateDocumentInput): Promise<Document> {
-    const content =
+    const content = assignSectionIds(
       input.content === undefined
         ? emptyDocumentContent()
-        : requireDocumentContent('content', input.content);
+        : requireDocumentContent('content', input.content),
+      this.ids,
+    );
 
     const entity = await this.entities.create(projectId, {
       type: 'document',
@@ -164,8 +174,9 @@ export class DocumentService {
    */
   async saveContent(projectId: string, documentId: string, content: unknown): Promise<Document> {
     const entity = await this.requireDocument(projectId, documentId);
+    const body = assignSectionIds(requireDocumentContent('content', content), this.ids);
     const saved = await this.entities.update(projectId, entity.id, {
-      data: documentData(requireDocumentContent('content', content), entity.data),
+      data: documentData(body, entity.data),
     });
 
     return this.load(projectId, saved);

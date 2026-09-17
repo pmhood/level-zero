@@ -2,8 +2,9 @@ import {
   type ReviewDecision,
   type ReviewDecisionRepository,
   type ReviewTargetFilter,
+  type ReviewTargetType,
 } from '@level-zero/domain';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 
 import { type Database } from '../postgres/client';
 import { reviewDecisions } from '../schema/reviews';
@@ -43,6 +44,28 @@ export class DrizzleReviewDecisionRepository implements ReviewDecisionRepository
           filter.anchor === null
             ? isNull(reviewDecisions.targetAnchor)
             : eq(reviewDecisions.targetAnchor, filter.anchor),
+        ),
+      )
+      .orderBy(desc(reviewDecisions.decidedAt), desc(reviewDecisions.id));
+
+    return rows.map(toReviewDecision);
+  }
+
+  /** Every section's decisions at once: the anchored rows, newest first. */
+  async listAnchoredByTarget(
+    projectId: string,
+    targetType: ReviewTargetType,
+    targetId: string,
+  ): Promise<ReviewDecision[]> {
+    const rows = await this.db
+      .select()
+      .from(reviewDecisions)
+      .where(
+        and(
+          eq(reviewDecisions.projectId, projectId),
+          eq(reviewDecisions.targetType, targetType),
+          eq(reviewDecisions.targetId, targetId),
+          isNotNull(reviewDecisions.targetAnchor),
         ),
       )
       .orderBy(desc(reviewDecisions.decidedAt), desc(reviewDecisions.id));

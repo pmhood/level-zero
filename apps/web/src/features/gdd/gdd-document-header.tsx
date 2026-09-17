@@ -4,6 +4,7 @@ import type { DocumentVersion, Entity, Project } from '@level-zero/domain';
 import {
   Button,
   ChevronRightIcon,
+  CommentIcon,
   DownloadIcon,
   HistoryIcon,
   SparklesIcon,
@@ -22,8 +23,8 @@ import { DocumentSwitcher } from './document-switcher';
  * demands back every visit — over the cinematic hero itself, reusing #133's
  * `WorkspaceHeader` rather than a second implementation.
  *
- * The strip absorbs what #182 and #184 already built into this header
- * (`DocumentSwitcher`, the archived badge, History, Ask AI) instead of
+ * The strip absorbs what #182, #184 and #187 already built into this header
+ * (`DocumentSwitcher`, the archived badge, History, Review, Ask AI) instead of
  * duplicating them, and adds the version pill, Compare and Export entry
  * points the mockup (`docs/mockups/gdd-workspace.png`) asks for.
  *
@@ -42,6 +43,7 @@ export function GddDocumentHeader({
   comparing,
   onToggleCompare,
   onToggleHistory,
+  onToggleReview,
   onToggleAskAi,
 }: {
   projectId: string;
@@ -54,6 +56,7 @@ export function GddDocumentHeader({
   comparing: boolean;
   onToggleCompare: () => void;
   onToggleHistory: () => void;
+  onToggleReview: () => void;
   onToggleAskAi: () => void;
 }) {
   const projectHref = `/projects/${projectId}` as Route;
@@ -96,6 +99,13 @@ export function GddDocumentHeader({
                 </Button>
                 <Button variant="secondary" size="sm" onClick={onToggleCompare}>
                   Compare
+                </Button>
+                {/* Outside the archived guard, unlike Ask AI: archiving freezes
+                    the prose and not the conversation about it, and this is the
+                    only way in once the toolbar's Comment button is hidden. */}
+                <Button variant="secondary" size="sm" onClick={onToggleReview}>
+                  <CommentIcon className="size-4" />
+                  Review
                 </Button>
                 <Button
                   variant="secondary"

@@ -12,20 +12,24 @@ import {
 import { IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 /**
- * The thing being commented on or reviewed.
- *
- * `targetType` and `targetId` are the address; `anchor` narrows it to a section
- * of a document, and leaving it out means the target itself rather than any
- * section of it.
+ * The thing being commented on or reviewed, without an anchor: the whole of it,
+ * sections included. What the anchored listings are read by.
  */
-export class ReviewTargetQueryDto {
+export class TargetAddressDto {
   @IsIn(REVIEW_TARGET_TYPES)
   targetType!: ReviewTargetType;
 
   @IsString()
   @IsNotEmpty()
   targetId!: string;
+}
 
+/**
+ * One exact target. `anchor` narrows it to a section of a document — for a
+ * `document` entity, the `sectionId` its heading carries — and leaving it out
+ * means the target itself rather than any section of it.
+ */
+export class ReviewTargetQueryDto extends TargetAddressDto {
   @IsOptional()
   @IsString()
   @MaxLength(MAX_REVIEW_TARGET_ANCHOR_LENGTH)

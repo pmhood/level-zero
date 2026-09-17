@@ -3,6 +3,7 @@
 import type { Document, DocumentContent, Entity } from '@level-zero/domain';
 import {
   Button,
+  CommentIcon,
   EmptyState,
   Inspector,
   RichTextEditor,
@@ -32,9 +33,10 @@ import * as api from '@/lib/api';
 import { ApiRequestError, apiErrorMessage } from '@/lib/api';
 
 import { recordAcceptedAiEdit } from './ai-edit-version';
-import { documentOutline } from './document-outline';
 import { GddDocumentHeader } from './gdd-document-header';
 import { GddHistory } from './gdd-history';
+import { GddOutline } from './gdd-outline';
+import { GddReview } from './gdd-review';
 import { gddDocumentRoute, gddRoute } from './gdd-route';
 import {
   GDD_DOCUMENT_NAME,
@@ -44,45 +46,6 @@ import {
   useSaveGddDocument,
   useSnapshotGddDocument,
 } from './use-gdd-documents';
-
-function DocumentOutline({
-  content,
-  onSelect,
-}: {
-  content: JSONContent | null;
-  onSelect: (index: number) => void;
-}) {
-  const headings = useMemo(() => documentOutline(content), [content]);
-
-  return (
-    <nav
-      aria-label="Document outline"
-      className="hidden w-[220px] shrink-0 overflow-y-auto border-r border-border-subtle px-3 py-5 lg:block"
-    >
-      <p className="px-2 text-xs font-medium text-muted-foreground">Contents</p>
-      {headings.length === 0 ? (
-        <p className="mt-2 px-2 text-xs text-faint-foreground">
-          Headings you add show up here as the document&rsquo;s outline.
-        </p>
-      ) : (
-        <ul className="mt-2 space-y-0.5">
-          {headings.map((heading, index) => (
-            <li key={index}>
-              <button
-                type="button"
-                onClick={() => onSelect(index)}
-                style={{ paddingLeft: `${(heading.level - 1) * 12 + 8}px` }}
-                className="w-full truncate rounded-md py-1 pr-2 text-left text-xs text-muted-foreground hover:bg-hover hover:text-foreground"
-              >
-                {heading.text || 'Untitled section'}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </nav>
-  );
-}
 
 function GddDocumentEditor({
   projectId,
@@ -120,6 +83,11 @@ function GddDocumentEditor({
   // rather than something docked beside every sentence.
   const [askingAi, setAskingAi] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // Review and discussion are a panel in the same slot (#187): the status of
+  // the section being written, the states it can be moved through, and the
+  // threads on it. The section itself follows the caret.
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
 
   const entitiesQuery = useReferenceableEntities(projectId);
   const entities = useMemo(() => entitiesQuery.data?.items ?? [], [entitiesQuery.data]);
@@ -132,6 +100,7 @@ function GddDocumentEditor({
     setOpenEntityId(entity.id);
     setAskingAi(false);
     setHistoryOpen(false);
+    setReviewOpen(false);
   }, []);
 
   // The `@` menu is built once with the editor, but has to search the entities
@@ -208,13 +177,14 @@ function GddDocumentEditor({
     setEditorKey((key) => key + 1);
   }
 
-  // History, Ask AI and Compare share one inspector-and-mode slot, so opening
-  // one closes whatever else was open rather than stacking on top of it.
+  // History, Review, Ask AI and Compare share one inspector-and-mode slot, so
+  // opening one closes whatever else was open rather than stacking on top of it.
   function toggleHistory() {
     setHistoryOpen((current) => {
       const next = !current;
       if (next) {
         setAskingAi(false);
+        setReviewOpen(false);
         setOpenEntityId(null);
       }
       return next;
@@ -226,6 +196,19 @@ function GddDocumentEditor({
       const next = !current;
       if (next) {
         setHistoryOpen(false);
+        setReviewOpen(false);
+        setOpenEntityId(null);
+      }
+      return next;
+    });
+  }
+
+  function toggleReview() {
+    setReviewOpen((current) => {
+      const next = !current;
+      if (next) {
+        setHistoryOpen(false);
+        setAskingAi(false);
         setOpenEntityId(null);
       }
       return next;
@@ -238,6 +221,7 @@ function GddDocumentEditor({
       if (next) {
         setHistoryOpen(false);
         setAskingAi(false);
+        setReviewOpen(false);
         setOpenEntityId(null);
       }
       return next;
@@ -252,7 +236,18 @@ function GddDocumentEditor({
       projectId={projectId}
     >
       <div className="flex h-full min-h-0">
-        {!comparing && <DocumentOutline content={content} onSelect={scrollToHeading} />}
+        {!comparing && (
+          <GddOutline
+            projectId={projectId}
+            documentId={documentId}
+            content={content}
+            activeSectionId={activeSectionId}
+            onSelect={(heading, index) => {
+              setActiveSectionId(heading.id);
+              scrollToHeading(index);
+            }}
+          />
+        )}
 
         <div ref={surfaceRef} className="flex min-w-0 flex-1 flex-col overflow-y-auto">
           <GddDocumentHeader
@@ -264,6 +259,7 @@ function GddDocumentEditor({
             comparing={comparing}
             onToggleCompare={toggleComparing}
             onToggleHistory={toggleHistory}
+            onToggleReview={toggleReview}
             onToggleAskAi={toggleAskingAi}
           />
 
@@ -284,12 +280,21 @@ function GddDocumentEditor({
                   label="Game design document"
                   content={content}
                   onChange={handleChange}
+                  onSectionChange={setActiveSectionId}
                   editable={!archived}
                   extensions={referenceExtensions}
                   commands={ENTITY_EMBED_COMMANDS}
                   ai={archived ? undefined : aiEditing}
                   toolbarActions={
-                    <SaveStatusLabel status={autosave.status} error={autosave.error} />
+                    <>
+                      {/* The mockup's toolbar Comment button: it opens the
+                          review panel on whichever section the caret is in. */}
+                      <Button variant="ghost" size="sm" onClick={toggleReview}>
+                        <CommentIcon className="size-4" />
+                        Comment
+                      </Button>
+                      <SaveStatusLabel status={autosave.status} error={autosave.error} />
+                    </>
                   }
                 />
                 {aiEditError && (
@@ -306,7 +311,24 @@ function GddDocumentEditor({
           <EntityReferenceInspector entity={openEntity} onClose={() => setOpenEntityId(null)} />
         )}
 
-        {!openEntity && askingAi && !comparing && !archived && (
+        {!openEntity && reviewOpen && !comparing && (
+          <Inspector
+            title="Review"
+            description={designDocument.entity.name}
+            onClose={() => setReviewOpen(false)}
+          >
+            <GddReview
+              projectId={projectId}
+              documentId={documentId}
+              documentName={designDocument.entity.name}
+              content={content}
+              activeSectionId={activeSectionId}
+              onSelectSection={setActiveSectionId}
+            />
+          </Inspector>
+        )}
+
+        {!openEntity && !reviewOpen && askingAi && !comparing && !archived && (
           <Inspector
             title={designDocument.entity.name}
             description="Design document"
@@ -319,7 +341,7 @@ function GddDocumentEditor({
           </Inspector>
         )}
 
-        {!openEntity && !askingAi && historyOpen && !comparing && (
+        {!openEntity && !reviewOpen && !askingAi && historyOpen && !comparing && (
           <Inspector
             title="History"
             description={designDocument.entity.name}

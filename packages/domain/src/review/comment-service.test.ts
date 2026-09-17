@@ -374,3 +374,98 @@ describe('resolve and reopen', () => {
     await expect(service.resolve(otherProject, thread.id, 'kai')).rejects.toThrow(NotFoundError);
   });
 });
+
+describe('listAnchoredThreads', () => {
+  /** A design document: a section of one is this entity plus an anchor. */
+  async function gdd(): Promise<Entity> {
+    return entities.insert(
+      createEntity({ projectId: project, type: 'document', name: 'GDD' }, { clock, ids }),
+    );
+  }
+
+  it('reads every section’s threads at once, each saying which section it is on', async () => {
+    const document = await gdd();
+    await service.create(project, {
+      target: { type: 'entity', id: document.id, anchor: 'section-a' },
+      author: 'ada',
+      body: 'Still the old loop.',
+    });
+    await later.create(project, {
+      target: { type: 'entity', id: document.id, anchor: 'section-b' },
+      author: 'kai',
+      body: 'Tighten this.',
+    });
+
+    const threads = await service.listAnchoredThreads(project, {
+      type: 'entity',
+      id: document.id,
+    });
+
+    expect(threads.map((thread) => thread.comment.target.anchor)).toEqual([
+      'section-a',
+      'section-b',
+    ]);
+  });
+
+  it('brings a reply with its thread, under the section the thread was opened on', async () => {
+    const document = await gdd();
+    const thread = await service.create(project, {
+      target: { type: 'entity', id: document.id, anchor: 'section-a' },
+      author: 'ada',
+      body: 'Still the old loop.',
+    });
+    await later.reply(project, {
+      parentCommentId: thread.id,
+      author: 'kai',
+      body: 'Rewriting it now.',
+    });
+
+    const [anchored] = await service.listAnchoredThreads(project, {
+      type: 'entity',
+      id: document.id,
+    });
+
+    expect(anchored?.replies.map((reply) => reply.body)).toEqual(['Rewriting it now.']);
+  });
+
+  it('leaves the document’s own thread out: it is about the whole document', async () => {
+    const document = await gdd();
+    await service.create(project, {
+      target: { type: 'entity', id: document.id },
+      author: 'kai',
+      body: 'Overall this reads well.',
+    });
+
+    await expect(
+      service.listAnchoredThreads(project, { type: 'entity', id: document.id }),
+    ).resolves.toEqual([]);
+  });
+
+  it('still reads a thread whose section has been deleted', async () => {
+    const document = await gdd();
+    await service.create(project, {
+      target: { type: 'entity', id: document.id, anchor: 'section-gone' },
+      author: 'ada',
+      body: 'This paragraph contradicts the pillars.',
+    });
+
+    // Removing the heading writes nothing, so the thread is still here — which
+    // is the only way the document can find one it can no longer name.
+    await expect(
+      service.listAnchoredThreads(project, { type: 'entity', id: document.id }),
+    ).resolves.toHaveLength(1);
+  });
+
+  it('reads nothing for another project', async () => {
+    const document = await gdd();
+    await service.create(project, {
+      target: { type: 'entity', id: document.id, anchor: 'section-a' },
+      author: 'ada',
+      body: 'Still the old loop.',
+    });
+
+    await expect(
+      service.listAnchoredThreads(otherProject, { type: 'entity', id: document.id }),
+    ).resolves.toEqual([]);
+  });
+});

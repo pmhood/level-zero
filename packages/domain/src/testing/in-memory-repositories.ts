@@ -79,7 +79,7 @@ import { type Comment } from '../review/comment';
 import { type CommentRepository } from '../review/comment-repository';
 import { type ReviewDecision } from '../review/review-decision';
 import { type ReviewDecisionRepository } from '../review/review-decision-repository';
-import { type ReviewTargetFilter } from '../review/review-target';
+import { type ReviewTargetFilter, type ReviewTargetType } from '../review/review-target';
 import { type EntityRelationship } from '../relationship/entity-relationship';
 import {
   type EntityRelationshipRepository,
@@ -1446,6 +1446,19 @@ export class InMemoryCommentRepository implements CommentRepository {
       .map((comment) => structuredClone(comment));
   }
 
+  async listAnchoredByTarget(
+    projectId: string,
+    targetType: ReviewTargetType,
+    targetId: string,
+  ): Promise<Comment[]> {
+    return [...this.rows.values()]
+      .filter(
+        (comment) => comment.projectId === projectId && isAnchoredOn(comment, targetType, targetId),
+      )
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
+      .map((comment) => structuredClone(comment));
+  }
+
   async save(comment: Comment): Promise<Comment> {
     const existing = this.rows.get(comment.id);
     if (!existing || existing.projectId !== comment.projectId) {
@@ -1486,6 +1499,29 @@ export class InMemoryReviewDecisionRepository implements ReviewDecisionRepositor
       .sort((a, b) => b.decidedAt.getTime() - a.decidedAt.getTime() || b.id.localeCompare(a.id))
       .map((decision) => structuredClone(decision));
   }
+
+  async listAnchoredByTarget(
+    projectId: string,
+    targetType: ReviewTargetType,
+    targetId: string,
+  ): Promise<ReviewDecision[]> {
+    return [...this.rows.values()]
+      .filter(
+        (decision) =>
+          decision.projectId === projectId && isAnchoredOn(decision, targetType, targetId),
+      )
+      .sort((a, b) => b.decidedAt.getTime() - a.decidedAt.getTime() || b.id.localeCompare(a.id))
+      .map((decision) => structuredClone(decision));
+  }
+}
+
+/** Inside the target rather than about it: any anchor, never a null one. */
+function isAnchoredOn(
+  row: { target: { type: string; id: string; anchor: string | null } },
+  targetType: ReviewTargetType,
+  targetId: string,
+): boolean {
+  return row.target.type === targetType && row.target.id === targetId && row.target.anchor !== null;
 }
 
 function matchesTarget(

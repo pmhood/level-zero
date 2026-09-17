@@ -365,3 +365,110 @@ describe('listHistory', () => {
     expect(await service.listHistory(project, target)).toHaveLength(2);
   });
 });
+
+describe('listAnchoredStatuses', () => {
+  /** A design document: sections of one are anchors on the entity itself. */
+  async function gdd(): Promise<Entity> {
+    return entities.insert(
+      createEntity({ projectId: project, type: 'document', name: 'GDD' }, { clock, ids }),
+    );
+  }
+
+  it('reports where each section stands, from its newest decision', async () => {
+    const document = await gdd();
+    const later = new ReviewService(
+      decisions,
+      new ReviewTargetResolver(entities, assets, prototypeVersions, entityVersions),
+      { clock: laterClock, ids },
+    );
+
+    await service.decide(project, {
+      target: { type: 'entity', id: document.id, anchor: 'section-a' },
+      state: 'review',
+      actor: 'ada',
+    });
+    await later.decide(project, {
+      target: { type: 'entity', id: document.id, anchor: 'section-a' },
+      state: 'approved',
+      actor: 'kai',
+    });
+    await service.decide(project, {
+      target: { type: 'entity', id: document.id, anchor: 'section-b' },
+      state: 'rejected',
+      actor: 'ada',
+    });
+
+    const statuses = await service.listAnchoredStatuses(project, {
+      type: 'entity',
+      id: document.id,
+    });
+
+    expect(
+      statuses.map((status) => [status.anchor, status.state, status.decision?.actor]).sort(),
+    ).toEqual([
+      ['section-a', 'approved', 'kai'],
+      ['section-b', 'rejected', 'ada'],
+    ]);
+  });
+
+  it('leaves the document’s own decisions out: they are not a section’s', async () => {
+    const document = await gdd();
+
+    await service.decide(project, {
+      target: { type: 'entity', id: document.id },
+      state: 'approved',
+      actor: 'ada',
+    });
+
+    await expect(
+      service.listAnchoredStatuses(project, { type: 'entity', id: document.id }),
+    ).resolves.toEqual([]);
+  });
+
+  it('keeps a section approved after the document is snapshotted', async () => {
+    const document = await gdd();
+    await service.decide(project, {
+      target: { type: 'entity', id: document.id, anchor: 'section-a' },
+      state: 'approved',
+      actor: 'ada',
+    });
+
+    // A version is a whole-document snapshot: if a section's approval were
+    // pinned to one, this would unapprove every section at once.
+    await commit(document, 1);
+
+    const [status] = await service.listAnchoredStatuses(project, {
+      type: 'entity',
+      id: document.id,
+    });
+    expect(status).toMatchObject({ anchor: 'section-a', state: 'approved' });
+  });
+
+  it('still reports a section that has been deleted from the document', async () => {
+    const document = await gdd();
+    await service.decide(project, {
+      target: { type: 'entity', id: document.id, anchor: 'section-gone' },
+      state: 'approved',
+      actor: 'ada',
+    });
+
+    // Nothing is written when a heading leaves the body, so the decision is
+    // still here, and the caller is what knows it matches no section.
+    await expect(
+      service.listAnchoredStatuses(project, { type: 'entity', id: document.id }),
+    ).resolves.toMatchObject([{ anchor: 'section-gone', state: 'approved' }]);
+  });
+
+  it('reads nothing for another project', async () => {
+    const document = await gdd();
+    await service.decide(project, {
+      target: { type: 'entity', id: document.id, anchor: 'section-a' },
+      state: 'approved',
+      actor: 'ada',
+    });
+
+    await expect(
+      service.listAnchoredStatuses(otherProject, { type: 'entity', id: document.id }),
+    ).resolves.toEqual([]);
+  });
+});

@@ -44,7 +44,7 @@ beforeEach(async () => {
   const moduleRef = await Test.createTestingModule({
     controllers: [DocumentsController],
     providers: [
-      { provide: DocumentService, useValue: new DocumentService(entities, versions) },
+      { provide: DocumentService, useValue: new DocumentService(entities, versions, deps.ids) },
       { provide: APP_FILTER, useClass: DomainExceptionFilter },
     ],
   }).compile();

@@ -6,6 +6,7 @@ import {
   CreateCommentDto,
   CreateReplyDto,
   ReviewTargetQueryDto,
+  TargetAddressDto,
   UpdateCommentDto,
 } from './dto/review.dto';
 
@@ -35,6 +36,22 @@ export class CommentsController {
       type: query.targetType,
       id: query.targetId,
       anchor: query.anchor,
+    });
+  }
+
+  /**
+   * Every thread anchored inside the target, whichever section — what a
+   * document's review inspector reads, because a thread whose section has been
+   * deleted is one it cannot name to ask for.
+   */
+  @Get('anchored')
+  listAnchored(
+    @Param('projectId') projectId: string,
+    @Query() query: TargetAddressDto,
+  ): Promise<CommentThread[]> {
+    return this.comments.listAnchoredThreads(projectId, {
+      type: query.targetType,
+      id: query.targetId,
     });
   }
 

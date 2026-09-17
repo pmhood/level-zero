@@ -1,5 +1,6 @@
 import type { AiCapability, ResolvedContext } from '@level-zero/ai';
 import type {
+  AnchoredReviewStatus,
   ApproveAssetResult,
   Asset,
   AssetKind,
@@ -1130,12 +1131,30 @@ export interface ReviewTargetParams {
   anchor?: string;
 }
 
+/**
+ * The same address with no anchor: the target as a whole, every section of it
+ * included. What the two anchored listings below are read by.
+ */
+export type AnchoredTargetParams = Omit<ReviewTargetParams, 'anchor'>;
+
 /** The target's threads, oldest first, each with its replies. */
 export function listCommentThreads(
   projectId: string,
   target: ReviewTargetParams,
 ): Promise<CommentThread[]> {
   return apiFetch(`/api/projects/${projectId}/comments${toQueryString(target)}`);
+}
+
+/**
+ * Every thread anchored inside the target, whichever section — each thread's
+ * own `target.anchor` says which. The threads whose section has been deleted
+ * come back here too, because nothing else can name them.
+ */
+export function listAnchoredCommentThreads(
+  projectId: string,
+  target: AnchoredTargetParams,
+): Promise<CommentThread[]> {
+  return apiFetch(`/api/projects/${projectId}/comments/anchored${toQueryString(target)}`);
 }
 
 export interface CreateCommentInput extends ReviewTargetParams {
@@ -1201,6 +1220,15 @@ export function listReviewHistory(
   target: ReviewTargetParams,
 ): Promise<ReviewDecision[]> {
   return apiFetch(`/api/projects/${projectId}/reviews/history${toQueryString(target)}`);
+}
+
+/** Where each anchored section of the target stands. Anchors nobody has decided
+ * anything about are absent, and read as draft by that absence. */
+export function listAnchoredReviewStatuses(
+  projectId: string,
+  target: AnchoredTargetParams,
+): Promise<AnchoredReviewStatus[]> {
+  return apiFetch(`/api/projects/${projectId}/reviews/anchored${toQueryString(target)}`);
 }
 
 export interface RecordReviewDecisionInput extends ReviewTargetParams {

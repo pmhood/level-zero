@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { Document, Entity, EntityPage, Project } from '@level-zero/domain';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GddWorkspace } from './gdd-workspace';
@@ -34,6 +34,18 @@ vi.mock('@/lib/api', () => ({
   suggestDocumentEdit: vi.fn(),
   listEntities: vi.fn(),
   getProject: vi.fn(),
+  listCommentThreads: vi.fn(),
+  listAnchoredCommentThreads: vi.fn(),
+  listAnchoredReviewStatuses: vi.fn(),
+  createComment: vi.fn(),
+  replyToComment: vi.fn(),
+  updateComment: vi.fn(),
+  deleteComment: vi.fn(),
+  resolveComment: vi.fn(),
+  reopenComment: vi.fn(),
+  getReviewStatus: vi.fn(),
+  listReviewHistory: vi.fn(),
+  recordReviewDecision: vi.fn(),
 }));
 
 const api = await import('@/lib/api');
@@ -99,6 +111,21 @@ beforeEach(() => {
   replace.mockClear();
   vi.mocked(api.listEntities).mockResolvedValue(page([]));
   vi.mocked(api.getProject).mockResolvedValue(project());
+  vi.mocked(api.listCommentThreads).mockResolvedValue([]);
+  vi.mocked(api.listAnchoredCommentThreads).mockResolvedValue([]);
+  vi.mocked(api.listAnchoredReviewStatuses).mockResolvedValue([]);
+  vi.mocked(api.listReviewHistory).mockResolvedValue([]);
+  vi.mocked(api.getReviewStatus).mockResolvedValue({
+    target: {
+      target: { type: 'entity', id: 'doc_1', anchor: null, versionId: null },
+      label: 'Game Design Document',
+      archived: false,
+      currentVersionId: null,
+    },
+    state: 'draft',
+    decision: null,
+    staleDecision: null,
+  });
 });
 
 afterEach(cleanup);
@@ -164,6 +191,18 @@ describe('GddWorkspace — project isolation', () => {
   });
 });
 
+describe('GddWorkspace — review and comments', () => {
+  it('opens the review panel from the toolbar’s Comment button', async () => {
+    vi.mocked(api.getDocument).mockResolvedValue(document());
+
+    renderWorkspace({ projectId: 'prj_1', documentId: 'doc_1' });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Comment' }));
+
+    expect(await screen.findByLabelText('Reviewing')).toBeDefined();
+  });
+});
+
 describe('GddWorkspace — archived documents', () => {
   it('opens read-only, with no editing toolbar and no way to start editing', async () => {
     vi.mocked(api.getDocument).mockResolvedValue(
@@ -183,5 +222,23 @@ describe('GddWorkspace — archived documents', () => {
     expect(screen.queryByRole('button', { name: 'Bold' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Save a version' })).toBeNull();
     expect(screen.queryByRole('button', { name: /Ask AI/ })).toBeNull();
+  });
+
+  it('still lets an archived document be reviewed and commented on', async () => {
+    // Archiving hides a document from listings and freezes its prose; it does
+    // not end the conversation about it, and a decision still applies if it is
+    // restored (`ReviewPanel`'s own note says so).
+    vi.mocked(api.getDocument).mockResolvedValue(
+      document({
+        entity: entity({ status: 'archived', archivedAt: new Date('2026-02-01T00:00:00Z') }),
+      }),
+    );
+
+    renderWorkspace({ projectId: 'prj_1', documentId: 'doc_1' });
+
+    fireEvent.click(await screen.findByRole('button', { name: /Review/ }));
+
+    expect(await screen.findByLabelText('Reviewing')).toBeDefined();
+    expect(await screen.findByRole('button', { name: 'Approve' })).toBeDefined();
   });
 });

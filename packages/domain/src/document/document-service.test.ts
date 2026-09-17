@@ -14,6 +14,7 @@ import {
 } from '../testing';
 import { EntityVersionService } from '../version/entity-version-service';
 import { type DocumentContent } from './document';
+import { documentSections } from './document-section';
 import { DocumentService, type Document } from './document-service';
 
 const clock = fixedClock('2026-03-01T09:00:00.000Z');
@@ -33,7 +34,7 @@ beforeEach(async () => {
   const activity = new ActivityService(new InMemoryActivityRepository(), deps);
   entities = new EntityService(entityRepo, projectRepo, activity, deps);
   versions = new EntityVersionService(versionRepo, entityRepo, activity, deps);
-  documents = new DocumentService(entities, versions);
+  documents = new DocumentService(entities, versions, sequentialIdGenerator('section'));
 
   project = await projectRepo.insert(
     createProject({ name: 'Deep Fathom' }, { clock, ids: sequentialIdGenerator('project-a') }),
@@ -52,11 +53,20 @@ function prose(text: string): DocumentContent {
 }
 
 /** A body carrying an entity mention — the node a GDD links designs with. */
-function withMention(entityId: string): DocumentContent {
+/**
+ * A body with an entity mention in it. Saving mints a `sectionId` on the
+ * heading, so an assertion passes `expect.any(String)` for the id it cannot
+ * know while the same helper is still what gets written.
+ */
+function withMention(entityId: string, sectionId?: unknown): DocumentContent {
   return {
     type: 'doc',
     content: [
-      { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Core loop' }] },
+      {
+        type: 'heading',
+        attrs: sectionId === undefined ? { level: 2 } : { level: 2, sectionId },
+        content: [{ type: 'text', text: 'Core loop' }],
+      },
       {
         type: 'paragraph',
         content: [
@@ -115,7 +125,7 @@ describe('creating and loading documents', () => {
 
     const reloaded = await documents.getById(project.id, created.entity.id);
 
-    expect(reloaded.content).toEqual(withMention('mechanic-1'));
+    expect(reloaded.content).toEqual(withMention('mechanic-1', expect.any(String)));
   });
 
   it('lists the project documents without touching other types', async () => {
@@ -315,7 +325,7 @@ describe('restoring', () => {
     await documents.restoreVersion(project.id, created.entity.id, first.id);
 
     const reloaded = await documents.getById(project.id, created.entity.id);
-    expect(reloaded.content).toEqual(withMention('mechanic-1'));
+    expect(reloaded.content).toEqual(withMention('mechanic-1', expect.any(String)));
     expect(reloaded.hasUnversionedChanges).toBe(false);
   });
 
@@ -386,5 +396,52 @@ describe('comparing versions', () => {
     await expect(
       documents.getVersion(project.id, created.entity.id, version.id),
     ).resolves.toMatchObject({ content: withMention('mechanic-1'), name: 'Snapshot' });
+  });
+});
+
+describe('section ids', () => {
+  const heading = (text: string) => ({
+    type: 'heading',
+    attrs: { level: 1 },
+    content: [{ type: 'text', text }],
+  });
+
+  it('mints one for every heading a document is created with', async () => {
+    const created = await documents.create(project.id, {
+      name: 'GDD',
+      content: { type: 'doc', content: [heading('Vision'), heading('Core loop')] },
+    });
+
+    expect(documentSections(created.content).map((section) => section.text)).toEqual([
+      'Vision',
+      'Core loop',
+    ]);
+  });
+
+  it('mints one for a heading that arrives through a save', async () => {
+    const created = await documents.create(project.id, { name: 'GDD' });
+
+    const saved = await documents.saveContent(project.id, created.entity.id, {
+      type: 'doc',
+      content: [heading('Vision')],
+    });
+
+    expect(documentSections(saved.content)).toHaveLength(1);
+  });
+
+  it('leaves the ids the editor already minted exactly where they are', async () => {
+    const created = await documents.create(project.id, { name: 'GDD' });
+    const body = {
+      type: 'doc',
+      content: [
+        { ...heading('Vision'), attrs: { level: 1, sectionId: 'section-from-the-editor' } },
+      ],
+    };
+
+    const saved = await documents.saveContent(project.id, created.entity.id, body);
+
+    expect(documentSections(saved.content).map((section) => section.id)).toEqual([
+      'section-from-the-editor',
+    ]);
   });
 });

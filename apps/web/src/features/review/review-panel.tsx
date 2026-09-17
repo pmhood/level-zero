@@ -1,7 +1,8 @@
 'use client';
 
 import type { ReviewDecision, ReviewStatus } from '@level-zero/domain';
-import { Button, StatusBadge } from '@level-zero/ui';
+import { Button, Field, StatusBadge, Textarea } from '@level-zero/ui';
+import { useId, useState } from 'react';
 
 import { apiErrorMessage, type ReviewTargetParams } from '@/lib/api';
 
@@ -35,6 +36,10 @@ export function ReviewPanel({
   const status = useReviewStatus(projectId, target);
   const history = useReviewHistory(projectId, target);
   const decide = useRecordReviewDecision(projectId, target);
+  // One panel can be on screen more than once — an entity and the file it
+  // references — so the note's label needs an id of its own.
+  const noteId = useId();
+  const [note, setNote] = useState('');
 
   if (status.isPending) {
     return <p className="text-sm text-muted-foreground">Loading review state…</p>;
@@ -55,6 +60,22 @@ export function ReviewPanel({
       <TargetNote status={status.data} target={target} />
       <StaleNote decision={status.data.staleDecision} />
 
+      {status.data.target !== null && (
+        <Field
+          label="Note"
+          htmlFor={noteId}
+          hint="Optional, and kept verbatim with the decision below."
+        >
+          <Textarea
+            id={noteId}
+            className="min-h-[60px]"
+            placeholder="Why, in your words."
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+          />
+        </Field>
+      )}
+
       <div className="flex flex-wrap items-center gap-2">
         {reviewActionsFor(status.data.state).map((action) => (
           <Button
@@ -63,7 +84,12 @@ export function ReviewPanel({
             variant={variantFor(action)}
             size="sm"
             disabled={decide.isPending || status.data.target === null}
-            onClick={() => decide.mutate({ state: action, actor: ACTING_AS })}
+            onClick={() =>
+              decide.mutate(
+                { state: action, actor: ACTING_AS, note: note.trim() || undefined },
+                { onSuccess: () => setNote('') },
+              )
+            }
           >
             {reviewActionLabel(action)}
           </Button>

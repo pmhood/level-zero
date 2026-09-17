@@ -394,3 +394,100 @@ async function countRows(table: 'comments' | 'review_decisions'): Promise<number
   );
   return Number(result.rows[0]?.count);
 }
+
+describe('a design document’s sections', () => {
+  /** The anchor a section is addressed by: the id its heading carries. */
+  const coreLoop = '5f3ad0f2-1c5e-4a3e-9d3c-9a7a0f6b2c11';
+  const removed = 'b1c2d3e4-5f60-4a1b-8c2d-3e4f5a6b7c8d';
+
+  it('reads every section’s threads at once, orphaned ones included', async () => {
+    const gdd = await entities.create(project.id, { type: 'document', name: 'GDD' });
+    await commentsAt('2026-03-01T09:00:00.000Z').create(project.id, {
+      target: { type: 'entity', id: gdd.id, anchor: coreLoop },
+      author: 'ada',
+      body: 'Still describes the old loop.',
+    });
+    await commentsAt('2026-03-01T09:00:01.000Z').create(project.id, {
+      target: { type: 'entity', id: gdd.id, anchor: removed },
+      author: 'kai',
+      body: 'This contradicts the pillars.',
+    });
+    await commentsAt('2026-03-01T09:00:02.000Z').create(project.id, {
+      target: { type: 'entity', id: gdd.id },
+      author: 'ada',
+      body: 'Overall this reads well.',
+    });
+
+    const anchored = await comments.listAnchoredThreads(project.id, {
+      type: 'entity',
+      id: gdd.id,
+    });
+
+    expect(anchored.map((thread) => thread.comment.target.anchor)).toEqual([coreLoop, removed]);
+  });
+
+  it('reads where each section stands, the newest decision winning', async () => {
+    const gdd = await entities.create(project.id, { type: 'document', name: 'GDD' });
+    await reviewsAt('2026-03-01T09:00:00.000Z').decide(project.id, {
+      target: { type: 'entity', id: gdd.id, anchor: coreLoop },
+      state: 'review',
+      actor: 'ada',
+    });
+    await reviewsAt('2026-03-01T09:00:01.000Z').decide(project.id, {
+      target: { type: 'entity', id: gdd.id, anchor: coreLoop },
+      state: 'approved',
+      actor: 'kai',
+    });
+    await reviewsAt('2026-03-01T09:00:02.000Z').decide(project.id, {
+      target: { type: 'entity', id: gdd.id },
+      state: 'rejected',
+      actor: 'ada',
+    });
+
+    const statuses = await reviews.listAnchoredStatuses(project.id, {
+      type: 'entity',
+      id: gdd.id,
+    });
+
+    expect(statuses).toMatchObject([{ anchor: coreLoop, state: 'approved' }]);
+    expect(statuses[0]?.decision?.actor).toBe('kai');
+  });
+
+  it('keeps a section approved when the document is snapshotted', async () => {
+    const gdd = await entities.create(project.id, { type: 'document', name: 'GDD' });
+    await reviews.decide(project.id, {
+      target: { type: 'entity', id: gdd.id, anchor: coreLoop },
+      state: 'approved',
+      actor: 'ada',
+    });
+
+    // One milestone snapshot must not unapprove every section of the document
+    // (docs/decisions/gdd-section-identity.md §5.5).
+    await versions.commit(project.id, gdd.id, { reason: 'milestone' });
+
+    await expect(
+      reviews.listAnchoredStatuses(project.id, { type: 'entity', id: gdd.id }),
+    ).resolves.toMatchObject([{ anchor: coreLoop, state: 'approved' }]);
+  });
+
+  it('reads nothing from another project', async () => {
+    const gdd = await entities.create(project.id, { type: 'document', name: 'GDD' });
+    await comments.create(project.id, {
+      target: { type: 'entity', id: gdd.id, anchor: coreLoop },
+      author: 'ada',
+      body: 'Still describes the old loop.',
+    });
+    await reviews.decide(project.id, {
+      target: { type: 'entity', id: gdd.id, anchor: coreLoop },
+      state: 'approved',
+      actor: 'ada',
+    });
+
+    await expect(
+      comments.listAnchoredThreads(otherProject.id, { type: 'entity', id: gdd.id }),
+    ).resolves.toEqual([]);
+    await expect(
+      reviews.listAnchoredStatuses(otherProject.id, { type: 'entity', id: gdd.id }),
+    ).resolves.toEqual([]);
+  });
+});
