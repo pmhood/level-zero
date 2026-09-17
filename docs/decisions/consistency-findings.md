@@ -147,7 +147,10 @@ are what matter.
 - **Document positions.** There is nothing stable to use. TipTap nodes in this codebase carry no ids;
   `documentOutline` locates a heading by its text and its place in reading order, both of which move
   when someone types above it. Evidence may carry a heading path for the reader; the fingerprint may
-  not.
+  not. **Amended by #185:** top-level headings now carry a minted `sectionId`
+  (`docs/decisions/gdd-section-identity.md`), which is an identity rather than a position and is
+  admissible on the same terms §4.3 grants `parameterId`. A heading's text, level, path or ordinal
+  still is not.
 - **Model prose.** Two runs of the same AI check over the same two characters are the same finding
   even when the sentences differ.
 
