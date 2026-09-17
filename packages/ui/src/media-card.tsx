@@ -28,7 +28,8 @@ export interface MediaCardProps {
   /** Rendered under the title/subtitle block — a relative time, a short metric line. */
   meta?: React.ReactNode;
   selected?: boolean;
-  onClick?: () => void;
+  /** Receives the click event so a caller can read modifier keys for range/add-to-selection. */
+  onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   className?: string;
   ariaLabel?: string;
 }

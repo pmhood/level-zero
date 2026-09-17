@@ -455,6 +455,252 @@ describe('Assets workspace', () => {
 
     await screen.findByText('Uploaded');
   });
+
+  describe('multi-select and bulk actions', () => {
+    function fourAssets() {
+      return [
+        asset({ id: 'ast_1', filename: 'a.png' }),
+        asset({ id: 'ast_2', filename: 'b.png' }),
+        asset({ id: 'ast_3', filename: 'c.png' }),
+        asset({ id: 'ast_4', filename: 'd.png' }),
+      ];
+    }
+
+    async function renderWithFourAssets(summaries?: AssetSummary[]) {
+      const items = fourAssets();
+      vi.mocked(api.listAssetLibrary).mockResolvedValue(
+        libraryPage(items, summaries ?? items.map((item) => summary({ assetId: item.id }))),
+      );
+      renderWorkspace();
+      await screen.findByText('a.png');
+      return items;
+    }
+
+    it('extends a range with shift-click', async () => {
+      await renderWithFourAssets();
+
+      fireEvent.click(screen.getByRole('button', { name: 'a.png' }));
+      fireEvent.click(screen.getByRole('button', { name: 'c.png' }), { shiftKey: true });
+
+      expect(await screen.findByText('3 selected')).toBeDefined();
+      expect(screen.getByRole('button', { name: 'a.png' }).getAttribute('aria-pressed')).toBe(
+        'true',
+      );
+      expect(screen.getByRole('button', { name: 'b.png' }).getAttribute('aria-pressed')).toBe(
+        'true',
+      );
+      expect(screen.getByRole('button', { name: 'c.png' }).getAttribute('aria-pressed')).toBe(
+        'true',
+      );
+      expect(screen.getByRole('button', { name: 'd.png' }).getAttribute('aria-pressed')).toBe(
+        'false',
+      );
+    });
+
+    it('adds one to the selection with cmd/ctrl-click, leaving the rest untouched', async () => {
+      await renderWithFourAssets();
+
+      fireEvent.click(screen.getByRole('button', { name: 'a.png' }));
+      fireEvent.click(screen.getByRole('button', { name: 'c.png' }), { ctrlKey: true });
+
+      expect(await screen.findByText('2 selected')).toBeDefined();
+      expect(screen.getByRole('button', { name: 'b.png' }).getAttribute('aria-pressed')).toBe(
+        'false',
+      );
+    });
+
+    it('selects every loaded asset from the header control, and clears from the same place', async () => {
+      await renderWithFourAssets();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Select all 4' }));
+      expect(await screen.findByText('4 selected')).toBeDefined();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }));
+      expect(screen.queryByText('4 selected')).toBeNull();
+    });
+
+    it('clears the selection on Escape', async () => {
+      await renderWithFourAssets();
+
+      fireEvent.click(screen.getByRole('button', { name: 'a.png' }));
+      fireEvent.click(screen.getByRole('button', { name: 'c.png' }), { shiftKey: true });
+      await screen.findByText('3 selected');
+
+      fireEvent.keyDown(screen.getByTestId('asset-library-dropzone'), { key: 'Escape' });
+
+      expect(screen.queryByText('3 selected')).toBeNull();
+    });
+
+    it('shows a selection summary, never one asset standing in for the group, once more than one is selected', async () => {
+      await renderWithFourAssets();
+
+      fireEvent.click(screen.getByRole('button', { name: 'a.png' }));
+      fireEvent.click(screen.getByRole('button', { name: 'b.png' }), { ctrlKey: true });
+
+      const inspector = await screen.findByRole('complementary');
+      expect(within(inspector).getByText('2 assets selected')).toBeDefined();
+      expect(within(inspector).queryByRole('tab', { name: 'Overview' })).toBeNull();
+    });
+
+    it('bulk-favorites every selected asset, then bulk-unfavorites once every one already carries the mark', async () => {
+      const items = fourAssets();
+      // A small fake backend: `listAssetLibrary` always reads back whatever
+      // `markAsset`/`unmarkAsset` last recorded, so the round trip through
+      // the read model (#200's `markKinds`) is real rather than a second,
+      // separately-scripted response the UI never actually earned.
+      const marks = new Set<string>();
+      vi.mocked(api.listAssetLibrary).mockImplementation(async () =>
+        libraryPage(
+          items,
+          items.map((item) =>
+            summary({ assetId: item.id, markKinds: marks.has(item.id) ? ['favorite'] : [] }),
+          ),
+        ),
+      );
+      vi.mocked(api.markAsset).mockImplementation(async (_projectId, input) => {
+        marks.add(input.assetId);
+        return {
+          id: `mark_${input.assetId}`,
+          projectId: 'prj_1',
+          assetId: input.assetId,
+          kind: input.kind,
+          actor: input.actor,
+          markedAt: new Date(),
+        };
+      });
+      vi.mocked(api.unmarkAsset).mockImplementation(async (_projectId, assetId) => {
+        marks.delete(assetId);
+      });
+
+      renderWorkspace();
+      await screen.findByText('a.png');
+
+      fireEvent.click(screen.getByRole('button', { name: 'a.png' }));
+      fireEvent.click(screen.getByRole('button', { name: 'b.png' }), { ctrlKey: true });
+      await screen.findByText('2 selected');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Favorite' }));
+
+      await waitFor(() => expect(api.markAsset).toHaveBeenCalledTimes(2));
+      expect(vi.mocked(api.markAsset).mock.calls[0]![0]).toBe('prj_1');
+      expect(vi.mocked(api.markAsset).mock.calls[0]![1]).toMatchObject({
+        assetId: 'ast_1',
+        kind: 'favorite',
+      });
+      expect(vi.mocked(api.markAsset).mock.calls[1]![1]).toMatchObject({
+        assetId: 'ast_2',
+        kind: 'favorite',
+      });
+
+      // Both are now favorited in the read model the toggle reads its "on"
+      // state from, so the same button unmarks them on the next click.
+      const unfavorite = await screen.findByRole('button', { name: 'Unfavorite' });
+      fireEvent.click(unfavorite);
+
+      await waitFor(() => expect(api.unmarkAsset).toHaveBeenCalledTimes(2));
+      expect(vi.mocked(api.unmarkAsset).mock.calls[0]).toEqual(['prj_1', 'ast_1', 'favorite']);
+    });
+
+    it('is harmless to bulk-mark the same selection twice', async () => {
+      await renderWithFourAssets();
+      vi.mocked(api.markAsset).mockResolvedValue({
+        id: 'mark_1',
+        projectId: 'prj_1',
+        assetId: 'ast_1',
+        kind: 'shortlisted',
+        actor: 'You',
+        markedAt: new Date(),
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'a.png' }));
+      fireEvent.click(screen.getByRole('button', { name: 'b.png' }), { ctrlKey: true });
+      await screen.findByText('2 selected');
+
+      const shortlist = screen.getByRole('button', { name: 'Shortlist' });
+      fireEvent.click(shortlist);
+      await waitFor(() => expect(api.markAsset).toHaveBeenCalledTimes(2));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Shortlist' }));
+      await waitFor(() => expect(api.markAsset).toHaveBeenCalledTimes(4));
+
+      expect(screen.queryByText(/Couldn.t apply/)).toBeNull();
+    });
+
+    it('bulk-archives every selected asset, then offers Restore once the whole selection is archived', async () => {
+      const items = fourAssets();
+      const archived = new Set<string>();
+      vi.mocked(api.listAssetLibrary).mockImplementation(async () =>
+        libraryPage(
+          items.map((item) => ({
+            ...item,
+            status: archived.has(item.id) ? 'archived' : 'active',
+          })),
+          items.map((item) => summary({ assetId: item.id })),
+        ),
+      );
+      vi.mocked(api.archiveAsset).mockImplementation(async (_projectId, assetId) => {
+        archived.add(assetId);
+        return asset({ id: assetId, status: 'archived' });
+      });
+
+      renderWorkspace();
+      await screen.findByText('a.png');
+
+      fireEvent.click(screen.getByRole('button', { name: 'a.png' }));
+      fireEvent.click(screen.getByRole('button', { name: 'b.png' }), { ctrlKey: true });
+      await screen.findByText('2 selected');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+
+      await waitFor(() => expect(api.archiveAsset).toHaveBeenCalledTimes(2));
+      expect(vi.mocked(api.archiveAsset).mock.calls[0]).toEqual(['prj_1', 'ast_1']);
+      expect(vi.mocked(api.archiveAsset).mock.calls[1]).toEqual(['prj_1', 'ast_2']);
+
+      await screen.findByRole('button', { name: 'Restore' });
+      expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull();
+    });
+
+    it("reports a bulk action's per-asset failures and narrows the selection to just those, so retrying only touches them", async () => {
+      await renderWithFourAssets();
+      vi.mocked(api.archiveAsset).mockImplementation(async (_projectId, assetId) => {
+        if (assetId === 'ast_2' || assetId === 'ast_4') {
+          throw new api.ApiRequestError('Asset is already archived', 409);
+        }
+        return asset({ id: assetId, status: 'archived' });
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Select all 4' }));
+      await screen.findByText('4 selected');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+
+      const alert = await screen.findByRole('alert');
+      expect(alert.textContent).toMatch(/Couldn.t apply to 2 files/);
+      expect(alert.textContent).toMatch(/b\.png/);
+      expect(alert.textContent).toMatch(/d\.png/);
+      // Only the two failures stay selected — the two that succeeded are done.
+      expect(await screen.findByText('2 selected')).toBeDefined();
+      expect(screen.queryByRole('button', { name: 'a.png' })!.getAttribute('aria-pressed')).toBe(
+        'false',
+      );
+    });
+
+    it('scopes every bulk request to the project the workspace was given', async () => {
+      await renderWithFourAssets();
+      vi.mocked(api.archiveAsset).mockImplementation(async (_projectId, assetId) =>
+        asset({ id: assetId, status: 'archived' }),
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'a.png' }));
+      fireEvent.click(screen.getByRole('button', { name: 'b.png' }), { ctrlKey: true });
+      await screen.findByText('2 selected');
+      fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+
+      await waitFor(() => expect(api.archiveAsset).toHaveBeenCalledTimes(2));
+      expect(vi.mocked(api.archiveAsset).mock.calls[0]![0]).toBe('prj_1');
+      expect(vi.mocked(api.archiveAsset).mock.calls[1]![0]).toBe('prj_1');
+    });
+  });
 });
 
 async function waitForCall(times = 1) {

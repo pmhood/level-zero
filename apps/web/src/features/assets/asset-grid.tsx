@@ -3,6 +3,7 @@
 import type { Asset, AssetSummary } from '@level-zero/domain';
 import { MediaCard, MediaCardSkeleton, StatusBadge } from '@level-zero/ui';
 
+import type { AssetClickModifiers } from './use-asset-selection';
 import { AssetPreview } from './asset-preview';
 import { assetKindLabel, assetStatusBadge, formatRelativeTime } from './asset-presentation';
 
@@ -16,27 +17,38 @@ export interface AssetGridProps {
   projectId: string;
   assets: Asset[];
   summaries: ReadonlyMap<string, AssetSummary>;
-  selectedId: string | null;
-  onSelect: (asset: Asset) => void;
+  isSelected: (id: string) => boolean;
+  onClick: (index: number, modifiers: AssetClickModifiers) => void;
 }
 
 /**
  * The grid presentation (issue #171): one `MediaCard` per asset, 1:1 per
  * spec section 13's ratio table, a status pill from #170's summary and a
  * type-appropriate preview for anything that is not a loadable image.
+ *
+ * Multi-select (#175) reuses the same tile click `MediaCard` already had —
+ * plain click, shift-click and cmd/ctrl-click all read off the same
+ * `MouseEvent` the browser hands the button, so the grid needed no second
+ * click target for a selection checkbox the way the list's rows do.
  */
-export function AssetGrid({ projectId, assets, summaries, selectedId, onSelect }: AssetGridProps) {
+export function AssetGrid({ projectId, assets, summaries, isSelected, onClick }: AssetGridProps) {
   return (
     <ul role="list" aria-label="Assets" className={GRID_CLASSNAME}>
-      {assets.map((asset) => {
+      {assets.map((asset, index) => {
         const summary = summaries.get(asset.id);
         const badge = assetStatusBadge(asset, summary);
         return (
           <li key={asset.id}>
             <MediaCard
               aspect="square"
-              selected={asset.id === selectedId}
-              onClick={() => onSelect(asset)}
+              selected={isSelected(asset.id)}
+              onClick={(event) =>
+                onClick(index, {
+                  shiftKey: event.shiftKey,
+                  metaKey: event.metaKey,
+                  ctrlKey: event.ctrlKey,
+                })
+              }
               ariaLabel={asset.filename}
               media={<AssetPreview projectId={projectId} asset={asset} summary={summary} />}
               overlay={
