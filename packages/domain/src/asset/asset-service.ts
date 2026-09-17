@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { type ActivityService } from '../activity/activity-service';
 import { type JobService } from '../job/job-service';
 import { type ProjectRepository } from '../project/project-repository';
 import { type SearchIndexer } from '../search/search-indexer';
@@ -9,11 +10,13 @@ import { type IdGenerator } from '../shared/id';
 import { MAX_PAGE_SIZE, normalizePaging } from '../shared/paging';
 import {
   archiveAsset,
+  changeAssetPipelineStage,
   createAsset,
   restoreAsset,
   MAX_ASSET_UPLOAD_BYTES,
   type Asset,
   type AssetKind,
+  type AssetPipelineStage,
   type AssetVariant,
 } from './asset';
 import { type AssetListFilter, type AssetPage, type AssetRepository } from './asset-repository';
@@ -58,6 +61,7 @@ export class AssetService {
     private readonly assets: AssetRepository,
     private readonly projects: ProjectRepository,
     private readonly storage: ObjectStorageProvider,
+    private readonly activity: ActivityService,
     private readonly deps: AssetServiceDeps,
     private readonly search?: SearchIndexer,
     private readonly jobs?: JobService,
@@ -162,6 +166,40 @@ export class AssetService {
   async restore(projectId: string, assetId: string): Promise<Asset> {
     const asset = await this.getById(projectId, assetId);
     return this.indexed(await this.assets.save(restoreAsset(asset, this.deps)));
+  }
+
+  /**
+   * Moves an asset to a new pipeline stage (`docs/decisions/asset-library-model.md`
+   * §6.3/§6.4): validates the stage, writes the column and records an
+   * `asset_stage_changed` activity carrying `from`/`to`, so a production
+   * stage change is a recorded act, not a bare column write. Any stage may
+   * move to any other.
+   */
+  async setPipelineStage(
+    projectId: string,
+    assetId: string,
+    stage: AssetPipelineStage,
+    options: { actor?: string | null; note?: string } = {},
+  ): Promise<Asset> {
+    const asset = await this.getById(projectId, assetId);
+    const from = asset.pipelineStage;
+    const updated = await this.assets.save(changeAssetPipelineStage(asset, stage, this.deps));
+
+    await this.activity.record({
+      projectId,
+      type: 'asset_stage_changed',
+      summary: `${updated.filename} moved from ${from} to ${updated.pipelineStage}`,
+      subjectType: 'asset',
+      subjectId: updated.id,
+      metadata: {
+        from,
+        to: updated.pipelineStage,
+        ...(options.note ? { note: options.note } : {}),
+      },
+      actor: options.actor,
+    });
+
+    return this.indexed(updated);
   }
 
   /** Hands the saved asset to the search index, when one is wired up. */

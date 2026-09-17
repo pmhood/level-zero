@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { ActivityService } from '../activity/activity-service';
 import { JobService } from '../job/job-service';
 import { createProject } from '../project/project';
 import { fixedClock } from '../shared/clock';
 import { ConflictError, NotFoundError, ValidationError } from '../shared/errors';
 import { sequentialIdGenerator } from '../shared/id';
 import {
+  InMemoryActivityRepository,
   InMemoryAssetRepository,
   InMemoryJobEvents,
   InMemoryJobQueue,
@@ -23,6 +25,8 @@ const clock = fixedClock('2026-03-01T09:00:00.000Z');
 let projects: InMemoryProjectRepository;
 let assets: InMemoryAssetRepository;
 let storage: InMemoryObjectStorageProvider;
+let activityRepo: InMemoryActivityRepository;
+let activity: ActivityService;
 let service: AssetService;
 let projectId: string;
 
@@ -38,7 +42,12 @@ beforeEach(async () => {
   projects = new InMemoryProjectRepository();
   assets = new InMemoryAssetRepository();
   storage = new InMemoryObjectStorageProvider();
-  service = new AssetService(assets, projects, storage, {
+  activityRepo = new InMemoryActivityRepository();
+  activity = new ActivityService(activityRepo, {
+    clock,
+    ids: sequentialIdGenerator('activity'),
+  });
+  service = new AssetService(assets, projects, storage, activity, {
     clock,
     ids: sequentialIdGenerator('asset'),
   });
@@ -159,7 +168,7 @@ describe('upload', () => {
       listByProject: (id, filter) => assets.listByProject(id, filter),
       save: (asset) => assets.save(asset),
     };
-    const failingService = new AssetService(failingAssets, projects, observedStorage, {
+    const failingService = new AssetService(failingAssets, projects, observedStorage, activity, {
       clock,
       ids: sequentialIdGenerator('asset'),
     });
@@ -188,6 +197,7 @@ describe('thumbnails', () => {
       assets,
       projects,
       storage,
+      activity,
       { clock, ids: sequentialIdGenerator('asset') },
       undefined,
       jobs,
@@ -240,6 +250,7 @@ describe('backfilling thumbnails', () => {
       assets,
       projects,
       storage,
+      activity,
       { clock, ids: sequentialIdGenerator('asset') },
       undefined,
       jobs,
@@ -361,5 +372,63 @@ describe('archive and restore', () => {
     await service.archive(projectId, asset.id);
 
     await expect(service.archive(projectId, asset.id)).rejects.toThrow(ValidationError);
+  });
+});
+
+describe('setPipelineStage', () => {
+  it('defaults a freshly uploaded asset to concept', async () => {
+    const asset = await service.upload(projectId, uploadInput());
+
+    expect(asset.pipelineStage).toBe('concept');
+  });
+
+  it('writes the column and records an asset_stage_changed activity carrying from/to', async () => {
+    const asset = await service.upload(projectId, uploadInput());
+
+    const updated = await service.setPipelineStage(projectId, asset.id, 'in_progress', {
+      actor: 'pete',
+      note: 'starting texturing',
+    });
+
+    expect(updated.pipelineStage).toBe('in_progress');
+
+    const feed = await activityRepo.listByProject(projectId, {});
+    expect(feed.items).toMatchObject([
+      {
+        type: 'asset_stage_changed',
+        subjectType: 'asset',
+        subjectId: asset.id,
+        actor: 'pete',
+        metadata: { from: 'concept', to: 'in_progress', note: 'starting texturing' },
+      },
+    ]);
+  });
+
+  it('allows any stage to move to any other, including backwards', async () => {
+    const asset = await service.upload(projectId, uploadInput());
+
+    await service.setPipelineStage(projectId, asset.id, 'production_ready');
+    const backToConcept = await service.setPipelineStage(projectId, asset.id, 'concept');
+
+    expect(backToConcept.pipelineStage).toBe('concept');
+  });
+
+  it('rejects a stage that is not one of the three', async () => {
+    const asset = await service.upload(projectId, uploadInput());
+
+    await expect(
+      service.setPipelineStage(projectId, asset.id, 'approved_concept' as never),
+    ).rejects.toThrow(ValidationError);
+  });
+
+  it('rejects a transition through the wrong project', async () => {
+    const otherProject = await projects.insert(
+      createProject({ name: 'Sky Wreck' }, { clock, ids: sequentialIdGenerator('project-b') }),
+    );
+    const asset = await service.upload(projectId, uploadInput());
+
+    await expect(
+      service.setPipelineStage(otherProject.id, asset.id, 'in_progress'),
+    ).rejects.toThrow(NotFoundError);
   });
 });

@@ -1,4 +1,5 @@
 import { normalizePaging } from '../shared/paging';
+import { type AssetPipelineStage } from './asset';
 import {
   type AssetLibraryFilter,
   type AssetLibraryPage,
@@ -24,5 +25,10 @@ export class AssetLibraryService {
   /** Active member counts for every collection in the project that has at least one. */
   async collectionCounts(projectId: string): Promise<Record<string, number>> {
     return this.readModel.countsByCollection(projectId);
+  }
+
+  /** Active asset counts per pipeline stage across the whole project. */
+  async stageCounts(projectId: string): Promise<Partial<Record<AssetPipelineStage, number>>> {
+    return this.readModel.countsByStage(projectId);
   }
 }

@@ -43,7 +43,13 @@ beforeEach(async () => {
   const activity = new ActivityService(new InMemoryActivityRepository(), deps);
 
   entities = new EntityService(entityRepo, projectRepo, activity, deps);
-  assets = new AssetService(assetRepo, projectRepo, new InMemoryObjectStorageProvider(), deps);
+  assets = new AssetService(
+    assetRepo,
+    projectRepo,
+    new InMemoryObjectStorageProvider(),
+    activity,
+    deps,
+  );
   relationships = new EntityRelationshipService(relationshipRepo, entityRepo, deps);
   boardRepo = new InMemoryMoodboardRepository(relationshipRepo);
   moodboards = new MoodboardService(boardRepo, entities, assetRepo, relationships, deps);

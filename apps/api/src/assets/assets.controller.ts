@@ -9,7 +9,7 @@ import {
 import { Body, Controller, Get, Param, Post, Query, Res } from '@nestjs/common';
 import { type Response } from 'express';
 
-import { CreateAssetDto, ListAssetsQueryDto } from './dto/asset.dto';
+import { CreateAssetDto, ListAssetsQueryDto, SetAssetPipelineStageDto } from './dto/asset.dto';
 
 /**
  * Assets are addressed under their project, the same as entities.
@@ -56,6 +56,7 @@ export class AssetsController {
       createdAfter: query.createdAfter,
       createdBefore: query.createdBefore,
       includeArchived: query.includeArchived,
+      pipelineStages: query.pipelineStages,
       sortBy: query.sortBy,
       sortDirection: query.sortDirection,
       limit: query.limit,
@@ -137,6 +138,24 @@ export class AssetsController {
     @Param('assetId') assetId: string,
   ): Promise<Asset> {
     return this.assets.restore(projectId, assetId);
+  }
+
+  /**
+   * Moves an asset to a new pipeline stage
+   * (`docs/decisions/asset-library-model.md` §6.3/§6.4). Any stage may move
+   * to any other; the transition is recorded as an `asset_stage_changed`
+   * activity by `AssetService.setPipelineStage`, never a bare column write.
+   */
+  @Post(':assetId/pipeline-stage')
+  setPipelineStage(
+    @Param('projectId') projectId: string,
+    @Param('assetId') assetId: string,
+    @Body() body: SetAssetPipelineStageDto,
+  ): Promise<Asset> {
+    return this.assets.setPipelineStage(projectId, assetId, body.stage, {
+      actor: body.actor,
+      note: body.note,
+    });
   }
 
   /**

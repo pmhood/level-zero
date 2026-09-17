@@ -49,14 +49,16 @@ beforeEach(async () => {
   assetRepo = new InMemoryAssetRepository();
   generationRepo = new InMemoryGenerationRepository();
 
-  entities = new EntityService(
-    entityRepo,
+  const activity = new ActivityService(new InMemoryActivityRepository(), deps);
+  entities = new EntityService(entityRepo, projects, activity, deps);
+  relationships = new EntityRelationshipService(relationshipRepo, entityRepo, deps);
+  assets = new AssetService(
+    assetRepo,
     projects,
-    new ActivityService(new InMemoryActivityRepository(), deps),
+    new InMemoryObjectStorageProvider(),
+    activity,
     deps,
   );
-  relationships = new EntityRelationshipService(relationshipRepo, entityRepo, deps);
-  assets = new AssetService(assetRepo, projects, new InMemoryObjectStorageProvider(), deps);
   resolver = new ContextResolver(projects, entityRepo, relationshipRepo, assetRepo, generationRepo);
 
   project = await projects.insert(

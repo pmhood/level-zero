@@ -55,7 +55,13 @@ beforeAll(async () => {
 
   projects = new ProjectService(projectRepo, deps);
   entities = new EntityService(entityRepo, projectRepo, activity, deps);
-  assets = new AssetService(assetRepo, projectRepo, new InMemoryObjectStorageProvider(), deps);
+  assets = new AssetService(
+    assetRepo,
+    projectRepo,
+    new InMemoryObjectStorageProvider(),
+    activity,
+    deps,
+  );
 
   const targets = new ReviewTargetResolver(
     entityRepo,

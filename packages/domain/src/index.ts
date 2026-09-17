@@ -167,6 +167,7 @@ export {
 
 export {
   ASSET_KINDS,
+  ASSET_PIPELINE_STAGES,
   ASSET_STATUSES,
   ASSET_VARIANTS,
   MAX_ASSET_CHECKSUM_LENGTH,
@@ -176,11 +177,13 @@ export {
   MAX_ASSET_STORAGE_KEY_LENGTH,
   MAX_ASSET_UPLOAD_BYTES,
   archiveAsset,
+  changeAssetPipelineStage,
   createAsset,
   restoreAsset,
   type Asset,
   type AssetFactoryDeps,
   type AssetKind,
+  type AssetPipelineStage,
   type AssetStatus,
   type AssetVariant,
   type CreateAssetInput,

@@ -37,6 +37,17 @@ export type AssetVariant = (typeof ASSET_VARIANTS)[number];
 export const ASSET_STATUSES = ['active', 'archived'] as const;
 export type AssetStatus = (typeof ASSET_STATUSES)[number];
 
+/**
+ * How finished a file is, project-wide and orthogonal to `AssetSelection`
+ * (a contextual decision) and `AssetMark` (a triage set) — see
+ * `docs/decisions/asset-library-model.md` §6. Three, fixed, kind-agnostic:
+ * `concept` is where an upload, a generation result or a reference all
+ * legitimately start, and any stage may move to any other, because a
+ * production-ready asset sent back for rework is an ordinary event.
+ */
+export const ASSET_PIPELINE_STAGES = ['concept', 'in_progress', 'production_ready'] as const;
+export type AssetPipelineStage = (typeof ASSET_PIPELINE_STAGES)[number];
+
 export const MAX_ASSET_FILENAME_LENGTH = 300;
 export const MAX_ASSET_MIME_TYPE_LENGTH = 150;
 export const MAX_ASSET_STORAGE_KEY_LENGTH = 1024;
@@ -79,6 +90,8 @@ export interface Asset {
   /** The asset this one was derived from. Null unless `variant` is a derivative. */
   sourceAssetId: string | null;
   status: AssetStatus;
+  /** Project-wide production stage. See `ASSET_PIPELINE_STAGES`. */
+  pipelineStage: AssetPipelineStage;
   createdAt: Date;
   updatedAt: Date;
   archivedAt: Date | null;
@@ -138,6 +151,7 @@ export function createAsset(input: CreateAssetInput, deps: AssetFactoryDeps): As
     variant,
     sourceAssetId,
     status: 'active',
+    pipelineStage: 'concept',
     createdAt: now,
     updatedAt: now,
     archivedAt: null,
@@ -164,4 +178,19 @@ export function restoreAsset(asset: Asset, deps: { clock: Clock }): Asset {
   }
 
   return { ...asset, status: 'active', archivedAt: null, updatedAt: deps.clock.now() };
+}
+
+/**
+ * Moves an asset to a new pipeline stage. Any stage may move to any other —
+ * a production-ready asset sent back for rework is an ordinary event, so
+ * there is no adjacency rule to enforce here beyond `stage` being one of
+ * `ASSET_PIPELINE_STAGES`.
+ */
+export function changeAssetPipelineStage(
+  asset: Asset,
+  stage: AssetPipelineStage,
+  deps: { clock: Clock },
+): Asset {
+  const validated = requireOneOf('pipelineStage', stage, ASSET_PIPELINE_STAGES);
+  return { ...asset, pipelineStage: validated, updatedAt: deps.clock.now() };
 }

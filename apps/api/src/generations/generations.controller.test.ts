@@ -56,7 +56,13 @@ beforeEach(async () => {
   const activity = new ActivityService(new InMemoryActivityRepository(), deps);
   entityService = new EntityService(entities, projects, activity, deps);
   relationshipService = new EntityRelationshipService(relationships, entities, deps);
-  assetService = new AssetService(assets, projects, new InMemoryObjectStorageProvider(), deps);
+  assetService = new AssetService(
+    assets,
+    projects,
+    new InMemoryObjectStorageProvider(),
+    activity,
+    deps,
+  );
   const generationRepository = new InMemoryGenerationRepository();
   const generationService = new GenerationService(
     generationRepository,

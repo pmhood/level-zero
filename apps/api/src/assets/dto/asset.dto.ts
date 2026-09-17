@@ -2,6 +2,7 @@ import {
   ASSET_KINDS,
   ASSET_MARK_KINDS,
   ASSET_ORIGINS,
+  ASSET_PIPELINE_STAGES,
   ASSET_SELECTION_STATES,
   ASSET_SORT_DIRECTIONS,
   ASSET_SORT_FIELDS,
@@ -10,6 +11,7 @@ import {
   type AssetKind,
   type AssetMarkKind,
   type AssetOrigin,
+  type AssetPipelineStage,
   type AssetSelectionState,
   type AssetSortDirection,
   type AssetSortField,
@@ -180,6 +182,13 @@ export class ListAssetsQueryDto {
   @IsString()
   collectionId?: string;
 
+  /** Asset matches when its pipeline stage is one of these. */
+  @IsOptional()
+  @Transform(({ value }) => toStringArray(value))
+  @IsArray()
+  @IsIn(ASSET_PIPELINE_STAGES, { each: true })
+  pipelineStages?: AssetPipelineStage[];
+
   @IsOptional()
   @IsIn(ASSET_SORT_FIELDS)
   sortBy?: AssetSortField;
@@ -200,4 +209,24 @@ export class ListAssetsQueryDto {
   @IsInt()
   @Min(0)
   offset?: number;
+}
+
+/**
+ * Moves an asset to a new pipeline stage
+ * (`docs/decisions/asset-library-model.md` §6.3/§6.4). Any stage may move to
+ * any other, so there is no "from" to validate here — only that `stage` is
+ * one of the three.
+ */
+export class SetAssetPipelineStageDto {
+  @IsIn(ASSET_PIPELINE_STAGES)
+  stage!: AssetPipelineStage;
+
+  /** Free text until authentication lands; then it comes from the session. */
+  @IsOptional()
+  @IsString()
+  actor?: string;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
 }

@@ -50,7 +50,13 @@ beforeEach(async () => {
 
   const activity = new ActivityService(new InMemoryActivityRepository(), deps);
   entities = new EntityService(entityRepo, projects, activity, deps);
-  assets = new AssetService(assetRepo, projects, new InMemoryObjectStorageProvider(), deps);
+  assets = new AssetService(
+    assetRepo,
+    projects,
+    new InMemoryObjectStorageProvider(),
+    activity,
+    deps,
+  );
   const relationships = new EntityRelationshipService(relationshipRepo, entityRepo, deps);
   const collections = new AssetCollectionService(entities, relationships, assetRepo);
   const library = new AssetLibraryService(

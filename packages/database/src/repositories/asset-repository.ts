@@ -123,6 +123,10 @@ export function buildAssetWhere(projectId: string, filter: AssetListFilter): SQL
     conditions.push(lt(assets.createdAt, filter.createdBefore));
   }
 
+  if (filter.pipelineStages?.length) {
+    conditions.push(inArray(assets.pipelineStage, [...filter.pipelineStages]));
+  }
+
   return and(...conditions) as SQL;
 }
 

@@ -52,6 +52,7 @@ let relationships: EntityRelationshipService;
 let assets: AssetService;
 let selections: AssetSelectionService;
 let storage: InMemoryObjectStorageProvider;
+let activity: ActivityService;
 
 beforeAll(async () => {
   client = await connectTestDatabase();
@@ -63,7 +64,7 @@ beforeAll(async () => {
   projects = new ProjectService(projectRepo, deps);
 
   const entityRepo = new DrizzleEntityRepository(client.db);
-  const activity = new ActivityService(new DrizzleActivityRepository(client.db), deps);
+  activity = new ActivityService(new DrizzleActivityRepository(client.db), deps);
   entities = new EntityService(entityRepo, projectRepo, activity, deps);
   relationships = new EntityRelationshipService(
     new DrizzleEntityRelationshipRepository(client.db),
@@ -92,7 +93,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await truncateDomainTables(client);
   storage = new InMemoryObjectStorageProvider();
-  assets = new AssetService(assetRepo, projectRepo, storage, deps);
+  assets = new AssetService(assetRepo, projectRepo, storage, activity, deps);
 });
 
 async function seedProject(name: string): Promise<Project> {
@@ -1063,6 +1064,118 @@ describe('asset library read model', () => {
 
       expect(pageB.items).toHaveLength(0);
       expect(pageB.total).toBe(0);
+    });
+  });
+
+  describe('pipelineStages filter', () => {
+    it('narrows to assets in the given stages and reflects it in total', async () => {
+      const project = await seedProject('Deep Fathom');
+      const concept = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'concept.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+      const inProgress = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'in-progress.png',
+        mimeType: 'image/png',
+        content: Buffer.from('b'),
+      });
+      await assets.setPipelineStage(project.id, inProgress.id, 'in_progress');
+
+      const page = await readModel.listByProject(project.id, {
+        pipelineStages: ['in_progress'],
+      });
+
+      expect(page.items.map((item) => item.id)).toEqual([inProgress.id]);
+      expect(page.total).toBe(1);
+      expect(concept.id).not.toBe(inProgress.id);
+    });
+
+    it('never reports another project asset', async () => {
+      const [a, b] = [await seedProject('A'), await seedProject('B')];
+      const assetA = await assets.upload(a.id, {
+        kind: 'image',
+        filename: 'a.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+      await assets.setPipelineStage(a.id, assetA.id, 'production_ready');
+
+      const pageB = await readModel.listByProject(b.id, { pipelineStages: ['production_ready'] });
+
+      expect(pageB.items).toHaveLength(0);
+      expect(pageB.total).toBe(0);
+    });
+  });
+
+  describe('countsByStage', () => {
+    it('counts active source assets per stage, in one grouped read', async () => {
+      const project = await seedProject('Deep Fathom');
+      const [, b, c] = await Promise.all([
+        assets.upload(project.id, {
+          kind: 'image',
+          filename: 'a.png',
+          mimeType: 'image/png',
+          content: Buffer.from('a'),
+        }),
+        assets.upload(project.id, {
+          kind: 'image',
+          filename: 'b.png',
+          mimeType: 'image/png',
+          content: Buffer.from('b'),
+        }),
+        assets.upload(project.id, {
+          kind: 'image',
+          filename: 'c.png',
+          mimeType: 'image/png',
+          content: Buffer.from('c'),
+        }),
+      ]);
+      await assets.setPipelineStage(project.id, b.id, 'in_progress');
+      await assets.setPipelineStage(project.id, c.id, 'production_ready');
+
+      const counts = await readModel.countsByStage(project.id);
+
+      expect(counts).toEqual({ concept: 1, in_progress: 1, production_ready: 1 });
+    });
+
+    it('excludes an archived asset from its stage count', async () => {
+      const project = await seedProject('Deep Fathom');
+      const asset = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'a.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+      await assets.archive(project.id, asset.id);
+
+      const counts = await readModel.countsByStage(project.id);
+
+      expect(counts.concept).toBeUndefined();
+    });
+
+    it('omits a stage with no active assets rather than reporting zero', async () => {
+      const project = await seedProject('Deep Fathom');
+
+      const counts = await readModel.countsByStage(project.id);
+
+      expect(counts.production_ready).toBeUndefined();
+    });
+
+    it('never counts another project into this one', async () => {
+      const [a, b] = [await seedProject('A'), await seedProject('B')];
+      await assets.upload(a.id, {
+        kind: 'image',
+        filename: 'a.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+
+      const countsB = await readModel.countsByStage(b.id);
+
+      expect(countsB).toEqual({});
     });
   });
 

@@ -1,4 +1,4 @@
-import { type Asset } from './asset';
+import { type Asset, type AssetPipelineStage } from './asset';
 import { type AssetListFilter } from './asset-repository';
 import { type AssetOrigin, type AssetSummary } from './asset-summary';
 import { type AssetMarkKind } from '../selection/asset-mark';
@@ -62,4 +62,12 @@ export interface AssetLibraryReadModel {
    * from the result rather than present with `0`.
    */
   countsByCollection(projectId: string): Promise<Record<string, number>>;
+
+  /**
+   * Active asset counts per pipeline stage across the whole project, keyed
+   * by stage — the strip's counts, one grouped read rather than one
+   * `listByProject` call per stage. A stage with no active assets is simply
+   * absent from the result, the same convention `countsByCollection` uses.
+   */
+  countsByStage(projectId: string): Promise<Partial<Record<AssetPipelineStage, number>>>;
 }

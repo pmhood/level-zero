@@ -1,5 +1,6 @@
 import { loadDotEnv, parseEnv, workerEnvSchema } from '@level-zero/config';
 import {
+  DrizzleActivityRepository,
   DrizzleAssetRepository,
   DrizzleJobRepository,
   DrizzleProjectRepository,
@@ -8,6 +9,7 @@ import {
   createJobQueue,
 } from '@level-zero/database';
 import {
+  ActivityService,
   AssetService,
   JobService,
   MAX_PAGE_SIZE,
@@ -38,10 +40,12 @@ async function main(): Promise<void> {
   const deps = { clock: systemClock, ids: uuidIdGenerator };
   const projects = new DrizzleProjectRepository(database.db);
   const jobs = new JobService(new DrizzleJobRepository(database.db), projects, queue, events, deps);
+  const activity = new ActivityService(new DrizzleActivityRepository(database.db), deps);
   const assets = new AssetService(
     new DrizzleAssetRepository(database.db),
     projects,
     new LocalObjectStorageProvider({ rootDir: env.STORAGE_LOCAL_ROOT }),
+    activity,
     deps,
     undefined,
     jobs,

@@ -1,6 +1,7 @@
 import { type JobDelivery } from '@level-zero/database';
 import {
   ASSET_THUMBNAIL_JOB_STEPS,
+  ActivityService,
   AssetService,
   JobService,
   PREVIEW_MAX_DIMENSION,
@@ -12,6 +13,7 @@ import {
   type Project,
 } from '@level-zero/domain';
 import {
+  InMemoryActivityRepository,
   InMemoryAssetRepository,
   InMemoryJobEvents,
   InMemoryJobQueue,
@@ -45,6 +47,7 @@ beforeEach(async () => {
     new InMemoryAssetRepository(),
     projectRepo,
     new InMemoryObjectStorageProvider(),
+    new ActivityService(new InMemoryActivityRepository(), deps),
     deps,
   );
 

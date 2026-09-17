@@ -1,4 +1,10 @@
-import { type Asset, type AssetKind, type AssetStatus, type AssetVariant } from './asset';
+import {
+  type Asset,
+  type AssetKind,
+  type AssetPipelineStage,
+  type AssetStatus,
+  type AssetVariant,
+} from './asset';
 
 /** Fields the asset listing can be ordered by. */
 export const ASSET_SORT_FIELDS = ['createdAt', 'updatedAt', 'filename', 'byteSize'] as const;
@@ -27,6 +33,8 @@ export interface AssetListFilter {
   createdBefore?: Date;
   /** Archived assets are hidden unless this is true or `statuses` asks for them. */
   includeArchived?: boolean;
+  /** Asset matches when its pipeline stage is one of these. */
+  pipelineStages?: readonly AssetPipelineStage[];
   /** Defaults to `createdAt`. */
   sortBy?: AssetSortField;
   /** Defaults to `desc`. Every sort ties on `id`, so paging never drops or repeats a row. */

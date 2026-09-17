@@ -70,7 +70,14 @@ beforeEach(async () => {
   );
   const activity = new ActivityService(new InMemoryActivityRepository(), deps);
   entities = new EntityService(entityRepo, projects, activity, deps, index);
-  assets = new AssetService(assetRepo, projects, new InMemoryObjectStorageProvider(), deps, index);
+  assets = new AssetService(
+    assetRepo,
+    projects,
+    new InMemoryObjectStorageProvider(),
+    activity,
+    deps,
+    index,
+  );
 
   const moduleRef = await Test.createTestingModule({
     controllers: [SearchController],
