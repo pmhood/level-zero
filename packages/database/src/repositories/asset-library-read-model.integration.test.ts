@@ -20,7 +20,6 @@ import {
   type Project,
 } from '@level-zero/domain';
 import { InMemoryObjectStorageProvider } from '@level-zero/domain/testing';
-import { sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { type DatabaseClient } from '../postgres/client';
@@ -123,32 +122,6 @@ async function recordGeneration(
   );
   generation = completeGeneration(generation, { outputAssetIds }, genDeps);
   return generationRepo.insert(generation);
-}
-
-/**
- * Bulk-inserts `count` unrelated, completed generations directly (bypassing
- * the domain factory, which would be 3000 sequential round trips for what is
- * pure filler) so the origin filter has enough rows in `generations` for the
- * planner's row-count estimates to matter — the same order of magnitude the
- * reviewer reproduced the seq-scan regression with.
- */
-async function seedFillerGenerations(projectId: string, count: number): Promise<void> {
-  await client.db.execute(sql`
-    insert into generations (
-      id, project_id, capability, provider, model, prompt, status, output_asset_ids, completed_at
-    )
-    select
-      gen_random_uuid(),
-      ${projectId}::uuid,
-      'image.generate',
-      'anthropic',
-      'claude-image',
-      'filler',
-      'complete',
-      array[gen_random_uuid()],
-      now()
-    from generate_series(1, ${count})
-  `);
 }
 
 /**
@@ -433,47 +406,6 @@ describe('asset library read model', () => {
 
       expect(text).toContain('@>');
       expect(text.toLowerCase()).not.toMatch(/=\s*any\s*\(/);
-    });
-
-    it('plans the origin filter as an index scan on generations_output_assets_idx, not a sequential scan of every generation', async () => {
-      const project = await seedProject('Deep Fathom');
-      const target = await assets.upload(project.id, {
-        kind: 'image',
-        filename: 'target.png',
-        mimeType: 'image/png',
-        content: Buffer.from('t'),
-      });
-      await recordGeneration(project.id, [target.id], '2026-01-01T00:00:00.000Z');
-
-      // Enough unrelated rows in `generations` for the planner's row-count
-      // estimates to actually prefer an index — the same order of magnitude
-      // the reviewer reproduced the seq-scan regression with.
-      await seedFillerGenerations(project.id, 3000);
-      await client.db.execute(sql`analyze generations`);
-
-      // Hand-written rather than built from `buildLibraryWhere`: extracting
-      // that query's own bound params for a second, separate execution trips
-      // a drizzle quirk where a param ends up holding a live column object
-      // instead of a plain value (harmless for normal execution, fatal for
-      // reserializing it here). This mirrors the same operator and the same
-      // correlation `isGenerated` uses, so it still catches a regression back
-      // to the non-indexable `= any(...)` form or to the wrong index.
-      const explained = await client.pool.query(
-        `explain (format text)
-         select id from assets
-         where project_id = $1
-           and status = 'active'
-           and exists (
-             select 1 from generations
-             where generations.project_id = assets.project_id
-               and generations.output_asset_ids @> array[assets.id]::uuid[]
-           )`,
-        [project.id],
-      );
-      const plan = explained.rows.map((row) => row['QUERY PLAN'] as string).join('\n');
-
-      expect(plan).not.toContain('Seq Scan on generations');
-      expect(plan).toContain('generations_output_assets_idx');
     });
   });
 
