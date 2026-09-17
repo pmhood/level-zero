@@ -19,6 +19,7 @@ Engineering evaluations written in this repository, rather than imported design 
 - `asset-library-model.md` — collections, tags, pipeline state and versions for assets (issue #177)
 - `canonical-entity-routes.md` — HTTP routing and navigation model for entities (issue #86)
 - `consistency-findings.md` — storage model for project consistency findings (issue #88)
+- `gdd-section-identity.md` — what addresses a GDD section, and what an anchored comment or decision does when it moves (issue #185)
 - `moodboard-canvas-library.md` — freely licensed alternatives to tldraw for the Moodboard canvas (issue #59)
 - `playtest-record-model.md` — database design for playtests and playtest records (issue #85)
 - `promotion-registry.md` — promotion registry shape and semantics (issue #87)
