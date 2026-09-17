@@ -1,5 +1,5 @@
 import { type ReviewDecision } from './review-decision';
-import { type ReviewTargetFilter } from './review-target';
+import { type ReviewTargetFilter, type ReviewTargetType } from './review-target';
 
 /**
  * Storage port for review decisions.
@@ -13,4 +13,13 @@ export interface ReviewDecisionRepository {
   insert(decision: ReviewDecision): Promise<ReviewDecision>;
   /** The target's decisions, newest first. */
   listByTarget(projectId: string, filter: ReviewTargetFilter): Promise<ReviewDecision[]>;
+  /**
+   * The target's decisions with a non-null anchor, newest first — every section
+   * of a document at once, including sections that have since been deleted.
+   */
+  listAnchoredByTarget(
+    projectId: string,
+    targetType: ReviewTargetType,
+    targetId: string,
+  ): Promise<ReviewDecision[]>;
 }

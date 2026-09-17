@@ -76,6 +76,14 @@ export const HistoryIcon = createIcon(
   </>,
 );
 
+/** `assets/icons/chat.svg` */
+export const CommentIcon = createIcon(
+  <>
+    <path d="M4 5h16v11H9l-5 4V5Z" />
+    <path d="M8 9h8M8 12h5" />
+  </>,
+);
+
 /** `assets/icons/mechanics.svg` */
 export const MechanicsIcon = createIcon(
   <>

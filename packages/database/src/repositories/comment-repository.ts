@@ -3,8 +3,9 @@ import {
   type Comment,
   type CommentRepository,
   type ReviewTargetFilter,
+  type ReviewTargetType,
 } from '@level-zero/domain';
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, isNull } from 'drizzle-orm';
 
 import { type Database } from '../postgres/client';
 import { comments } from '../schema/reviews';
@@ -41,6 +42,28 @@ export class DrizzleCommentRepository implements CommentRepository {
       .select()
       .from(comments)
       .where(and(eq(comments.projectId, projectId), ...targetConditions(filter)))
+      .orderBy(asc(comments.createdAt), asc(comments.id));
+
+    return rows.map(toComment);
+  }
+
+  /** Every section's comments at once: the anchored rows, oldest first. */
+  async listAnchoredByTarget(
+    projectId: string,
+    targetType: ReviewTargetType,
+    targetId: string,
+  ): Promise<Comment[]> {
+    const rows = await this.db
+      .select()
+      .from(comments)
+      .where(
+        and(
+          eq(comments.projectId, projectId),
+          eq(comments.targetType, targetType),
+          eq(comments.targetId, targetId),
+          isNotNull(comments.targetAnchor),
+        ),
+      )
       .orderBy(asc(comments.createdAt), asc(comments.id));
 
     return rows.map(toComment);

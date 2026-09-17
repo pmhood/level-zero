@@ -1,7 +1,12 @@
-import { ReviewService, type ReviewDecision, type ReviewStatus } from '@level-zero/domain';
+import {
+  ReviewService,
+  type AnchoredReviewStatus,
+  type ReviewDecision,
+  type ReviewStatus,
+} from '@level-zero/domain';
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 
-import { RecordReviewDecisionDto, ReviewTargetQueryDto } from './dto/review.dto';
+import { RecordReviewDecisionDto, ReviewTargetQueryDto, TargetAddressDto } from './dto/review.dto';
 
 /**
  * Where a piece of work stands, and the record of how it got there.
@@ -22,6 +27,21 @@ export class ReviewsController {
     @Query() query: ReviewTargetQueryDto,
   ): Promise<ReviewDecision[]> {
     return this.reviews.listHistory(projectId, targetOf(query));
+  }
+
+  /**
+   * Where each anchored section of the target stands. Only anchors somebody has
+   * decided something about appear; anything else reads as draft by absence.
+   */
+  @Get('anchored')
+  anchored(
+    @Param('projectId') projectId: string,
+    @Query() query: TargetAddressDto,
+  ): Promise<AnchoredReviewStatus[]> {
+    return this.reviews.listAnchoredStatuses(projectId, {
+      type: query.targetType,
+      id: query.targetId,
+    });
   }
 
   @Get()

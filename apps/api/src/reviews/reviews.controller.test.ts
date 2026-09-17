@@ -451,3 +451,108 @@ describe('GET /projects/:projectId/reviews/history', () => {
     ]);
   });
 });
+
+describe('the anchored listings a design document reads', () => {
+  /** A design document: sections of one are anchors on the entity itself. */
+  async function gdd(): Promise<Entity> {
+    return entityRepo.insert(
+      createEntity({ projectId: project, type: 'document', name: 'GDD' }, deps),
+    );
+  }
+
+  it('lists every section’s threads, each saying which section it is on', async () => {
+    const document = await gdd();
+    await http()
+      .post(commentsUrl())
+      .send({
+        targetType: 'entity',
+        targetId: document.id,
+        anchor: 'section-a',
+        author: 'ada',
+        body: 'Still the old loop.',
+      })
+      .expect(201);
+    await http()
+      .post(commentsUrl())
+      .send({
+        targetType: 'entity',
+        targetId: document.id,
+        author: 'kai',
+        body: 'Overall this reads well.',
+      })
+      .expect(201);
+
+    const response = await http()
+      .get(`${commentsUrl()}/anchored`)
+      .query({ targetType: 'entity', targetId: document.id })
+      .expect(200);
+
+    expect(response.body).toHaveLength(1);
+    expect(response.body[0].comment.target.anchor).toBe('section-a');
+  });
+
+  it('lists where each section stands', async () => {
+    const document = await gdd();
+    await http()
+      .post(reviewsUrl())
+      .send({
+        targetType: 'entity',
+        targetId: document.id,
+        anchor: 'section-a',
+        state: 'approved',
+        actor: 'ada',
+      })
+      .expect(201);
+
+    const response = await http()
+      .get(`${reviewsUrl()}/anchored`)
+      .query({ targetType: 'entity', targetId: document.id })
+      .expect(200);
+
+    expect(response.body).toMatchObject([{ anchor: 'section-a', state: 'approved' }]);
+  });
+
+  it('does not pin a section’s approval to the document version in force', async () => {
+    const document = await gdd();
+    await commit(document, 1);
+
+    const response = await http()
+      .post(reviewsUrl())
+      .send({
+        targetType: 'entity',
+        targetId: document.id,
+        anchor: 'section-a',
+        state: 'approved',
+        actor: 'ada',
+      })
+      .expect(201);
+
+    expect(response.body.target.versionId).toBeNull();
+  });
+
+  it('answers 400 without a target', async () => {
+    await http().get(`${reviewsUrl()}/anchored`).expect(400);
+    await http().get(`${commentsUrl()}/anchored`).expect(400);
+  });
+
+  it('lists nothing for another project', async () => {
+    const document = await gdd();
+    await http()
+      .post(reviewsUrl())
+      .send({
+        targetType: 'entity',
+        targetId: document.id,
+        anchor: 'section-a',
+        state: 'approved',
+        actor: 'ada',
+      })
+      .expect(201);
+
+    const response = await http()
+      .get(`/api/projects/${otherProject}/reviews/anchored`)
+      .query({ targetType: 'entity', targetId: document.id })
+      .expect(200);
+
+    expect(response.body).toEqual([]);
+  });
+});

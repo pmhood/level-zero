@@ -7,6 +7,7 @@ import { Markdown } from '@tiptap/markdown';
 import StarterKit from '@tiptap/starter-kit';
 
 import { MarkdownPaste } from './markdown-paste';
+import { SectionId } from './section-id';
 import { BASE_EDITOR_COMMANDS, createSlashMenuExtension, type EditorCommand } from './slash-menu';
 
 export interface EditorExtensionOptions {
@@ -61,6 +62,10 @@ export function createEditorExtensions({
     // persisted as TipTap JSON (`editor.getJSON()`).
     Markdown,
     MarkdownPaste,
+    // Every surface, not just the GDD: a heading typed into a character's
+    // background gets an id nothing reads, which is cheaper than giving one
+    // surface a different extension set from its neighbours.
+    SectionId,
     ...(slashMenu ? [createSlashMenuExtension([...BASE_EDITOR_COMMANDS, ...commands])] : []),
     ...extensions,
   ];

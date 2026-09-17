@@ -109,6 +109,23 @@ export class CommentService {
     return groupCommentThreads(await this.comments.listByTarget(projectId, filter));
   }
 
+  /**
+   * Every thread anchored *inside* the target, whichever section — the one read
+   * a document's inspector needs, because the sections whose threads have been
+   * orphaned are exactly the ones it cannot name.
+   *
+   * Each thread's own `target.anchor` says which section it belongs to; a
+   * caller compares that against `documentSections` to tell live from orphaned.
+   * The target's own threads (`anchor: null`) are not included.
+   */
+  async listAnchoredThreads(
+    projectId: string,
+    target: Pick<ReviewTargetInput, 'type' | 'id'>,
+  ): Promise<CommentThread[]> {
+    const { type, id } = requireReviewTarget('target', { type: target.type, id: target.id });
+    return groupCommentThreads(await this.comments.listAnchoredByTarget(projectId, type, id));
+  }
+
   async edit(projectId: string, commentId: string, input: EditCommentInput): Promise<Comment> {
     const comment = await this.requireOwn(projectId, commentId, input.actor, 'edit');
     return this.comments.save(applyCommentEdit(comment, input.body, this.deps));

@@ -17,6 +17,20 @@ export interface ReviewServiceDeps {
   ids: IdGenerator;
 }
 
+/**
+ * Where one anchored section of a target stands.
+ *
+ * There is no `staleDecision`: an anchored judgement is never pinned to a
+ * version (`pinJudgement`), so one can never go out of date against it.
+ */
+export interface AnchoredReviewStatus {
+  /** The `ReviewTarget.anchor` these decisions were recorded against. */
+  anchor: string;
+  state: ReviewState;
+  /** The decision that set `state`. */
+  decision: ReviewDecision | null;
+}
+
 export interface NewReviewDecisionInput {
   target: ReviewTargetInput;
   state: ReviewState;
@@ -67,6 +81,43 @@ export class ReviewService {
   async listHistory(projectId: string, target: ReviewTargetInput): Promise<ReviewDecision[]> {
     const filter = reviewTargetFilter(requireReviewTarget('target', target));
     return this.decisions.listByTarget(projectId, filter);
+  }
+
+  /**
+   * Where every anchored section of the target stands, one entry per anchor
+   * that anybody has decided anything about.
+   *
+   * An anchor nobody has decided anything about is absent rather than reported
+   * as `draft`: the caller knows which sections exist — this only knows which
+   * ones were judged — and a missing entry reads as draft by the same rule
+   * `resolveReviewState` uses. An anchor whose section has since been deleted
+   * comes back too, and belongs to no section on screen.
+   */
+  async listAnchoredStatuses(
+    projectId: string,
+    target: Pick<ReviewTargetInput, 'type' | 'id'>,
+  ): Promise<AnchoredReviewStatus[]> {
+    const requested = requireReviewTarget('target', { type: target.type, id: target.id });
+    const [resolved, decisions] = await Promise.all([
+      this.targets.resolve(projectId, requested),
+      this.decisions.listAnchoredByTarget(projectId, requested.type, requested.id),
+    ]);
+
+    // Newest first out of the repository, which is the order
+    // `resolveReviewState` reads, so each group keeps it.
+    const byAnchor = new Map<string, ReviewDecision[]>();
+    for (const decision of decisions) {
+      const anchor = decision.target.anchor;
+      if (anchor === null) continue;
+      const group = byAnchor.get(anchor);
+      if (group) group.push(decision);
+      else byAnchor.set(anchor, [decision]);
+    }
+
+    return [...byAnchor].map(([anchor, group]) => {
+      const { state, decision } = resolveReviewState(group, resolved);
+      return { anchor, state, decision };
+    });
   }
 
   /**

@@ -29,11 +29,15 @@ export interface ReviewTarget {
   type: ReviewTargetType;
   id: string;
   /**
-   * A stable address inside the target — a GDD section heading. Null means the
-   * whole target. It is stored and matched, never parsed: there is no
-   * addressable block inside a document
-   * (docs/decisions/consistency-findings.md §4.2), so what counts as an anchor
-   * is the caller's to decide.
+   * A stable address inside the target. Null means the whole target, and it is
+   * stored and matched, never parsed.
+   *
+   * For a `document` entity it is the bare `sectionId` a top-level heading
+   * carries — no prefix, no path, no heading text — so renaming, moving or
+   * demoting a section leaves what is anchored to it untouched, and deleting
+   * one orphans rather than erases it (docs/decisions/gdd-section-identity.md
+   * §3, and `documentSections`). On any other target an anchor remains the
+   * caller's to decide; nothing uses one yet.
    */
   anchor: string | null;
   /**

@@ -211,7 +211,7 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
       provide: DocumentService,
       inject: [EntityService, EntityVersionService],
       useFactory: (entities: EntityService, versions: EntityVersionService): DocumentService =>
-        new DocumentService(entities, versions),
+        new DocumentService(entities, versions, uuidIdGenerator),
     },
     {
       provide: ASSET_REPOSITORY,

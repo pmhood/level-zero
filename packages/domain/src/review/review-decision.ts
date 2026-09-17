@@ -97,13 +97,19 @@ export function isReviewJudgement(state: ReviewState): boolean {
  * entity moves on. A caller may pin an older version deliberately — approving
  * v1 retrospectively — and anything without versions is left unpinned, because
  * there is nothing for the judgement to go out of date against.
+ *
+ * An *anchored* judgement is never pinned. A version is a whole-entity
+ * snapshot, so pinning the approval of one GDD section would unapprove all
+ * twelve the next time anybody saved a milestone — a wall of false staleness
+ * over a change to one paragraph (docs/decisions/gdd-section-identity.md §5.5).
+ * A section's status is simply its newest decision.
  */
 export function pinJudgement(
   target: ReviewTarget,
   state: ReviewState,
   resolved: ResolvedReviewTarget,
 ): ReviewTarget {
-  if (!isReviewJudgement(state)) return target;
+  if (!isReviewJudgement(state) || target.anchor !== null) return target;
   if (target.versionId !== null || resolved.currentVersionId === null) return target;
   return { ...target, versionId: resolved.currentVersionId };
 }

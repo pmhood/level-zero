@@ -90,7 +90,7 @@ beforeEach(async () => {
 
   entities = new EntityService(entityRepo, projectRepo, activity, deps, index);
   versions = new EntityVersionService(versionRepo, entityRepo, activity, deps, index);
-  gddDocuments = new DocumentService(entities, versions);
+  gddDocuments = new DocumentService(entities, versions, deps.ids);
   assets = new AssetService(
     assetRepo,
     projectRepo,

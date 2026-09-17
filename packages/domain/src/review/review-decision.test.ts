@@ -58,6 +58,19 @@ describe('pinJudgement', () => {
     expect(pinJudgement(pinned, 'approved', resolved()).versionId).toBe('version-1');
   });
 
+  it('leaves an anchored judgement unpinned, so one snapshot cannot unapprove every section', () => {
+    // A document version is a whole-document snapshot, so pinning a section's
+    // approval would make a milestone taken after editing section 5 report all
+    // twelve as unreviewed (docs/decisions/gdd-section-identity.md §5.5).
+    const section = requireReviewTarget('target', { ...entityTarget, anchor: 'section-a' });
+
+    expect(pinJudgement(section, 'approved', resolved({ target: section })).versionId).toBeNull();
+  });
+
+  it('still pins the document itself, which is approved as it stood', () => {
+    expect(pinJudgement(target, 'approved', resolved()).versionId).toBe('version-2');
+  });
+
   it('leaves a target with no versions unpinned', () => {
     const asset = requireReviewTarget('target', { type: 'asset', id: 'asset-1' });
 

@@ -11,6 +11,7 @@ import { AiSuggestion } from './ai-suggestion';
 import { createEditorExtensions } from './editor-extensions';
 import { EDITOR_MODE_CONFIG, type EditorMode } from './editor-modes';
 import { EditorToolbar } from './editor-toolbar';
+import { activeSectionId } from './section-id';
 import type { EditorCommand } from './slash-menu';
 import type { AiEditingOptions } from './use-ai-suggestion';
 
@@ -24,6 +25,13 @@ export interface RichTextEditorProps {
   content: JSONContent | null;
   /** Called on every edit with the new canonical JSON. */
   onChange?: (content: JSONContent) => void;
+  /**
+   * Called with the section the caret sits in whenever it moves — the id a
+   * top-level heading carries (`section-id.ts`), or null before the first
+   * heading. What lets a feature address the section somebody is writing in
+   * without reaching into the editor itself.
+   */
+  onSectionChange?: (sectionId: string | null) => void;
   /** Which chrome this surface shows; see `EDITOR_MODE_CONFIG`. */
   mode?: EditorMode;
   /** Overrides the mode's default placeholder. */
@@ -58,6 +66,7 @@ export interface RichTextEditorProps {
 export function RichTextEditor({
   content,
   onChange,
+  onSectionChange,
   mode = 'document',
   placeholder,
   editable = true,
@@ -82,6 +91,11 @@ export function RichTextEditor({
   React.useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+
+  const onSectionChangeRef = React.useRef(onSectionChange);
+  React.useEffect(() => {
+    onSectionChangeRef.current = onSectionChange;
+  }, [onSectionChange]);
 
   // Built once per surface: TipTap reads both only when it creates the editor,
   // and rebuilding them on every render would churn the view for nothing.
@@ -111,11 +125,20 @@ export function RichTextEditor({
     editable,
     ...initialOptions,
     editorProps,
+    onCreate: ({ editor: instance }) => {
+      onSectionChangeRef.current?.(activeSectionId(instance));
+    },
+    onSelectionUpdate: ({ editor: instance }) => {
+      onSectionChangeRef.current?.(activeSectionId(instance));
+    },
     onUpdate: ({ editor: instance, transaction }) => {
       // Mounting the view and moving the caret both produce updates. Reporting
       // those would autosave a document nobody has touched.
       if (!transaction.docChanged) return;
       onChangeRef.current?.(instance.getJSON());
+      // An edit can mint the caret's section id, so the section is re-read
+      // here as well as on a selection change.
+      onSectionChangeRef.current?.(activeSectionId(instance));
     },
   });
 

@@ -89,6 +89,7 @@ function renderHeader(props: Partial<ComponentProps<typeof GddDocumentHeader>> =
         comparing={false}
         onToggleCompare={vi.fn()}
         onToggleHistory={vi.fn()}
+        onToggleReview={vi.fn()}
         onToggleAskAi={vi.fn()}
         {...props}
       />
@@ -187,6 +188,7 @@ describe('GddDocumentHeader — actions reach the right surface', () => {
           comparing
           onToggleCompare={onToggleCompare}
           onToggleHistory={vi.fn()}
+          onToggleReview={vi.fn()}
           onToggleAskAi={vi.fn()}
         />
       </QueryClientProvider>,
@@ -194,6 +196,25 @@ describe('GddDocumentHeader — actions reach the right surface', () => {
 
     expect(screen.getByRole('button', { name: 'Back to writing' })).toBeDefined();
     expect(screen.queryByRole('button', { name: /History/ })).toBeNull();
+  });
+
+  it('Review opens the section review and comments panel from #187', () => {
+    const onToggleReview = vi.fn();
+    renderHeader({ onToggleReview });
+
+    fireEvent.click(screen.getByRole('button', { name: /Review/ }));
+    expect(onToggleReview).toHaveBeenCalledOnce();
+  });
+
+  it('keeps Review on an archived document, where the toolbar is hidden', () => {
+    // Archiving freezes the prose, not the conversation about it — and with
+    // the editor read-only, its Comment button is gone, so this is the only
+    // way into the panel.
+    const onToggleReview = vi.fn();
+    renderHeader({ archived: true, onToggleReview });
+
+    fireEvent.click(screen.getByRole('button', { name: /Review/ }));
+    expect(onToggleReview).toHaveBeenCalledOnce();
   });
 
   it('Export has a place in the strip, disabled ahead of #190', () => {

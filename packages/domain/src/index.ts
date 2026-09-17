@@ -504,6 +504,12 @@ export {
   type DocumentVersionReason,
 } from './document/document';
 export {
+  DOCUMENT_SECTION_ID_ATTR,
+  assignSectionIds,
+  documentSections,
+  type DocumentSection,
+} from './document/document-section';
+export {
   DocumentService,
   type CreateDocumentInput,
   type Document,
@@ -627,6 +633,7 @@ export {
 export { type ReviewDecisionRepository } from './review/review-decision-repository';
 export {
   ReviewService,
+  type AnchoredReviewStatus,
   type NewReviewDecisionInput,
   type ReviewServiceDeps,
 } from './review/review-service';
