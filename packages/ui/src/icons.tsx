@@ -158,3 +158,11 @@ export const ListIcon = createIcon(
     <circle cx="5" cy="18" r="1" />
   </>,
 );
+
+/** `assets/icons/download.svg` — used for export/download actions. */
+export const DownloadIcon = createIcon(
+  <>
+    <path d="M12 4v12M7.5 11.5 12 16l4.5-4.5" />
+    <path d="M5 19h14" />
+  </>,
+);

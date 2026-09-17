@@ -21,24 +21,42 @@ export interface WorkspaceHeaderProps {
    * `<img>` and is never announced.
    */
   image?: string;
+  /**
+   * Forces the cinematic band even when `image` is absent — a project with
+   * no artwork still reads as the taller, dark header rather than dropping
+   * to the compact one. Defaults to whether `image` is set, so callers that
+   * only ever pass artwork (World) are unaffected either way.
+   */
+  cinematic?: boolean;
 }
 
 /**
  * The workspace header (spec section 8) in its two patterns. Without `image`
  * it is the compact header used by utility-heavy tool pages such as Idea Lab:
- * a title, one line of description, and actions. With `image` it is the
- * cinematic header the spec asks for on World, Overview, Mechanics, GDD, Build
- * and Prototype — the same three parts, at cinematic height over the artwork.
+ * a title, one line of description, and actions. With `image` — or with
+ * `cinematic` on its own — it is the taller header the spec asks for on
+ * World, Overview, Mechanics, GDD, Build and Prototype: the same three parts,
+ * at cinematic height, over the artwork when there is any and over a plain
+ * canvas-coloured band when there is not.
  *
- * The scrim is dark whatever the app theme is, so the text over it is pinned to
+ * The band is dark whatever the app theme is, so the text over it is pinned to
  * the palette's light ink rather than following `text-foreground`.
  */
-export function WorkspaceHeader({ title, description, actions, image }: WorkspaceHeaderProps) {
+export function WorkspaceHeader({
+  title,
+  description,
+  actions,
+  image,
+  cinematic,
+}: WorkspaceHeaderProps) {
+  const isCinematic = cinematic ?? Boolean(image);
+
   return (
     <header
       className={cn(
         'flex items-start justify-between gap-4 px-4 py-5 xl:px-5 2xl:px-6',
-        image && 'min-h-[180px] bg-cover bg-center',
+        isCinematic && 'min-h-[180px] bg-cover bg-center',
+        isCinematic && !image && 'bg-[var(--lz-bg-canvas)]',
       )}
       style={image ? { backgroundImage: `${CINEMATIC_SCRIM}, url("${image}")` } : undefined}
     >
@@ -46,7 +64,7 @@ export function WorkspaceHeader({ title, description, actions, image }: Workspac
         <h1
           className={cn(
             'text-[28px] leading-[34px] font-bold',
-            image ? 'text-[var(--lz-text-primary)]' : 'text-foreground',
+            isCinematic ? 'text-[var(--lz-text-primary)]' : 'text-foreground',
           )}
         >
           {title}
@@ -55,7 +73,7 @@ export function WorkspaceHeader({ title, description, actions, image }: Workspac
           <p
             className={cn(
               'mt-1 text-sm',
-              image ? 'text-[var(--lz-text-secondary)]' : 'text-muted-foreground',
+              isCinematic ? 'text-[var(--lz-text-secondary)]' : 'text-muted-foreground',
             )}
           >
             {description}
