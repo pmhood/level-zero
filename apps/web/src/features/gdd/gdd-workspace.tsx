@@ -1,9 +1,10 @@
 'use client';
 
-import type { Document, Entity } from '@level-zero/domain';
+import type { Document, DocumentContent, Entity } from '@level-zero/domain';
 import {
   Button,
   EmptyState,
+  HistoryIcon,
   Inspector,
   RichTextEditor,
   SaveStatusLabel,
@@ -36,6 +37,7 @@ import { ApiRequestError, apiErrorMessage } from '@/lib/api';
 import { recordAcceptedAiEdit } from './ai-edit-version';
 import { documentOutline } from './document-outline';
 import { DocumentSwitcher } from './document-switcher';
+import { GddHistory } from './gdd-history';
 import { gddDocumentRoute, gddRoute } from './gdd-route';
 import {
   GDD_DOCUMENT_NAME,
@@ -100,11 +102,14 @@ function GddDocumentEditor({
   // silently after the fact.
   const archived = designDocument.entity.status === 'archived';
   const [content, setContent] = useState<JSONContent>(() => designDocument.content as JSONContent);
+  // `RichTextEditor` reads `content` only when it is created, so a restore —
+  // which replaces the body from outside the editor's own edits — bumps this
+  // to force a fresh surface onto the restored writing.
+  const [editorKey, setEditorKey] = useState(0);
   const saveDocument = useSaveGddDocument(projectId, documentId);
   const snapshotDocument = useSnapshotGddDocument(projectId, documentId);
   const surfaceRef = useRef<HTMLDivElement>(null);
   const [aiEditError, setAiEditError] = useState<string | null>(null);
-  const [versionError, setVersionError] = useState<string | null>(null);
   // Compare is a mode of the document surface rather than a page of its own:
   // the writer stays where they were writing, and the outline steps aside so
   // two versions get the full width.
@@ -113,6 +118,7 @@ function GddDocumentEditor({
   // are the editor's own inline layer — so it is a panel the writer opens
   // rather than something docked beside every sentence.
   const [askingAi, setAskingAi] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const entitiesQuery = useReferenceableEntities(projectId);
   const entities = useMemo(() => entitiesQuery.data?.items ?? [], [entitiesQuery.data]);
@@ -124,6 +130,7 @@ function GddDocumentEditor({
   const openReference = useCallback((entity: Entity) => {
     setOpenEntityId(entity.id);
     setAskingAi(false);
+    setHistoryOpen(false);
   }, []);
 
   // The `@` menu is built once with the editor, but has to search the entities
@@ -191,17 +198,13 @@ function GddDocumentEditor({
   }
 
   /**
-   * A version is of what the server holds, so whatever is still waiting in
-   * autosave has to land before the snapshot is taken.
+   * A restore replaces the body from outside the editor's own edits, so the
+   * surface is remounted onto it rather than patched in place — the same
+   * reason a save round-trip is deliberately never fed back to `content`.
    */
-  async function saveVersion() {
-    try {
-      await autosave.flush();
-      await snapshotDocument.mutateAsync({});
-      setVersionError(null);
-    } catch (error) {
-      setVersionError(apiErrorMessage(error, 'Could not save a version.'));
-    }
+  function handleRestored(restored: DocumentContent) {
+    setContent(restored as JSONContent);
+    setEditorKey((key) => key + 1);
   }
 
   return (
@@ -222,21 +225,39 @@ function GddDocumentEditor({
               <div className="flex items-center gap-2">
                 <DocumentSwitcher projectId={projectId} current={designDocument.entity} />
                 {archived && <StatusBadge tone="neutral">Archived</StatusBadge>}
-                <Button variant="secondary" size="sm" onClick={() => setComparing(!comparing)}>
-                  {comparing ? 'Back to writing' : 'Compare versions'}
-                </Button>
-                {!archived && (
-                  <Button
-                    variant="ai"
-                    size="sm"
-                    onClick={() => {
-                      setAskingAi(!askingAi);
-                      setOpenEntityId(null);
-                    }}
-                  >
-                    <SparklesIcon className="size-4" />
-                    Ask AI
+                {comparing ? (
+                  <Button variant="secondary" size="sm" onClick={() => setComparing(false)}>
+                    Back to writing
                   </Button>
+                ) : (
+                  <>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setHistoryOpen(!historyOpen);
+                        setAskingAi(false);
+                        setOpenEntityId(null);
+                      }}
+                    >
+                      <HistoryIcon className="size-4" />
+                      History
+                    </Button>
+                    {!archived && (
+                      <Button
+                        variant="ai"
+                        size="sm"
+                        onClick={() => {
+                          setAskingAi(!askingAi);
+                          setOpenEntityId(null);
+                          setHistoryOpen(false);
+                        }}
+                      >
+                        <SparklesIcon className="size-4" />
+                        Ask AI
+                      </Button>
+                    )}
+                  </>
                 )}
               </div>
             }
@@ -254,6 +275,7 @@ function GddDocumentEditor({
             ) : (
               <>
                 <RichTextEditor
+                  key={editorKey}
                   mode="document"
                   label="Game design document"
                   content={content}
@@ -263,27 +285,12 @@ function GddDocumentEditor({
                   commands={ENTITY_EMBED_COMMANDS}
                   ai={archived ? undefined : aiEditing}
                   toolbarActions={
-                    <>
-                      <SaveStatusLabel status={autosave.status} error={autosave.error} />
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        disabled={snapshotDocument.isPending}
-                        onClick={() => void saveVersion()}
-                      >
-                        {snapshotDocument.isPending ? 'Saving…' : 'Save a version'}
-                      </Button>
-                    </>
+                    <SaveStatusLabel status={autosave.status} error={autosave.error} />
                   }
                 />
                 {aiEditError && (
                   <p role="status" className="mt-2 text-xs text-error">
                     {aiEditError}
-                  </p>
-                )}
-                {versionError && (
-                  <p role="status" className="mt-2 text-xs text-error">
-                    {versionError}
                   </p>
                 )}
               </>
@@ -304,6 +311,26 @@ function GddDocumentEditor({
             <AiInspector
               projectId={projectId}
               subject={{ kind: 'entity', entity: designDocument.entity }}
+            />
+          </Inspector>
+        )}
+
+        {!openEntity && !askingAi && historyOpen && !comparing && (
+          <Inspector
+            title="History"
+            description={designDocument.entity.name}
+            onClose={() => setHistoryOpen(false)}
+          >
+            <GddHistory
+              projectId={projectId}
+              documentId={documentId}
+              archived={archived}
+              flush={flush}
+              onCompare={() => {
+                setComparing(true);
+                setHistoryOpen(false);
+              }}
+              onRestored={handleRestored}
             />
           </Inspector>
         )}

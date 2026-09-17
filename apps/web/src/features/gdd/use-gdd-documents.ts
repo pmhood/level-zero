@@ -22,6 +22,10 @@ const gddKeys = {
     ['projects', projectId, 'gdd', 'documents', { includeArchived }] as const,
   document: (projectId: string, documentId: string) =>
     ['projects', projectId, 'gdd', 'documents', documentId] as const,
+  history: (projectId: string, documentId: string) =>
+    ['projects', projectId, 'gdd', 'documents', documentId, 'versions'] as const,
+  version: (projectId: string, documentId: string, versionId: string) =>
+    ['projects', projectId, 'gdd', 'documents', documentId, 'versions', versionId] as const,
 };
 
 /** Newest edit first — the switcher's order, and how `/gdd` picks its default. */
@@ -156,8 +160,54 @@ export function useSaveGddDocument(projectId: string, documentId: string) {
  * of what is stored, not of what is on screen.
  */
 export function useSnapshotGddDocument(projectId: string, documentId: string) {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: (input: SnapshotDocumentInput) =>
       api.snapshotDocument(projectId, documentId, input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: gddKeys.history(projectId, documentId) }),
+  });
+}
+
+/** The history panel's list: every version, newest first, without a body per entry. */
+export function useGddDocumentHistory(projectId: string, documentId: string) {
+  return useQuery({
+    queryKey: gddKeys.history(projectId, documentId),
+    queryFn: () => api.listDocumentVersions(projectId, documentId),
+    enabled: Boolean(projectId) && Boolean(documentId),
+  });
+}
+
+/** One version with the body it holds, to read it or preview before restoring it. */
+export function useGddDocumentVersion(
+  projectId: string,
+  documentId: string,
+  versionId: string | null,
+) {
+  return useQuery({
+    queryKey: gddKeys.version(projectId, documentId, versionId ?? ''),
+    queryFn: () => api.getDocumentVersion(projectId, documentId, versionId as string),
+    enabled: Boolean(projectId) && Boolean(documentId) && Boolean(versionId),
+  });
+}
+
+/**
+ * Restoring appends a new version rather than rewinding, so the history list
+ * and the document itself (its content and `currentVersionId`) both move on.
+ *
+ * One invalidation, not two: `gddKeys.document(...)` is a prefix of
+ * `gddKeys.history(...)` and `gddKeys.version(...)`, and `invalidateQueries`
+ * matches by prefix, so it already covers the history list and any version
+ * read alongside the document itself. Invalidating both separately queued
+ * the history query twice and raced its own two mock responses in tests.
+ */
+export function useRestoreGddDocumentVersion(projectId: string, documentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (versionId: string) => api.restoreDocumentVersion(projectId, documentId, versionId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: gddKeys.document(projectId, documentId) }),
   });
 }
