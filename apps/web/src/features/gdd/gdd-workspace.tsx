@@ -8,12 +8,16 @@ import {
   RichTextEditor,
   SaveStatusLabel,
   SparklesIcon,
+  StatusBadge,
   WorkspaceHeader,
   useEditorAutosave,
   type AcceptedAiEdit,
   type AiEditingOptions,
   type JSONContent,
 } from '@level-zero/ui';
+import type { Route } from 'next';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AiInspector } from '@/features/ai-inspector/ai-inspector';
@@ -31,12 +35,16 @@ import { ApiRequestError, apiErrorMessage } from '@/lib/api';
 
 import { recordAcceptedAiEdit } from './ai-edit-version';
 import { documentOutline } from './document-outline';
+import { DocumentSwitcher } from './document-switcher';
+import { gddDocumentRoute, gddRoute } from './gdd-route';
 import {
+  GDD_DOCUMENT_NAME,
   useCreateGddDocument,
   useGddDocument,
+  useGddDocuments,
   useSaveGddDocument,
   useSnapshotGddDocument,
-} from './use-gdd-document';
+} from './use-gdd-documents';
 
 function DocumentOutline({
   content,
@@ -86,6 +94,11 @@ function GddDocumentEditor({
 }) {
   // The stored body is a document node; the editor reads it as TipTap JSON.
   const documentId = designDocument.entity.id;
+  // Archived is the entity's, same rule the domain enforces server-side
+  // (`applyEntityUpdate`, "an archived entity must be restored before it can
+  // be edited"): the surface goes read-only rather than letting a save fail
+  // silently after the fact.
+  const archived = designDocument.entity.status === 'archived';
   const [content, setContent] = useState<JSONContent>(() => designDocument.content as JSONContent);
   const saveDocument = useSaveGddDocument(projectId, documentId);
   const snapshotDocument = useSnapshotGddDocument(projectId, documentId);
@@ -207,20 +220,24 @@ function GddDocumentEditor({
             description="The canonical written design. Reference entities instead of restating them."
             actions={
               <div className="flex items-center gap-2">
+                <DocumentSwitcher projectId={projectId} current={designDocument.entity} />
+                {archived && <StatusBadge tone="neutral">Archived</StatusBadge>}
                 <Button variant="secondary" size="sm" onClick={() => setComparing(!comparing)}>
                   {comparing ? 'Back to writing' : 'Compare versions'}
                 </Button>
-                <Button
-                  variant="ai"
-                  size="sm"
-                  onClick={() => {
-                    setAskingAi(!askingAi);
-                    setOpenEntityId(null);
-                  }}
-                >
-                  <SparklesIcon className="size-4" />
-                  Ask AI
-                </Button>
+                {!archived && (
+                  <Button
+                    variant="ai"
+                    size="sm"
+                    onClick={() => {
+                      setAskingAi(!askingAi);
+                      setOpenEntityId(null);
+                    }}
+                  >
+                    <SparklesIcon className="size-4" />
+                    Ask AI
+                  </Button>
+                )}
               </div>
             }
           />
@@ -241,9 +258,10 @@ function GddDocumentEditor({
                   label="Game design document"
                   content={content}
                   onChange={handleChange}
+                  editable={!archived}
                   extensions={referenceExtensions}
                   commands={ENTITY_EMBED_COMMANDS}
-                  ai={aiEditing}
+                  ai={archived ? undefined : aiEditing}
                   toolbarActions={
                     <>
                       <SaveStatusLabel status={autosave.status} error={autosave.error} />
@@ -277,7 +295,7 @@ function GddDocumentEditor({
           <EntityReferenceInspector entity={openEntity} onClose={() => setOpenEntityId(null)} />
         )}
 
-        {!openEntity && askingAi && !comparing && (
+        {!openEntity && askingAi && !comparing && !archived && (
           <Inspector
             title={designDocument.entity.name}
             description="Design document"
@@ -294,26 +312,33 @@ function GddDocumentEditor({
   );
 }
 
-export function GddWorkspace({ projectId }: { projectId: string }) {
-  const documentQuery = useGddDocument(projectId);
-  const createDocument = useCreateGddDocument(projectId);
+/**
+ * `/projects/:projectId/gdd`, with no document id (#182): opens the most
+ * recently updated document, or — a project with none at all — offers to
+ * start the first one. Never the empty state a missing document used to mean;
+ * that is now `GddDocumentRoute`'s 404, for an id that names nothing.
+ */
+function GddIndexRoute({ projectId }: { projectId: string }) {
+  const router = useRouter();
+  const documentsQuery = useGddDocuments(projectId);
+  const mostRecent = documentsQuery.data?.items[0] ?? null;
 
-  if (documentQuery.isPending) {
+  useEffect(() => {
+    if (mostRecent) router.replace(gddDocumentRoute(projectId, mostRecent.id) as Route);
+  }, [mostRecent, projectId, router]);
+
+  if (documentsQuery.isPending || mostRecent) {
     return <p className="p-6 text-sm text-muted-foreground">Loading the design document…</p>;
   }
 
-  if (documentQuery.isError) {
+  if (documentsQuery.isError) {
     return (
       <div className="p-6">
         <EmptyState
-          title="Couldn't load the design document"
-          description={
-            documentQuery.error instanceof ApiRequestError
-              ? documentQuery.error.message
-              : 'Something went wrong talking to the API.'
-          }
+          title="Couldn't load the project's documents"
+          description={apiErrorMessage(documentsQuery.error)}
           actions={
-            <Button variant="secondary" onClick={() => documentQuery.refetch()}>
+            <Button variant="secondary" onClick={() => documentsQuery.refetch()}>
               Try again
             </Button>
           }
@@ -322,15 +347,86 @@ export function GddWorkspace({ projectId }: { projectId: string }) {
     );
   }
 
-  if (!documentQuery.data) {
+  return <GddEmptyIndex projectId={projectId} />;
+}
+
+/**
+ * No document survived `includeArchived: false` — either the project has
+ * never had one, or every one it had is archived. The two read the same to a
+ * writer ("nothing to open") but not to someone chasing a document they
+ * archived, so archived documents get a quiet way back in rather than
+ * disappearing until someone remembers "Show archived" exists.
+ */
+function GddEmptyIndex({ projectId }: { projectId: string }) {
+  const router = useRouter();
+  const createDocument = useCreateGddDocument(projectId);
+  const archivedQuery = useGddDocuments(projectId, { includeArchived: true });
+  const archived = (archivedQuery.data?.items ?? []).filter((item) => item.status === 'archived');
+
+  function startDocument() {
+    createDocument.mutate(GDD_DOCUMENT_NAME, {
+      onSuccess: (document) =>
+        router.replace(gddDocumentRoute(projectId, document.entity.id) as Route),
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-6 p-6">
+      <EmptyState
+        title="No documents yet"
+        description="A project holds as many design documents as it needs. Start with the pillars, the core loop and the systems as they settle."
+        actions={
+          <Button onClick={startDocument} disabled={createDocument.isPending}>
+            {createDocument.isPending ? 'Creating…' : 'Start a document'}
+          </Button>
+        }
+      />
+
+      {archived.length > 0 && (
+        <div className="max-w-sm">
+          <p className="text-xs font-medium text-muted-foreground">Archived documents</p>
+          <ul className="mt-2 flex flex-col gap-1">
+            {archived.map((document) => (
+              <li key={document.id}>
+                <Link
+                  href={gddDocumentRoute(projectId, document.id) as Route}
+                  className="text-sm text-primary hover:underline"
+                >
+                  {document.name}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** `/projects/:projectId/gdd/:documentId` (#182): one document, by id. */
+function GddDocumentRoute({ projectId, documentId }: { projectId: string; documentId: string }) {
+  const documentQuery = useGddDocument(projectId, documentId);
+
+  if (documentQuery.isPending) {
+    return <p className="p-6 text-sm text-muted-foreground">Loading the design document…</p>;
+  }
+
+  if (documentQuery.isError) {
+    const notFound =
+      documentQuery.error instanceof ApiRequestError && documentQuery.error.status === 404;
+
     return (
       <div className="p-6">
         <EmptyState
-          title="No design document yet"
-          description="Start the GDD and write the pillars, the core loop and the systems as they settle."
+          title={notFound ? 'Document not found' : "Couldn't load this document"}
+          description={
+            notFound
+              ? "This document doesn't exist, or you don't have access to it."
+              : apiErrorMessage(documentQuery.error)
+          }
           actions={
-            <Button onClick={() => createDocument.mutate()} disabled={createDocument.isPending}>
-              {createDocument.isPending ? 'Creating…' : 'Start the GDD'}
+            <Button asChild variant="secondary">
+              <Link href={gddRoute(projectId) as Route}>Back to documents</Link>
             </Button>
           }
         />
@@ -345,4 +441,17 @@ export function GddWorkspace({ projectId }: { projectId: string }) {
       designDocument={documentQuery.data}
     />
   );
+}
+
+export function GddWorkspace({
+  projectId,
+  documentId,
+}: {
+  projectId: string;
+  documentId?: string;
+}) {
+  if (documentId) {
+    return <GddDocumentRoute projectId={projectId} documentId={documentId} />;
+  }
+  return <GddIndexRoute projectId={projectId} />;
 }

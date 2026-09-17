@@ -97,6 +97,9 @@ export const LinkIcon = createIcon(
 /** `assets/icons/chevron-right.svg` */
 export const ChevronRightIcon = createIcon(<path d="m9 6 6 6-6 6" />);
 
+/** `assets/icons/chevron-down.svg` — the caret on a control that opens a list. */
+export const ChevronDownIcon = createIcon(<path d="m6 9 6 6 6-6" />);
+
 /** `assets/icons/gdd.svg` */
 export const DocumentIcon = createIcon(
   <>

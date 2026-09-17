@@ -31,6 +31,7 @@ export { ParameterControl, type ParameterControlProps } from './parameter-contro
 export { ParameterSummary, type ParameterSummaryProps } from './parameter-summary';
 export {
   CheckIcon,
+  ChevronDownIcon,
   ChevronRightIcon,
   CloseIcon,
   DocumentIcon,
