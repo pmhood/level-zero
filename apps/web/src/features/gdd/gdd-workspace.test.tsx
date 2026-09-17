@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { Document, Entity, EntityPage } from '@level-zero/domain';
+import type { Document, Entity, EntityPage, Project } from '@level-zero/domain';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -33,6 +33,7 @@ vi.mock('@/lib/api', () => ({
   snapshotDocument: vi.fn(),
   suggestDocumentEdit: vi.fn(),
   listEntities: vi.fn(),
+  getProject: vi.fn(),
 }));
 
 const api = await import('@/lib/api');
@@ -69,6 +70,19 @@ function page(items: Entity[]): EntityPage {
   return { items, total: items.length };
 }
 
+function project(overrides: Partial<Project> = {}): Project {
+  return {
+    id: 'prj_1',
+    name: 'Driftwake',
+    description: 'A salvage the past. Survive what remains.',
+    status: 'active',
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    archivedAt: null,
+    ...overrides,
+  };
+}
+
 function renderWorkspace(props: { projectId: string; documentId?: string }) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -84,6 +98,7 @@ beforeEach(() => {
   push.mockClear();
   replace.mockClear();
   vi.mocked(api.listEntities).mockResolvedValue(page([]));
+  vi.mocked(api.getProject).mockResolvedValue(project());
 });
 
 afterEach(cleanup);

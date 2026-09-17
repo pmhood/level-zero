@@ -4,13 +4,9 @@ import type { Document, DocumentContent, Entity } from '@level-zero/domain';
 import {
   Button,
   EmptyState,
-  HistoryIcon,
   Inspector,
   RichTextEditor,
   SaveStatusLabel,
-  SparklesIcon,
-  StatusBadge,
-  WorkspaceHeader,
   useEditorAutosave,
   type AcceptedAiEdit,
   type AiEditingOptions,
@@ -31,12 +27,13 @@ import {
 } from '@/features/entities/entity-reference-extensions';
 import { EntityReferenceInspector } from '@/features/entities/entity-reference-inspector';
 import { useReferenceableEntities } from '@/features/entities/use-entities';
+import { useProject } from '@/features/projects/use-projects';
 import * as api from '@/lib/api';
 import { ApiRequestError, apiErrorMessage } from '@/lib/api';
 
 import { recordAcceptedAiEdit } from './ai-edit-version';
 import { documentOutline } from './document-outline';
-import { DocumentSwitcher } from './document-switcher';
+import { GddDocumentHeader } from './gdd-document-header';
 import { GddHistory } from './gdd-history';
 import { gddDocumentRoute, gddRoute } from './gdd-route';
 import {
@@ -101,6 +98,10 @@ function GddDocumentEditor({
   // be edited"): the surface goes read-only rather than letting a save fail
   // silently after the fact.
   const archived = designDocument.entity.status === 'archived';
+  // The header reads the project — name, description, artwork — it never
+  // edits it (renaming the game belongs to project settings), so this is the
+  // ordinary read-only query every other project page uses.
+  const projectQuery = useProject(projectId);
   const [content, setContent] = useState<JSONContent>(() => designDocument.content as JSONContent);
   // `RichTextEditor` reads `content` only when it is created, so a restore —
   // which replaces the body from outside the editor's own edits — bumps this
@@ -207,6 +208,42 @@ function GddDocumentEditor({
     setEditorKey((key) => key + 1);
   }
 
+  // History, Ask AI and Compare share one inspector-and-mode slot, so opening
+  // one closes whatever else was open rather than stacking on top of it.
+  function toggleHistory() {
+    setHistoryOpen((current) => {
+      const next = !current;
+      if (next) {
+        setAskingAi(false);
+        setOpenEntityId(null);
+      }
+      return next;
+    });
+  }
+
+  function toggleAskingAi() {
+    setAskingAi((current) => {
+      const next = !current;
+      if (next) {
+        setHistoryOpen(false);
+        setOpenEntityId(null);
+      }
+      return next;
+    });
+  }
+
+  function toggleComparing() {
+    setComparing((current) => {
+      const next = !current;
+      if (next) {
+        setHistoryOpen(false);
+        setAskingAi(false);
+        setOpenEntityId(null);
+      }
+      return next;
+    });
+  }
+
   return (
     <EntityReferenceProvider
       entities={entities}
@@ -218,49 +255,16 @@ function GddDocumentEditor({
         {!comparing && <DocumentOutline content={content} onSelect={scrollToHeading} />}
 
         <div ref={surfaceRef} className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-          <WorkspaceHeader
-            title="GDD"
-            description="The canonical written design. Reference entities instead of restating them."
-            actions={
-              <div className="flex items-center gap-2">
-                <DocumentSwitcher projectId={projectId} current={designDocument.entity} />
-                {archived && <StatusBadge tone="neutral">Archived</StatusBadge>}
-                {comparing ? (
-                  <Button variant="secondary" size="sm" onClick={() => setComparing(false)}>
-                    Back to writing
-                  </Button>
-                ) : (
-                  <>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => {
-                        setHistoryOpen(!historyOpen);
-                        setAskingAi(false);
-                        setOpenEntityId(null);
-                      }}
-                    >
-                      <HistoryIcon className="size-4" />
-                      History
-                    </Button>
-                    {!archived && (
-                      <Button
-                        variant="ai"
-                        size="sm"
-                        onClick={() => {
-                          setAskingAi(!askingAi);
-                          setOpenEntityId(null);
-                          setHistoryOpen(false);
-                        }}
-                      >
-                        <SparklesIcon className="size-4" />
-                        Ask AI
-                      </Button>
-                    )}
-                  </>
-                )}
-              </div>
-            }
+          <GddDocumentHeader
+            projectId={projectId}
+            project={projectQuery.data}
+            documentEntity={designDocument.entity}
+            currentVersion={designDocument.currentVersion}
+            archived={archived}
+            comparing={comparing}
+            onToggleCompare={toggleComparing}
+            onToggleHistory={toggleHistory}
+            onToggleAskAi={toggleAskingAi}
           />
 
           <div

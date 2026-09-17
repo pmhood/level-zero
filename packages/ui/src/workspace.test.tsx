@@ -7,6 +7,7 @@ import { Input } from './input';
 import { Inspector } from './inspector';
 import { SearchField } from './search-field';
 import { WorkspaceBrowser } from './workspace-browser';
+import { WorkspaceHeader } from './workspace-header';
 import { WorkspacePage } from './workspace-page';
 
 describe('WorkspacePage', () => {
@@ -71,6 +72,29 @@ describe('WorkspacePage', () => {
     );
 
     expect(container.querySelector('aside')).toBeNull();
+  });
+});
+
+describe('WorkspaceHeader — cinematic without artwork', () => {
+  it('reads as the cinematic band on `cinematic` alone, over a plain canvas colour', () => {
+    const { container } = render(<WorkspaceHeader title="Driftwake" cinematic />);
+
+    const header = container.querySelector('header');
+    expect(header?.className).toContain('min-h-[180px]');
+    expect(header?.className).toContain('bg-[var(--lz-bg-canvas)]');
+    // No artwork was passed, so there is nothing to set as a background image.
+    expect(header?.style.backgroundImage).toBe('');
+    expect(screen.getByRole('heading', { name: 'Driftwake' }).className).toContain(
+      'text-[var(--lz-text-primary)]',
+    );
+  });
+
+  it('still defaults to the compact header when neither `image` nor `cinematic` is passed', () => {
+    const { container } = render(<WorkspaceHeader title="Characters" />);
+
+    const header = container.querySelector('header');
+    expect(header?.className).not.toContain('min-h-[180px]');
+    expect(header?.className).not.toContain('bg-[var(--lz-bg-canvas)]');
   });
 });
 

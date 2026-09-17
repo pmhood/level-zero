@@ -35,6 +35,7 @@ export {
   ChevronRightIcon,
   CloseIcon,
   DocumentIcon,
+  DownloadIcon,
   GridIcon,
   HistoryIcon,
   IdeaLabIcon,
