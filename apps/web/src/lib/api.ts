@@ -22,7 +22,9 @@ import type {
   CreateProjectInput,
   Document,
   DocumentContent,
+  DocumentHistory,
   DocumentVersion,
+  DocumentVersionSnapshot,
   Entity,
   EntityHistory,
   EntityNeighborhood,
@@ -63,6 +65,7 @@ import type {
   PrototypeVersionStatus,
   RelationshipDirection,
   RelationType,
+  RestoreDocumentVersionInput,
   ReviewDecision,
   ReviewState,
   ReviewStatus,
@@ -397,6 +400,44 @@ export function snapshotDocument(
   input: SnapshotDocumentInput,
 ): Promise<DocumentVersion> {
   return post(`/api/projects/${projectId}/documents/${documentId}/versions`, input);
+}
+
+export interface ListDocumentVersionsParams {
+  limit?: number;
+  offset?: number;
+}
+
+/** The history list: version metadata only, without a body per entry. */
+export function listDocumentVersions(
+  projectId: string,
+  documentId: string,
+  params: ListDocumentVersionsParams = {},
+): Promise<DocumentHistory> {
+  return apiFetch(
+    `/api/projects/${projectId}/documents/${documentId}/versions${toQueryString(params)}`,
+  );
+}
+
+/** One version with the body it holds, to read it or preview a restore. */
+export function getDocumentVersion(
+  projectId: string,
+  documentId: string,
+  versionId: string,
+): Promise<DocumentVersionSnapshot> {
+  return apiFetch(`/api/projects/${projectId}/documents/${documentId}/versions/${versionId}`);
+}
+
+/** Brings this version's body back as a new version. Later history is kept. */
+export function restoreDocumentVersion(
+  projectId: string,
+  documentId: string,
+  versionId: string,
+  input: RestoreDocumentVersionInput = {},
+): Promise<DocumentVersion> {
+  return post(
+    `/api/projects/${projectId}/documents/${documentId}/versions/${versionId}/restore`,
+    input,
+  );
 }
 
 export interface SuggestDocumentEditInput {
