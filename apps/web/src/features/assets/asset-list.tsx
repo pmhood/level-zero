@@ -2,6 +2,7 @@
 
 import type { Asset, AssetSummary } from '@level-zero/domain';
 import {
+  Checkbox,
   StatusBadge,
   Table,
   TableBody,
@@ -11,6 +12,7 @@ import {
   TableRow,
 } from '@level-zero/ui';
 
+import type { AssetClickModifiers } from './use-asset-selection';
 import {
   assetKindLabel,
   assetStatusBadge,
@@ -26,8 +28,13 @@ const AI_BADGE_CLASSNAME =
 export interface AssetListProps {
   assets: Asset[];
   summaries: ReadonlyMap<string, AssetSummary>;
-  selectedId: string | null;
-  onSelect: (asset: Asset) => void;
+  isSelected: (id: string) => boolean;
+  onRowClick: (index: number, modifiers: AssetClickModifiers) => void;
+  /** A row's own checkbox: always adds or removes just that row. */
+  onToggleRow: (index: number) => void;
+  selectedCount: number;
+  onSelectAll: () => void;
+  onClear: () => void;
 }
 
 /**
@@ -35,12 +42,38 @@ export interface AssetListProps {
  * show well — filename, kind, MIME type, size, dimensions or duration,
  * created date, and the same badge column the grid uses. Design spec
  * section 40's table, built once in `packages/ui` rather than inline here.
+ *
+ * The checkbox column is #175's: a table row's own click already opens the
+ * inspector, so multi-select needs an explicit target that toggles one row
+ * without the shift/cmd reading a plain click gets — the header's checkbox
+ * is the "select all loaded" control, indeterminate while some but not all
+ * rows are checked.
  */
-export function AssetList({ assets, summaries, selectedId, onSelect }: AssetListProps) {
+export function AssetList({
+  assets,
+  summaries,
+  isSelected,
+  onRowClick,
+  onToggleRow,
+  selectedCount,
+  onSelectAll,
+  onClear,
+}: AssetListProps) {
+  const allSelected = assets.length > 0 && selectedCount === assets.length;
+  const someSelected = selectedCount > 0 && !allSelected;
+
   return (
     <Table aria-label="Assets">
       <TableHeader>
         <TableRow>
+          <TableHead className="w-8">
+            <Checkbox
+              aria-label="Select all loaded assets"
+              checked={allSelected}
+              indeterminate={someSelected}
+              onChange={() => (allSelected || someSelected ? onClear() : onSelectAll())}
+            />
+          </TableHead>
           <TableHead>Filename</TableHead>
           <TableHead>Kind</TableHead>
           <TableHead>MIME type</TableHead>
@@ -51,14 +84,28 @@ export function AssetList({ assets, summaries, selectedId, onSelect }: AssetList
         </TableRow>
       </TableHeader>
       <TableBody>
-        {assets.map((asset) => {
+        {assets.map((asset, index) => {
           const badge = assetStatusBadge(asset, summaries.get(asset.id));
+          const selected = isSelected(asset.id);
           return (
             <TableRow
               key={asset.id}
-              selected={asset.id === selectedId}
-              onClick={() => onSelect(asset)}
+              selected={selected}
+              onClick={(event) =>
+                onRowClick(index, {
+                  shiftKey: event.shiftKey,
+                  metaKey: event.metaKey,
+                  ctrlKey: event.ctrlKey,
+                })
+              }
             >
+              <TableCell onClick={(event) => event.stopPropagation()}>
+                <Checkbox
+                  aria-label={`Select ${asset.filename}`}
+                  checked={selected}
+                  onChange={() => onToggleRow(index)}
+                />
+              </TableCell>
               <TableCell className="font-medium text-foreground">{asset.filename}</TableCell>
               <TableCell>{assetKindLabel(asset.kind)}</TableCell>
               <TableCell className="text-muted-foreground">{asset.mimeType}</TableCell>
