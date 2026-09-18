@@ -38,7 +38,13 @@ function draftVersion(
 }
 
 function facts(overrides: Partial<ProjectFacts> = {}): ProjectFacts {
-  return { projectId, entities: [], prototypeVersions: [], ...overrides };
+  return {
+    projectId,
+    entities: [],
+    prototypeVersions: [],
+    sectionDecisions: [],
+    ...overrides,
+  };
 }
 
 describe('stalePrototypePinCheck', () => {

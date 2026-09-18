@@ -1,4 +1,4 @@
-import type { AnchoredReviewStatus, CommentThread, ReviewState } from '@level-zero/domain';
+import type { AnchoredReviewStatus, CommentThread, Finding, ReviewState } from '@level-zero/domain';
 
 import type { AnchoredTargetParams, ReviewTargetParams } from '@/lib/api';
 
@@ -28,6 +28,36 @@ export function sectionHeading(text: string): string {
  */
 export function sectionStates(statuses: readonly AnchoredReviewStatus[]): Map<string, ReviewState> {
   return new Map(statuses.map((status) => [status.anchor, status.state]));
+}
+
+/**
+ * The open findings against each section, keyed by its anchor.
+ *
+ * Stale is deliberately not a fifth `ReviewState` (#188): it is computed from a
+ * dependency by the consistency scan rather than decided by a person, so a
+ * section is Approved *and* stale and both are shown. The anchor comes off the
+ * finding's own evidence — `FindingEvidence.anchor`, the same minted section id
+ * a decision is recorded against — so nothing here reads the prose in `where`.
+ */
+export function sectionFindings(
+  findings: readonly Finding[],
+  documentId: string,
+): Map<string, Finding[]> {
+  const byAnchor = new Map<string, Finding[]>();
+
+  for (const finding of findings) {
+    const anchors = finding.evidence
+      .filter((evidence) => evidence.entityId === documentId)
+      .map((evidence) => evidence.anchor)
+      .filter((anchor): anchor is string => anchor !== undefined);
+
+    for (const anchor of new Set(anchors)) {
+      const group = byAnchor.get(anchor);
+      if (group) group.push(finding);
+      else byAnchor.set(anchor, [finding]);
+    }
+  }
+  return byAnchor;
 }
 
 /** How many threads on each section are still open — what the outline marks. */

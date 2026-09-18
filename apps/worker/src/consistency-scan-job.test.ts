@@ -20,6 +20,7 @@ import {
   InMemoryJobRepository,
   InMemoryProjectRepository,
   InMemoryPrototypeVersionRepository,
+  InMemoryReviewDecisionRepository,
 } from '@level-zero/domain/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -118,7 +119,14 @@ beforeEach(async () => {
     new InMemoryJobEvents(),
     deps,
   );
-  consistency = new ConsistencyScanService(entityRepo, prototypeVersionRepo, findings, jobs, deps);
+  consistency = new ConsistencyScanService(
+    entityRepo,
+    prototypeVersionRepo,
+    new InMemoryReviewDecisionRepository(),
+    findings,
+    jobs,
+    deps,
+  );
 
   project = await projectRepo.insert(createProject({ name: 'Deep Fathom' }, deps));
 });
@@ -138,7 +146,12 @@ function delivery(job: Job, overrides: Partial<JobDelivery> = {}): JobDelivery {
 function brokenConsistency(): ConsistencyScanService {
   return {
     loadProjectFacts: () =>
-      Promise.resolve({ projectId: project.id, entities: [], prototypeVersions: [] }),
+      Promise.resolve({
+        projectId: project.id,
+        entities: [],
+        prototypeVersions: [],
+        sectionDecisions: [],
+      }),
     runDeterministicChecks: () => Promise.reject(new Error('postgres is down')),
   } as unknown as ConsistencyScanService;
 }
