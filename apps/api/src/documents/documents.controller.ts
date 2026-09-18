@@ -58,6 +58,18 @@ export class DocumentsController {
     return this.documents.getById(projectId, documentId);
   }
 
+  /**
+   * Applies the GDD starting structure to a document that has nothing in it
+   * yet (#189) — refuses once the document holds anything a writer put there.
+   */
+  @Post(':documentId/starting-structure')
+  applyStartingStructure(
+    @Param('projectId') projectId: string,
+    @Param('documentId') documentId: string,
+  ): Promise<Document> {
+    return this.documents.applyStartingStructure(projectId, documentId);
+  }
+
   /** Autosave. Replaces the body; deliberately writes no version. */
   @Put(':documentId/content')
   saveContent(

@@ -1,6 +1,11 @@
 'use client';
 
-import type { Document, DocumentContent, Entity } from '@level-zero/domain';
+import {
+  documentIsEmpty,
+  type Document,
+  type DocumentContent,
+  type Entity,
+} from '@level-zero/domain';
 import {
   Button,
   CommentIcon,
@@ -43,6 +48,7 @@ import { gddDocumentRoute, gddRoute } from './gdd-route';
 import { sectionInView } from './scroll-position';
 import {
   GDD_DOCUMENT_NAME,
+  useApplyGddStartingStructure,
   useCreateGddDocument,
   useGddDocument,
   useGddDocuments,
@@ -75,6 +81,7 @@ function GddDocumentEditor({
   const [editorKey, setEditorKey] = useState(0);
   const saveDocument = useSaveGddDocument(projectId, documentId);
   const snapshotDocument = useSnapshotGddDocument(projectId, documentId);
+  const applyStartingStructure = useApplyGddStartingStructure(projectId, documentId);
   const surfaceRef = useRef<HTMLDivElement>(null);
   // The live TipTap editor, for commands the outline needs to run against it
   // ("+ Add Section") rather than through `content`, which `RichTextEditor`
@@ -342,6 +349,27 @@ function GddDocumentEditor({
                   ai={archived ? undefined : aiEditing}
                   toolbarActions={
                     <>
+                      {/* Offered, not imposed (#189): a document nobody has
+                          started writing in yet — created blank, or from a
+                          project before this landed — can still pick up the
+                          starting structure. Disappears the moment there is
+                          anything to protect. */}
+                      {!archived && documentIsEmpty(content as DocumentContent) && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={applyStartingStructure.isPending}
+                          onClick={() =>
+                            applyStartingStructure.mutate(undefined, {
+                              onSuccess: (applied) => handleRestored(applied.content),
+                            })
+                          }
+                        >
+                          {applyStartingStructure.isPending
+                            ? 'Adding structure…'
+                            : 'Start from the GDD structure'}
+                        </Button>
+                      )}
                       {/* The mockup's toolbar Comment button: it opens the
                           review panel on whichever section the caret is in. */}
                       <Button variant="ghost" size="sm" onClick={toggleReview}>
@@ -471,12 +499,21 @@ function GddEmptyIndex({ projectId }: { projectId: string }) {
   const archivedQuery = useGddDocuments(projectId, { includeArchived: true });
   const archived = (archivedQuery.data?.items ?? []).filter((item) => item.status === 'archived');
 
-  function startDocument() {
-    createDocument.mutate(GDD_DOCUMENT_NAME, {
-      onSuccess: (document) =>
-        router.replace(gddDocumentRoute(projectId, document.entity.id) as Route),
-    });
+  function startDocument(startingStructure: boolean) {
+    createDocument.mutate(
+      { name: GDD_DOCUMENT_NAME, startingStructure },
+      {
+        onSuccess: (document) =>
+          router.replace(gddDocumentRoute(projectId, document.entity.id) as Route),
+      },
+    );
   }
+
+  // Offered, not imposed (#189): the spec caps an empty state at two primary
+  // choices, and this is exactly that choice — start from the GDD structure,
+  // or start from nothing.
+  const startingWithStructure = createDocument.variables?.startingStructure === true;
+  const startingBlank = createDocument.isPending && !startingWithStructure;
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -484,9 +521,20 @@ function GddEmptyIndex({ projectId }: { projectId: string }) {
         title="No documents yet"
         description="A project holds as many design documents as it needs. Start with the pillars, the core loop and the systems as they settle."
         actions={
-          <Button onClick={startDocument} disabled={createDocument.isPending}>
-            {createDocument.isPending ? 'Creating…' : 'Start a document'}
-          </Button>
+          <>
+            <Button onClick={() => startDocument(true)} disabled={createDocument.isPending}>
+              {createDocument.isPending && startingWithStructure
+                ? 'Creating…'
+                : 'Start from the GDD structure'}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => startDocument(false)}
+              disabled={createDocument.isPending}
+            >
+              {startingBlank ? 'Creating…' : 'Start blank'}
+            </Button>
+          </>
         }
       />
 

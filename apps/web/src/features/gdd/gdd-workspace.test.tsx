@@ -26,6 +26,7 @@ vi.mock('@/lib/api', () => ({
   listDocuments: vi.fn(),
   getDocument: vi.fn(),
   createDocument: vi.fn(),
+  applyDocumentStartingStructure: vi.fn(),
   updateEntity: vi.fn(),
   archiveEntity: vi.fn(),
   restoreEntity: vi.fn(),
@@ -203,6 +204,95 @@ describe('GddWorkspace — review and comments', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Comment' }));
 
     expect(await screen.findByLabelText('Reviewing')).toBeDefined();
+  });
+});
+
+describe('GddWorkspace — the GDD starting structure (#189)', () => {
+  it('offers the structure or a blank document when a project has none at all', async () => {
+    vi.mocked(api.listDocuments).mockResolvedValue(page([]));
+    vi.mocked(api.createDocument).mockResolvedValue(
+      document({ entity: entity({ id: 'doc_new' }) }),
+    );
+
+    renderWorkspace({ projectId: 'prj_1' });
+
+    await screen.findByText('No documents yet');
+    fireEvent.click(screen.getByRole('button', { name: 'Start from the GDD structure' }));
+
+    await waitFor(() =>
+      expect(api.createDocument).toHaveBeenCalledWith(
+        'prj_1',
+        expect.objectContaining({
+          name: 'Game Design Document',
+          content: expect.objectContaining({ type: 'doc' }),
+        }),
+      ),
+    );
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/projects/prj_1/gdd/doc_new'));
+  });
+
+  it('creates an empty document when "Start blank" is chosen instead', async () => {
+    vi.mocked(api.listDocuments).mockResolvedValue(page([]));
+    vi.mocked(api.createDocument).mockResolvedValue(
+      document({ entity: entity({ id: 'doc_new' }) }),
+    );
+
+    renderWorkspace({ projectId: 'prj_1' });
+
+    await screen.findByText('No documents yet');
+    fireEvent.click(screen.getByRole('button', { name: 'Start blank' }));
+
+    await waitFor(() =>
+      expect(api.createDocument).toHaveBeenCalledWith('prj_1', { name: 'Game Design Document' }),
+    );
+  });
+
+  it('offers to seed an existing empty document, and swaps the seeded body in once applied', async () => {
+    vi.mocked(api.getDocument).mockResolvedValue(document());
+    vi.mocked(api.applyDocumentStartingStructure).mockResolvedValue(
+      document({
+        content: {
+          type: 'doc',
+          content: [
+            {
+              type: 'heading',
+              attrs: { level: 1, sectionId: 'sec_1' },
+              content: [{ type: 'text', text: 'High Concept' }],
+            },
+          ],
+        },
+      }),
+    );
+
+    renderWorkspace({ projectId: 'prj_1', documentId: 'doc_1' });
+
+    const button = await screen.findByRole('button', { name: 'Start from the GDD structure' });
+    fireEvent.click(button);
+
+    await waitFor(() =>
+      expect(api.applyDocumentStartingStructure).toHaveBeenCalledWith('prj_1', 'doc_1'),
+    );
+    // The document is no longer empty, so the offer disappears — it only ever
+    // makes sense before a writer (or the structure) has put anything there.
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Start from the GDD structure' })).toBeNull(),
+    );
+  });
+
+  it('does not offer to seed a document that already has content', async () => {
+    vi.mocked(api.getDocument).mockResolvedValue(
+      document({
+        content: {
+          type: 'doc',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Already writing.' }] }],
+        },
+      }),
+    );
+
+    renderWorkspace({ projectId: 'prj_1', documentId: 'doc_1' });
+
+    await screen.findByRole('button', { name: 'Comment' });
+    expect(screen.queryByRole('button', { name: 'Start from the GDD structure' })).toBeNull();
   });
 });
 

@@ -5,6 +5,7 @@ import {
   isApprovedInAnyContext,
   pickNewestOrigin,
   summarizeCurrentSelections,
+  type Asset,
   type AssetLibraryFilter,
   type AssetLibraryPage,
   type AssetLibraryReadModel,
@@ -125,6 +126,53 @@ export class DrizzleAssetLibraryReadModel implements AssetLibraryReadModel {
     const counts: Record<string, number> = {};
     for (const row of result.rows) counts[row.collectionId] = row.count;
     return counts;
+  }
+
+  /**
+   * The newest active member per collection, by the membership edge's
+   * `createdAt` — the derived cover `docs/decisions/asset-library-model.md`
+   * §4.3 settles on, one `row_number()` window per collection rather than a
+   * `listForEntity` call per collection. Two steps, the same shape as
+   * `thumbnailsFor`: the ranked (collection, asset) pairs first, then one
+   * typed `assets` read for the winning ids so the result comes back as
+   * `Asset`, not a hand-mapped raw row.
+   */
+  async coversByCollection(projectId: string): Promise<Record<string, Asset>> {
+    const ranked = await this.db.execute<{ collectionId: string; assetId: string }>(sql`
+      select "collectionId", "assetId" from (
+        select
+          ${entityRelationships.sourceEntityId} as "collectionId",
+          ${assets.id} as "assetId",
+          row_number() over (
+            partition by ${entityRelationships.sourceEntityId}
+            order by ${entityRelationships.createdAt} desc, ${entityRelationships.id} desc
+          ) as rank
+        from ${entityRelationships}
+        join ${entities}
+          on ${entities.id} = ${entityRelationships.targetEntityId}
+          and ${entities.projectId} = ${entityRelationships.projectId}
+        join ${assets}
+          on ${assets.id} = (${entities.data} ->> ${ASSET_REFERENCE_ASSET_ID_KEY})::uuid
+        where ${entityRelationships.projectId} = ${projectId}
+          and ${entityRelationships.relation} = 'contains'
+          and ${entities.type} = 'asset_reference'
+          and ${assets.status} = 'active'
+      ) ranked
+      where rank = 1
+    `);
+
+    if (ranked.rows.length === 0) return {};
+
+    const assetIds = ranked.rows.map((row) => row.assetId);
+    const rows = await this.db.select().from(assets).where(inArray(assets.id, assetIds));
+    const assetById = new Map(rows.map((row) => [row.id, toAsset(row)]));
+
+    const covers: Record<string, Asset> = {};
+    for (const row of ranked.rows) {
+      const asset = assetById.get(row.assetId);
+      if (asset) covers[row.collectionId] = asset;
+    }
+    return covers;
   }
 
   /**

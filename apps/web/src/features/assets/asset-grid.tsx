@@ -17,8 +17,9 @@ export interface AssetGridProps {
   projectId: string;
   assets: Asset[];
   summaries: ReadonlyMap<string, AssetSummary>;
-  isSelected: (id: string) => boolean;
-  onClick: (index: number, modifiers: AssetClickModifiers) => void;
+  /** Omit for a read-only grid (the Collections view, #227) — every tile renders unselectable and inert. */
+  isSelected?: (id: string) => boolean;
+  onClick?: (index: number, modifiers: AssetClickModifiers) => void;
 }
 
 /**
@@ -41,13 +42,16 @@ export function AssetGrid({ projectId, assets, summaries, isSelected, onClick }:
           <li key={asset.id}>
             <MediaCard
               aspect="square"
-              selected={isSelected(asset.id)}
-              onClick={(event) =>
-                onClick(index, {
-                  shiftKey: event.shiftKey,
-                  metaKey: event.metaKey,
-                  ctrlKey: event.ctrlKey,
-                })
+              selected={isSelected?.(asset.id)}
+              onClick={
+                onClick
+                  ? (event) =>
+                      onClick(index, {
+                        shiftKey: event.shiftKey,
+                        metaKey: event.metaKey,
+                        ctrlKey: event.ctrlKey,
+                      })
+                  : undefined
               }
               ariaLabel={asset.filename}
               media={<AssetPreview projectId={projectId} asset={asset} summary={summary} />}
