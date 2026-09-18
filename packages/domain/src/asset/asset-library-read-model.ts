@@ -64,6 +64,16 @@ export interface AssetLibraryReadModel {
   countsByCollection(projectId: string): Promise<Record<string, number>>;
 
   /**
+   * The derived cover for every collection in the project that has at least
+   * one active member — the newest one filed into it, by the membership
+   * edge's `createdAt` (`docs/decisions/asset-library-model.md` §4.3: "the
+   * cover is derived ... no column, no upload, no `data.coverAssetId`").
+   * Keyed by collection id; a collection with no active members is simply
+   * absent, the same convention `countsByCollection` uses.
+   */
+  coversByCollection(projectId: string): Promise<Record<string, Asset>>;
+
+  /**
    * Active asset counts per pipeline stage across the whole project, keyed
    * by stage — the strip's counts, one grouped read rather than one
    * `listByProject` call per stage. A stage with no active assets is simply

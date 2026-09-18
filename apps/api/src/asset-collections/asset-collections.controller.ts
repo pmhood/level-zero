@@ -1,6 +1,7 @@
 import {
   AssetCollectionService,
   AssetLibraryService,
+  type Asset,
   type Entity,
   type EntityRelationship,
 } from '@level-zero/domain';
@@ -45,6 +46,17 @@ export class AssetCollectionsController {
   @Get('counts')
   counts(@Param('projectId') projectId: string): Promise<Record<string, number>> {
     return this.library.collectionCounts(projectId);
+  }
+
+  /**
+   * The derived cover for every collection that has at least one active
+   * member — the rail's cover images, one grouped read rather than one
+   * lookup per collection. Declared before `:collectionId` routes for the
+   * same reason `counts` is.
+   */
+  @Get('covers')
+  covers(@Param('projectId') projectId: string): Promise<Record<string, Asset>> {
+    return this.library.collectionCovers(projectId);
   }
 
   @Patch(':collectionId')
