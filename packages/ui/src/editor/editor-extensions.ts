@@ -6,7 +6,9 @@ import { Placeholder } from '@tiptap/extensions';
 import { Markdown } from '@tiptap/markdown';
 import StarterKit from '@tiptap/starter-kit';
 
+import { Callout, CalloutBody, CalloutTitle } from './callout';
 import { MarkdownPaste } from './markdown-paste';
+import { PullQuote, PullQuoteAttribution, PullQuoteText } from './pull-quote';
 import { SectionId } from './section-id';
 import { BASE_EDITOR_COMMANDS, createSlashMenuExtension, type EditorCommand } from './slash-menu';
 
@@ -58,6 +60,15 @@ export function createEditorExtensions({
     TaskItem.configure({ nested: true }),
     TableKit.configure({ table: { resizable: true } }),
     Image,
+    // The Design North Star / Design Note callout and the pull-quote (#193).
+    // Every surface gets them, same reasoning as `SectionId` below: a callout
+    // is as useful in a playtest write-up as in a GDD.
+    CalloutTitle,
+    CalloutBody,
+    Callout,
+    PullQuoteText,
+    PullQuoteAttribution,
+    PullQuote,
     // Markdown is an import/export format, never the stored one: documents are
     // persisted as TipTap JSON (`editor.getJSON()`).
     Markdown,

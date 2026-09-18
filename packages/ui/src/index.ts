@@ -69,6 +69,28 @@ export {
 export { ViewSwitcher, type ViewSwitcherItem, type ViewSwitcherProps } from './view-switcher';
 export { RichTextEditor, type RichTextEditorProps } from './editor/rich-text-editor';
 export {
+  CALLOUT_BODY_NODE,
+  CALLOUT_NODE,
+  CALLOUT_TITLE_NODE,
+  CALLOUT_VARIANT_CONFIG,
+  CALLOUT_VARIANTS,
+  Callout,
+  CalloutBody,
+  CalloutTitle,
+  insertCallout,
+  type CalloutVariant,
+  type CalloutVariantConfig,
+} from './editor/callout';
+export {
+  PULL_QUOTE_ATTRIBUTION_NODE,
+  PULL_QUOTE_NODE,
+  PULL_QUOTE_TEXT_NODE,
+  PullQuote,
+  PullQuoteAttribution,
+  PullQuoteText,
+  insertPullQuote,
+} from './editor/pull-quote';
+export {
   EDITOR_MODE_CONFIG,
   EDITOR_MODES,
   type EditorMode,
