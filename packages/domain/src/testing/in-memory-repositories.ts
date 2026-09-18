@@ -732,6 +732,43 @@ export class InMemoryAssetLibraryReadModel implements AssetLibraryReadModel {
     return counts;
   }
 
+  /**
+   * The newest active member per collection, by the membership edge's
+   * `createdAt` (ties broken by edge id, the same tiebreak `pickNewestOrigin`
+   * uses) — mirrors `DrizzleAssetLibraryReadModel.coversByCollection`.
+   */
+  async coversByCollection(projectId: string): Promise<Record<string, Asset>> {
+    const { items: collections } = await this.entities.listByProject(projectId, {
+      types: ['asset_collection'],
+      includeArchived: true,
+    });
+
+    const covers: Record<string, Asset> = {};
+    for (const collection of collections) {
+      const { items: edges } = await this.relationships.listForEntity(projectId, collection.id, {
+        direction: 'outgoing',
+        relations: ['contains'],
+      });
+
+      let newestEdge: EntityRelationship | undefined;
+      let newestAsset: Asset | undefined;
+      for (const edge of edges) {
+        const reference = await this.entities.findById(projectId, edge.targetEntityId);
+        if (reference?.type !== 'asset_reference') continue;
+        const assetId = referencedAssetId(reference);
+        if (!assetId) continue;
+        const asset = await this.assets.findById(projectId, assetId);
+        if (asset?.status !== 'active') continue;
+        if (!newestEdge || isNewerEdge(edge, newestEdge)) {
+          newestEdge = edge;
+          newestAsset = asset;
+        }
+      }
+      if (newestAsset) covers[collection.id] = newestAsset;
+    }
+    return covers;
+  }
+
   /** Active source assets only — mirrors `DrizzleAssetLibraryReadModel.countsByStage`. */
   async countsByStage(projectId: string): Promise<Partial<Record<AssetPipelineStage, number>>> {
     const { items } = await this.assets.listByProject(projectId, { variants: ['source'] });
@@ -846,6 +883,14 @@ export class InMemoryAssetLibraryReadModel implements AssetLibraryReadModel {
 
 function emptyLinkedEntities(): AssetLinkedEntitiesSummary {
   return { entities: [], total: 0 };
+}
+
+/** Newest-first tiebreak for a membership edge — `createdAt` desc, id desc, the same shape as `pickNewestOrigin`. */
+function isNewerEdge(candidate: EntityRelationship, current: EntityRelationship): boolean {
+  const candidateTime = candidate.createdAt.getTime();
+  const currentTime = current.createdAt.getTime();
+  if (candidateTime !== currentTime) return candidateTime > currentTime;
+  return candidate.id > current.id;
 }
 
 function summarize(

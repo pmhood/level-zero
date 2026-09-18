@@ -15,6 +15,8 @@ import { useEffect, useState, type DragEvent, type KeyboardEvent } from 'react';
 import { GenerationQueuePanel } from '@/features/generation/generation-queue-panel';
 import { apiErrorMessage } from '@/lib/api';
 
+import { AssetCollectionsRail } from './asset-collections-rail';
+import { AssetCollectionsView } from './asset-collections-view';
 import { AssetCompare } from './asset-compare';
 import { AssetGrid, AssetGridSkeleton } from './asset-grid';
 import { AssetInspector } from './asset-inspector';
@@ -42,7 +44,6 @@ const VIEW_ITEMS: ViewSwitcherItem<AssetView>[] = [
     value: 'collections',
     label: 'Collections',
     icon: <CollectionsIcon className="size-4" />,
-    disabled: true,
   },
   {
     value: 'pipeline',
@@ -73,7 +74,10 @@ const VIEW_ITEMS: ViewSwitcherItem<AssetView>[] = [
  * page holds the only `Asset` records the bar and the inspector have to
  * act on.
  *
- * Collections and the Pipeline are later issues (#178–#179).
+ * The Pipeline view is a later issue (#179). Collections (#227) is the rail
+ * above the grid/list plus the switcher's third view, both reading #226's
+ * collections and per-collection counts — never counting or picking a cover
+ * from a fetched page.
  */
 export function AssetsWorkspace({ projectId }: { projectId: string }) {
   const [view, changeView] = useAssetView();
@@ -215,6 +219,17 @@ export function AssetsWorkspace({ projectId }: { projectId: string }) {
           </div>
         )}
 
+        {/* The mockup's rail, below the toolbar and above the grid — every
+            collection as a covered card (issue #227). The Collections view
+            below already groups by collection, so the rail steps aside there
+            rather than repeating the same list twice. */}
+        {view !== 'collections' && (
+          <AssetCollectionsRail
+            projectId={projectId}
+            onOpenCollections={() => switchView('collections')}
+          />
+        )}
+
         {/* Generations in flight for this project (#180) — what is
             generating now, not the pipeline or Collections views this
             workspace's view switcher still has disabled. */}
@@ -244,6 +259,8 @@ export function AssetsWorkspace({ projectId }: { projectId: string }) {
             b={comparedWith}
             onClose={() => setComparedWith(null)}
           />
+        ) : view === 'collections' ? (
+          <AssetCollectionsView projectId={projectId} listParams={listParams} />
         ) : (
           <AssetsBody
             projectId={projectId}
