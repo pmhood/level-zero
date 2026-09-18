@@ -9,6 +9,7 @@ import {
   MIN_AI_EDIT_VERSION_LENGTH,
   documentContent,
   documentData,
+  documentIsEmpty,
   documentPlainText,
   documentVersionGenerationId,
   documentVersionName,
@@ -148,6 +149,36 @@ describe('documentPlainText', () => {
 
   it('reads an empty document as an empty string', () => {
     expect(documentPlainText(emptyDocumentContent())).toBe('');
+  });
+});
+
+describe('documentIsEmpty', () => {
+  it('reads the literal empty document as empty', () => {
+    expect(documentIsEmpty(emptyDocumentContent())).toBe(true);
+  });
+
+  it('reads the editor’s own blank state — a lone paragraph with no text — as empty', () => {
+    const content: DocumentContent = { type: 'doc', content: [{ type: 'paragraph' }] };
+
+    expect(documentIsEmpty(content)).toBe(true);
+  });
+
+  it('reads a document with prose as not empty', () => {
+    const content: DocumentContent = {
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Something.' }] }],
+    };
+
+    expect(documentIsEmpty(content)).toBe(false);
+  });
+
+  it('reads a heading with no body text yet as not empty', () => {
+    const content: DocumentContent = {
+      type: 'doc',
+      content: [{ type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'X' }] }],
+    };
+
+    expect(documentIsEmpty(content)).toBe(false);
   });
 });
 

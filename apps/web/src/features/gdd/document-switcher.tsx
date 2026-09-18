@@ -37,6 +37,7 @@ export function DocumentSwitcher({ projectId, current }: { projectId: string; cu
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(current.name);
   const [newName, setNewName] = useState('');
+  const [newFromStructure, setNewFromStructure] = useState(false);
 
   const documentsQuery = useGddDocuments(projectId, { includeArchived });
   const createDocument = useCreateGddDocument(projectId);
@@ -86,12 +87,16 @@ export function DocumentSwitcher({ projectId, current }: { projectId: string; cu
   function create() {
     const name = newName.trim();
     if (!name) return;
-    createDocument.mutate(name, {
-      onSuccess: (document) => {
-        setNewName('');
-        openDocument(document.entity.id);
+    createDocument.mutate(
+      { name, startingStructure: newFromStructure },
+      {
+        onSuccess: (document) => {
+          setNewName('');
+          setNewFromStructure(false);
+          openDocument(document.entity.id);
+        },
       },
-    });
+    );
   }
 
   function duplicate() {
@@ -275,21 +280,34 @@ export function DocumentSwitcher({ projectId, current }: { projectId: string; cu
           </div>
 
           <form
-            className="mt-2 flex gap-1.5 border-t border-border-subtle px-2 pt-2"
+            className="mt-2 flex flex-col gap-1.5 border-t border-border-subtle px-2 pt-2"
             onSubmit={(event) => {
               event.preventDefault();
               create();
             }}
           >
-            <Input
-              value={newName}
-              onChange={(event) => setNewName(event.target.value)}
-              placeholder="New document"
-              aria-label="New document name"
-            />
-            <Button type="submit" size="sm" disabled={createDocument.isPending || !newName.trim()}>
-              {createDocument.isPending ? 'Creating…' : 'Create'}
-            </Button>
+            <div className="flex gap-1.5">
+              <Input
+                value={newName}
+                onChange={(event) => setNewName(event.target.value)}
+                placeholder="New document"
+                aria-label="New document name"
+              />
+              <Button
+                type="submit"
+                size="sm"
+                disabled={createDocument.isPending || !newName.trim()}
+              >
+                {createDocument.isPending ? 'Creating…' : 'Create'}
+              </Button>
+            </div>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Checkbox
+                checked={newFromStructure}
+                onChange={(event) => setNewFromStructure(event.target.checked)}
+              />
+              Start from the GDD structure
+            </label>
           </form>
         </div>
       )}

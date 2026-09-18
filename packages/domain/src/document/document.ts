@@ -111,6 +111,20 @@ export function documentPlainText(content: DocumentContent): string {
   return flatten(content.content);
 }
 
+/**
+ * Whether a body holds nothing a writer would recognise as their own words.
+ *
+ * True for the literal result of `emptyDocumentContent()` and for the
+ * editor's own blank state — a lone paragraph with no text — so both a
+ * document nobody has opened yet and one somebody opened and left untouched
+ * read as empty. Gates `DocumentService.applyStartingStructure`: the
+ * starting structure is offered at the empty moment, never layered onto
+ * writing that is already there.
+ */
+export function documentIsEmpty(content: DocumentContent): boolean {
+  return documentPlainText(content).length === 0;
+}
+
 /** One top-level block of a body: its node type, and the words it shows. */
 export interface DocumentBlock {
   /** `paragraph`, `heading`, `bulletList`, or whatever a feature added. */

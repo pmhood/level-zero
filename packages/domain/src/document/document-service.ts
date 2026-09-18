@@ -15,6 +15,7 @@ import {
   MAX_DOCUMENT_VERSION_NAME_LENGTH,
   documentContent,
   documentData,
+  documentIsEmpty,
   documentVersionGenerationId,
   documentVersionName,
   emptyDocumentContent,
@@ -23,6 +24,7 @@ import {
   type DocumentVersionReason,
 } from './document';
 import { assignSectionIds } from './document-section';
+import { gddStartingStructureContent } from './gdd-starting-structure';
 
 /** How the body reads as a comparison field, e.g. `data.content`. */
 const CONTENT_FIELD = `data.${DOCUMENT_CONTENT_KEY}`;
@@ -155,6 +157,26 @@ export class DocumentService {
     });
 
     return this.load(projectId, entity);
+  }
+
+  /**
+   * Applies the GDD starting structure to a document that has nothing in it
+   * yet — the "projects that already have one" case #189 asks for, alongside
+   * offering the structure at creation.
+   *
+   * Refuses once a document holds anything a writer put there: the structure
+   * is offered at the empty moment, never layered onto real work. Written
+   * through `saveContent`, so it mints section ids and writes no version,
+   * exactly like autosave would if a writer had typed the same thing.
+   */
+  async applyStartingStructure(projectId: string, documentId: string): Promise<Document> {
+    const entity = await this.requireDocument(projectId, documentId);
+
+    if (!documentIsEmpty(documentContent(entity))) {
+      throw new ValidationError('The document already has content', { documentId: entity.id });
+    }
+
+    return this.saveContent(projectId, documentId, gddStartingStructureContent());
   }
 
   /** The project's documents, newest first. Reading one is `getById`. */

@@ -493,6 +493,7 @@ export {
   documentBlocks,
   documentContent,
   documentData,
+  documentIsEmpty,
   documentPlainText,
   documentVersionGenerationId,
   documentVersionName,
@@ -510,6 +511,7 @@ export {
   documentSections,
   type DocumentSection,
 } from './document/document-section';
+export { gddStartingStructureContent } from './document/gdd-starting-structure';
 export {
   DocumentService,
   type CreateDocumentInput,

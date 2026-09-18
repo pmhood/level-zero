@@ -1,6 +1,11 @@
 'use client';
 
-import type { DocumentContent, Entity, SnapshotDocumentInput } from '@level-zero/domain';
+import {
+  gddStartingStructureContent,
+  type DocumentContent,
+  type Entity,
+  type SnapshotDocumentInput,
+} from '@level-zero/domain';
 import type { JSONContent } from '@level-zero/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -77,12 +82,42 @@ function useGddDocumentsInvalidation(projectId: string) {
     queryClient.invalidateQueries({ queryKey: ['projects', projectId, 'gdd', 'documents'] });
 }
 
+/**
+ * Creates a document, offered rather than imposed (#189): a writer opts into
+ * the GDD starting structure per document, and the default stays what it has
+ * always been — an empty document — when they don't.
+ */
 export function useCreateGddDocument(projectId: string) {
   const invalidate = useGddDocumentsInvalidation(projectId);
 
   return useMutation({
-    mutationFn: (name: string) => api.createDocument(projectId, { name }),
+    mutationFn: ({
+      name,
+      startingStructure = false,
+    }: {
+      name: string;
+      startingStructure?: boolean;
+    }) =>
+      api.createDocument(projectId, {
+        name,
+        ...(startingStructure ? { content: gddStartingStructureContent() } : {}),
+      }),
     onSuccess: invalidate,
+  });
+}
+
+/**
+ * Seeds the GDD starting structure into a document that has nothing in it yet
+ * (#189) — the "projects that already have one" case, for a document created
+ * (or left) empty before this landed, or one someone chose to start blank.
+ */
+export function useApplyGddStartingStructure(projectId: string, documentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => api.applyDocumentStartingStructure(projectId, documentId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: gddKeys.document(projectId, documentId) }),
   });
 }
 

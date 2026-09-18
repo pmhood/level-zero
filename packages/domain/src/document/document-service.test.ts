@@ -16,6 +16,7 @@ import { EntityVersionService } from '../version/entity-version-service';
 import { type DocumentContent } from './document';
 import { documentSections } from './document-section';
 import { DocumentService, type Document } from './document-service';
+import { gddStartingStructureContent } from './gdd-starting-structure';
 
 const clock = fixedClock('2026-03-01T09:00:00.000Z');
 
@@ -443,5 +444,92 @@ describe('section ids', () => {
     expect(documentSections(saved.content).map((section) => section.id)).toEqual([
       'section-from-the-editor',
     ]);
+  });
+});
+
+describe('the GDD starting structure (#189)', () => {
+  const sectionHeadings = (content: DocumentContent) =>
+    documentSections(content).map((section) => section.text);
+
+  it('seeds the sections and mints section ids when a document is created with it', async () => {
+    const created = await documents.create(project.id, {
+      name: 'GDD',
+      content: gddStartingStructureContent(),
+    });
+
+    const sections = documentSections(created.content);
+    expect(sections).toHaveLength(10);
+    expect(sections[0]).toMatchObject({ text: 'High Concept', level: 1 });
+    expect(sections.every((section) => section.id.length > 0)).toBe(true);
+  });
+
+  it('choosing not to gives an empty document, same as ever', async () => {
+    const created = await documents.create(project.id, { name: 'GDD' });
+
+    expect(created.content).toEqual({ type: 'doc', content: [] });
+    expect(documentSections(created.content)).toEqual([]);
+  });
+
+  it('applies the structure to an existing document that has nothing in it', async () => {
+    const created = await documents.create(project.id, { name: 'GDD' });
+
+    const applied = await documents.applyStartingStructure(project.id, created.entity.id);
+
+    expect(sectionHeadings(applied.content)).toContain('High Concept');
+    expect(documentSections(applied.content)).toHaveLength(10);
+
+    const reloaded = await documents.getById(project.id, created.entity.id);
+    expect(sectionHeadings(reloaded.content)).toEqual(sectionHeadings(applied.content));
+  });
+
+  it('refuses to apply the structure once a writer has put anything in the document', async () => {
+    const created = await documents.create(project.id, { name: 'GDD' });
+    await documents.saveContent(project.id, created.entity.id, prose('Already writing.'));
+
+    await expect(
+      documents.applyStartingStructure(project.id, created.entity.id),
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it('refuses to apply the structure a second time, once the first application filled it in', async () => {
+    const created = await documents.create(project.id, {
+      name: 'GDD',
+      content: gddStartingStructureContent(),
+    });
+
+    await expect(
+      documents.applyStartingStructure(project.id, created.entity.id),
+    ).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it('lets a seeded section be renamed and another be deleted, exactly like hand-typed content', async () => {
+    const created = await documents.create(project.id, { name: 'GDD' });
+    const applied = await documents.applyStartingStructure(project.id, created.entity.id);
+    const nodes = applied.content.content as Array<{
+      type: string;
+      attrs?: { sectionId?: string };
+      content?: Array<{ type: string; text?: string }>;
+    }>;
+
+    const conceptIndex = nodes.findIndex((node) => node.content?.[0]?.text === 'High Concept');
+    const conceptId = nodes[conceptIndex]?.attrs?.sectionId;
+    const worldIndex = nodes.findIndex((node) => node.content?.[0]?.text === 'World');
+    expect(conceptId).toBeTruthy();
+
+    const renamed = nodes.map((node, index) =>
+      index === conceptIndex ? { ...node, content: [{ type: 'text', text: 'Vision' }] } : node,
+    );
+    // Delete "World": its heading and the paragraph right after it.
+    const edited = renamed.filter((_, index) => index !== worldIndex && index !== worldIndex + 1);
+
+    const saved = await documents.saveContent(project.id, created.entity.id, {
+      type: 'doc',
+      content: edited,
+    });
+
+    const sections = documentSections(saved.content);
+    expect(sections.find((section) => section.id === conceptId)?.text).toBe('Vision');
+    expect(sections.map((section) => section.text)).not.toContain('World');
+    expect(sections).toHaveLength(9);
   });
 });

@@ -386,6 +386,14 @@ export function createDocument(projectId: string, input: CreateDocumentInput): P
   return post(`/api/projects/${projectId}/documents`, input);
 }
 
+/** Seeds the GDD starting structure into a document that has nothing in it yet (#189). */
+export function applyDocumentStartingStructure(
+  projectId: string,
+  documentId: string,
+): Promise<Document> {
+  return post(`/api/projects/${projectId}/documents/${documentId}/starting-structure`);
+}
+
 /** Autosave. The API replaces the body and deliberately writes no version. */
 export function saveDocumentContent(
   projectId: string,
