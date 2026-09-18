@@ -3,6 +3,8 @@ import type {
   AnchoredReviewStatus,
   Comment,
   CommentThread,
+  Entity,
+  Finding,
   ReviewStatus,
 } from '@level-zero/domain';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -15,6 +17,13 @@ import { GddReview } from './gdd-review';
 vi.mock('@/lib/api', () => ({
   apiErrorMessage: (error: unknown, fallback = 'Something went wrong talking to the API.') =>
     error instanceof Error ? error.message : fallback,
+  ApiRequestError: class ApiRequestError extends Error {
+    status = 500;
+  },
+  listFindings: vi.fn(),
+  dismissFinding: vi.fn(),
+  reopenFinding: vi.fn(),
+  getEntity: vi.fn(),
   listCommentThreads: vi.fn(),
   listAnchoredCommentThreads: vi.fn(),
   listAnchoredReviewStatuses: vi.fn(),
@@ -87,6 +96,41 @@ function anchored(anchor: string, state: AnchoredReviewStatus['state']): Anchore
   return { anchor, state, decision: null };
 }
 
+/** A stale-section finding as the last scan wrote it, addressed to `anchor`. */
+function staleFinding(anchor: string, overrides: Partial<Finding> = {}): Finding {
+  return {
+    id: 'fnd_1',
+    projectId: 'prj_1',
+    checkId: 'stale-section-reference',
+    fingerprint: `fingerprint-${anchor}`,
+    origin: 'deterministic',
+    generationId: null,
+    severity: 'warning',
+    summary: 'Kael has changed since “Core loop” was approved.',
+    evidence: [
+      {
+        entityId: 'doc_1',
+        anchor,
+        where: 'Core loop',
+        states: 'approved before Kael changed',
+      },
+      { entityId: 'ent_kael', where: 'Kael', states: 'has changed since that decision' },
+    ],
+    status: 'open',
+    firstSeenAt: new Date('2026-03-02T09:00:00.000Z'),
+    lastSeenAt: new Date('2026-03-02T09:00:00.000Z'),
+    resolvedAt: null,
+    dismissedAt: null,
+    dismissedBy: null,
+    dismissedReason: null,
+    ...overrides,
+  };
+}
+
+function findingPage(...items: Finding[]) {
+  return { items, total: items.length };
+}
+
 function client() {
   return new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -133,6 +177,12 @@ beforeEach(() => {
   vi.mocked(api.listCommentThreads).mockResolvedValue([]);
   vi.mocked(api.listAnchoredCommentThreads).mockResolvedValue([]);
   vi.mocked(api.listAnchoredReviewStatuses).mockResolvedValue([]);
+  vi.mocked(api.listFindings).mockResolvedValue(findingPage());
+  vi.mocked(api.getEntity).mockResolvedValue({
+    id: 'ent_kael',
+    type: 'character',
+    name: 'Kael',
+  } as Entity);
 });
 
 afterEach(cleanup);
@@ -189,6 +239,84 @@ describe('GddOutline — a status per section', () => {
 
     await waitFor(() => expect(screen.getByText('Old section')).toBeDefined());
     expect(screen.queryByText('Draft')).toBeNull();
+  });
+});
+
+describe('a section the design moved underneath', () => {
+  it('marks it Stale in the outline beside the status it was left in', async () => {
+    vi.mocked(api.listAnchoredReviewStatuses).mockResolvedValue([anchored(CORE_LOOP, 'approved')]);
+    vi.mocked(api.listFindings).mockResolvedValue(findingPage(staleFinding(CORE_LOOP)));
+
+    renderOutline();
+
+    await waitFor(() => expect(screen.getByText('Stale')).toBeDefined());
+    // Not a fifth review state: the section is Approved *and* stale.
+    expect(screen.getByText('Approved')).toBeDefined();
+    expect(screen.getAllByText('Draft')).toHaveLength(1);
+  });
+
+  it('marks only the section the finding is addressed to', async () => {
+    vi.mocked(api.listFindings).mockResolvedValue(findingPage(staleFinding(PILLARS)));
+
+    renderOutline();
+
+    await waitFor(() => expect(screen.getByText('Stale')).toBeDefined());
+    expect(screen.getAllByText('Stale')).toHaveLength(1);
+  });
+
+  it('names what changed on the section itself, with the way through to it', async () => {
+    vi.mocked(api.listFindings).mockResolvedValue(findingPage(staleFinding(CORE_LOOP)));
+
+    renderReview();
+
+    const stale = await screen.findByRole('region', { name: 'Out of date' });
+    expect(
+      within(stale).getByText('Kael has changed since “Core loop” was approved.'),
+    ).toBeDefined();
+    await waitFor(() =>
+      expect(within(stale).getByRole('link', { name: 'Open Kael' })).toBeDefined(),
+    );
+  });
+
+  it('dismisses the finding the way every other finding is dismissed', async () => {
+    vi.mocked(api.listFindings).mockResolvedValue(findingPage(staleFinding(CORE_LOOP)));
+    vi.mocked(api.dismissFinding).mockResolvedValue(
+      staleFinding(CORE_LOOP, { status: 'dismissed' }),
+    );
+
+    renderReview();
+
+    const stale = await screen.findByRole('region', { name: 'Out of date' });
+    fireEvent.click(within(stale).getByRole('button', { name: 'Dismiss' }));
+
+    await waitFor(() =>
+      expect(api.dismissFinding).toHaveBeenCalledWith('prj_1', 'fnd_1', { dismissedBy: 'You' }),
+    );
+  });
+
+  it('says nothing about a section nothing has moved underneath', async () => {
+    renderReview();
+
+    await waitFor(() => expect(screen.getByText('Reviewing')).toBeDefined());
+    expect(screen.queryByRole('region', { name: 'Out of date' })).toBeNull();
+  });
+
+  it('ignores a finding about the document as a whole, which names no section', async () => {
+    vi.mocked(api.listFindings).mockResolvedValue(
+      findingPage(
+        staleFinding(CORE_LOOP, {
+          evidence: [
+            { entityId: 'doc_1', where: 'Game Design Document', states: 'also named GDD' },
+            { entityId: 'doc_2', where: 'GDD', states: 'also named Game Design Document' },
+          ],
+        }),
+      ),
+    );
+
+    renderOutline();
+
+    await waitFor(() => expect(screen.getAllByText('Draft')).toHaveLength(2));
+    expect(screen.queryByText('Stale')).toBeNull();
   });
 });
 

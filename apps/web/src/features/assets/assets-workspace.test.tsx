@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { Asset, AssetLibraryPage, AssetSummary } from '@level-zero/domain';
+import type { Asset, AssetLibraryPage, Entity, AssetSummary } from '@level-zero/domain';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -23,6 +23,8 @@ vi.mock('@/lib/api', () => ({
   getAssetPipelineStageCounts: vi.fn(),
   listEntities: vi.fn(),
   getEntity: vi.fn(),
+  collectionCounts: vi.fn(),
+  collectionCovers: vi.fn(),
   assetContentUrl: (projectId: string, assetId: string) =>
     `https://api.test/projects/${projectId}/assets/${assetId}/content`,
   assetDownloadUrl: (projectId: string, assetId: string) =>
@@ -104,6 +106,34 @@ function libraryPage(
   return { items, summaries, total };
 }
 
+function collectionEntity(overrides: Partial<Entity> = {}): Entity {
+  return {
+    id: 'col_1',
+    projectId: 'prj_1',
+    type: 'asset_collection',
+    name: 'Props & Gear',
+    description: null,
+    status: 'active',
+    tags: [],
+    data: {},
+    currentVersionId: null,
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+    updatedAt: new Date('2026-01-01T00:00:00Z'),
+    archivedAt: null,
+    ...overrides,
+  };
+}
+
+/** Routes `listEntities` by its `type` filter, the way the real API narrows collections from every other entity type. */
+function mockCollections(collections: Entity[]) {
+  vi.mocked(api.listEntities).mockImplementation(async (_projectId, params) => {
+    if (params?.type?.includes('asset_collection')) {
+      return { items: collections, total: collections.length };
+    }
+    return { items: [], total: 0 };
+  });
+}
+
 function renderWorkspace(projectId = 'prj_1') {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -125,6 +155,8 @@ describe('Assets workspace', () => {
     vi.mocked(api.getAssetPipelineStageCounts).mockResolvedValue({});
     vi.mocked(api.listEntities).mockResolvedValue({ items: [], total: 0 });
     vi.mocked(api.getEntity).mockRejectedValue(new Error('not found'));
+    vi.mocked(api.collectionCounts).mockResolvedValue({});
+    vi.mocked(api.collectionCovers).mockResolvedValue({});
     vi.mocked(api.listGenerationsForAsset).mockResolvedValue({ items: [], total: 0 });
     vi.mocked(api.listGenerations).mockResolvedValue({ items: [], total: 0 });
     vi.mocked(api.listAssets).mockResolvedValue({ items: [], total: 0 });
@@ -776,8 +808,8 @@ describe('Assets workspace', () => {
 
       const pipelineButton = screen.getByRole('button', { name: 'Pipeline' });
       expect(pipelineButton).toHaveProperty('disabled', false);
-      // #227's slot stays exactly as #171 left it — this issue only fills its own.
-      expect(screen.getByRole('button', { name: 'Collections' })).toHaveProperty('disabled', true);
+      // Collections (#227) fills the switcher's other reserved slot.
+      expect(screen.getByRole('button', { name: 'Collections' })).toHaveProperty('disabled', false);
 
       fireEvent.click(pipelineButton);
 
@@ -829,6 +861,116 @@ describe('Assets workspace', () => {
       expect(screen.getByRole('button', { name: 'Pipeline' }).getAttribute('aria-pressed')).toBe(
         'true',
       );
+    });
+  });
+
+  describe('collections rail and view', () => {
+    it('shows every collection with its count and cover, reading both from the read model', async () => {
+      const props = collectionEntity({ id: 'col_props', name: 'Props & Gear' });
+      const ui = collectionEntity({ id: 'col_ui', name: 'UI & HUD' });
+      mockCollections([props, ui]);
+      vi.mocked(api.collectionCounts).mockResolvedValue({ col_props: 92, col_ui: 1 });
+      const cover = asset({ id: 'ast_cover', filename: 'crate.png' });
+      vi.mocked(api.collectionCovers).mockResolvedValue({ col_props: cover });
+
+      renderWorkspace();
+
+      await screen.findByRole('heading', { name: 'Collections' });
+      expect(screen.getByText('Props & Gear')).toBeDefined();
+      expect(screen.getByText('92 assets')).toBeDefined();
+      expect(screen.getByText('UI & HUD')).toBeDefined();
+      expect(screen.getByText('1 asset')).toBeDefined();
+      expect(screen.getByRole('img', { name: 'crate.png' })).toBeDefined();
+    });
+
+    it('says so when the project has no collections yet', async () => {
+      mockCollections([]);
+
+      renderWorkspace();
+
+      await screen.findByText('No collections yet');
+    });
+
+    it('enables the Collections slot in the switcher, alongside Pipeline', async () => {
+      mockCollections([]);
+      renderWorkspace();
+      await screen.findByText('No collections yet');
+
+      const collectionsButton = screen.getByRole('button', { name: 'Collections' });
+      const pipelineButton = screen.getByRole('button', { name: 'Pipeline' });
+      expect(collectionsButton).toHaveProperty('disabled', false);
+      expect(pipelineButton).toHaveProperty('disabled', false);
+    });
+
+    it('opens the Collections view from the switcher and groups assets by collection', async () => {
+      const props = collectionEntity({ id: 'col_props', name: 'Props & Gear' });
+      mockCollections([props]);
+      vi.mocked(api.collectionCounts).mockResolvedValue({ col_props: 1 });
+      vi.mocked(api.collectionCovers).mockResolvedValue({});
+      const member = asset({ id: 'ast_crate', filename: 'crate.png' });
+      vi.mocked(api.listAssetLibrary).mockImplementation(async (_projectId, params) => {
+        if (params?.collectionId === 'col_props') {
+          return libraryPage([member], [summary({ assetId: 'ast_crate' })], 1);
+        }
+        return libraryPage([], []);
+      });
+
+      renderWorkspace();
+      fireEvent.click(await screen.findByRole('button', { name: 'Collections' }));
+
+      await screen.findByRole('heading', { name: /Props & Gear/ });
+      await screen.findByText('crate.png');
+      // The rail is redundant once the Collections view is already grouping
+      // by collection, so it steps aside rather than repeating the shelf.
+      expect(screen.queryByRole('heading', { name: 'Collections' })).toBeNull();
+    });
+
+    it('opening the rail’s View All switches to the Collections view', async () => {
+      mockCollections([collectionEntity()]);
+      vi.mocked(api.collectionCounts).mockResolvedValue({ col_1: 1 });
+      vi.mocked(api.collectionCovers).mockResolvedValue({});
+      vi.mocked(api.listAssetLibrary).mockResolvedValue(libraryPage([], []));
+
+      renderWorkspace();
+      await screen.findByRole('heading', { name: 'Collections' });
+
+      fireEvent.click(screen.getByRole('button', { name: 'View All' }));
+
+      await screen.findByRole('heading', { name: /Props & Gear/ });
+    });
+
+    it('shows an empty state for a collection with no members, without hiding the others', async () => {
+      const props = collectionEntity({ id: 'col_props', name: 'Props & Gear' });
+      const empty = collectionEntity({ id: 'col_empty', name: 'Empty Board' });
+      mockCollections([props, empty]);
+      vi.mocked(api.collectionCounts).mockResolvedValue({ col_props: 1 });
+      vi.mocked(api.collectionCovers).mockResolvedValue({});
+      const member = asset({ id: 'ast_crate', filename: 'crate.png' });
+      vi.mocked(api.listAssetLibrary).mockImplementation(async (_projectId, params) => {
+        if (params?.collectionId === 'col_props') {
+          return libraryPage([member], [summary({ assetId: 'ast_crate' })], 1);
+        }
+        return libraryPage([], []);
+      });
+
+      renderWorkspace();
+      fireEvent.click(await screen.findByRole('button', { name: 'Collections' }));
+
+      await screen.findByText('crate.png');
+      expect(screen.getByText('No assets in this collection')).toBeDefined();
+      expect(screen.getByRole('heading', { name: /Empty Board/ })).toBeDefined();
+    });
+
+    it('persists the Collections choice across a remount, alongside grid and list', async () => {
+      mockCollections([]);
+      const { unmount } = renderWorkspace();
+      fireEvent.click(await screen.findByRole('button', { name: 'Collections' }));
+      await screen.findByText('No collections yet');
+      unmount();
+
+      renderWorkspace();
+      await screen.findByText('No collections yet');
+      expect(screen.queryByRole('status', { name: 'Loading assets' })).toBeNull();
     });
   });
 });

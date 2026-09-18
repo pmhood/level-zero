@@ -18,6 +18,7 @@ import {
   DrizzleJobRepository,
   DrizzlePrototypeVersionRepository,
   DrizzleProjectRepository,
+  DrizzleReviewDecisionRepository,
   DrizzleSearchDocumentRepository,
   checkPostgres,
   checkRedis,
@@ -71,6 +72,7 @@ async function main(): Promise<void> {
   const relationships = new DrizzleEntityRelationshipRepository(database.db);
   const assets = new DrizzleAssetRepository(database.db);
   const prototypeVersions = new DrizzlePrototypeVersionRepository(database.db);
+  const reviewDecisions = new DrizzleReviewDecisionRepository(database.db);
   const findings = new DrizzleFindingRepository(database.db);
 
   const generationRepository = new DrizzleGenerationRepository(database.db);
@@ -93,7 +95,14 @@ async function main(): Promise<void> {
     jobs,
     deps,
   );
-  const consistency = new ConsistencyScanService(entities, prototypeVersions, findings, jobs, deps);
+  const consistency = new ConsistencyScanService(
+    entities,
+    prototypeVersions,
+    reviewDecisions,
+    findings,
+    jobs,
+    deps,
+  );
 
   const entityService = new EntityService(entities, projects, activity, deps, search);
   const lineage = new LineageService(

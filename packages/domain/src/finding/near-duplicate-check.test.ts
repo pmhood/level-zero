@@ -70,7 +70,7 @@ function entity(overrides: Partial<Parameters<typeof createEntity>[0]> = {}): En
 }
 
 function facts(entities: readonly Entity[]): ProjectFacts {
-  return { projectId: 'project-1', entities, prototypeVersions: [] };
+  return { projectId: 'project-1', entities, prototypeVersions: [], sectionDecisions: [] };
 }
 
 describe('nearDuplicateCheck', () => {

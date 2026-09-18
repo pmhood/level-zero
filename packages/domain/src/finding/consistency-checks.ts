@@ -1,6 +1,7 @@
 import { type ConsistencyCheck } from './consistency-check';
 import { duplicateNameCheck } from './duplicate-name-check';
 import { stalePrototypePinCheck } from './stale-prototype-pin-check';
+import { staleSectionReferenceCheck } from './stale-section-reference-check';
 
 /**
  * Every deterministic check a scan runs, in the order their findings appear.
@@ -10,5 +11,6 @@ import { stalePrototypePinCheck } from './stale-prototype-pin-check';
  */
 export const CONSISTENCY_CHECKS: readonly ConsistencyCheck[] = [
   stalePrototypePinCheck,
+  staleSectionReferenceCheck,
   duplicateNameCheck,
 ];

@@ -177,6 +177,33 @@ async function addAssetToCollection(
   });
 }
 
+/**
+ * Files `assetId` into `collectionId` with a `contains` edge stamped at
+ * `createdAt`, so a test can control which member is "newest" without
+ * relying on wall-clock timing between two inserts a real test runs in
+ * microseconds apart.
+ */
+async function addAssetToCollectionAt(
+  projectId: string,
+  collectionId: string,
+  assetId: string,
+  createdAt: string,
+): Promise<void> {
+  const reference = await entities.findOrCreateAssetReference(projectId, assetId, {
+    name: 'asset reference',
+  });
+  const relationshipsAt = new EntityRelationshipService(
+    new DrizzleEntityRelationshipRepository(client.db),
+    new DrizzleEntityRepository(client.db),
+    { clock: fixedClock(createdAt), ids: uuidIdGenerator },
+  );
+  await relationshipsAt.link(projectId, {
+    sourceEntityId: collectionId,
+    targetEntityId: reference.id,
+    relation: 'contains',
+  });
+}
+
 describe('asset library read model', () => {
   it('reports an uploaded asset as imported, with no generation at all', async () => {
     const project = await seedProject('Deep Fathom');
@@ -1271,6 +1298,145 @@ describe('asset library read model', () => {
       const countsB = await readModel.countsByCollection(b.id);
 
       expect(countsB).toEqual({});
+    });
+
+    it('agrees with the listing total for the same collection', async () => {
+      const project = await seedProject('Deep Fathom');
+      const propsCollection = await entities.create(project.id, {
+        type: 'asset_collection',
+        name: 'Props & Gear',
+      });
+      const [first, second] = await Promise.all([
+        assets.upload(project.id, {
+          kind: 'image',
+          filename: 'a.png',
+          mimeType: 'image/png',
+          content: Buffer.from('a'),
+        }),
+        assets.upload(project.id, {
+          kind: 'image',
+          filename: 'b.png',
+          mimeType: 'image/png',
+          content: Buffer.from('b'),
+        }),
+      ]);
+      await addAssetToCollection(project.id, propsCollection.id, first.id);
+      await addAssetToCollection(project.id, propsCollection.id, second.id);
+
+      const counts = await readModel.countsByCollection(project.id);
+      const page = await readModel.listByProject(project.id, {
+        collectionId: propsCollection.id,
+      });
+
+      expect(counts[propsCollection.id]).toBe(page.total);
+    });
+  });
+
+  describe('coversByCollection', () => {
+    it('reports the newest active member as the cover, by the membership edge createdAt', async () => {
+      const project = await seedProject('Deep Fathom');
+      const propsCollection = await entities.create(project.id, {
+        type: 'asset_collection',
+        name: 'Props & Gear',
+      });
+      const older = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'a.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+      const newer = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'b.png',
+        mimeType: 'image/png',
+        content: Buffer.from('b'),
+      });
+      // Filed out of chronological order, so a naive "last inserted" read
+      // would get this wrong — only the edge's own createdAt should decide.
+      await addAssetToCollectionAt(
+        project.id,
+        propsCollection.id,
+        newer.id,
+        '2026-01-01T00:00:00.000Z',
+      );
+      await addAssetToCollectionAt(
+        project.id,
+        propsCollection.id,
+        older.id,
+        '2026-01-02T00:00:00.000Z',
+      );
+
+      const covers = await readModel.coversByCollection(project.id);
+
+      expect(covers[propsCollection.id]?.id).toBe(older.id);
+    });
+
+    it('falls back to the next-newest member once the newest is archived', async () => {
+      const project = await seedProject('Deep Fathom');
+      const propsCollection = await entities.create(project.id, {
+        type: 'asset_collection',
+        name: 'Props & Gear',
+      });
+      const older = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'a.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+      const newer = await assets.upload(project.id, {
+        kind: 'image',
+        filename: 'b.png',
+        mimeType: 'image/png',
+        content: Buffer.from('b'),
+      });
+      await addAssetToCollectionAt(
+        project.id,
+        propsCollection.id,
+        older.id,
+        '2026-01-01T00:00:00.000Z',
+      );
+      await addAssetToCollectionAt(
+        project.id,
+        propsCollection.id,
+        newer.id,
+        '2026-01-02T00:00:00.000Z',
+      );
+      await assets.archive(project.id, newer.id);
+
+      const covers = await readModel.coversByCollection(project.id);
+
+      expect(covers[propsCollection.id]?.id).toBe(older.id);
+    });
+
+    it('omits a collection with no active members rather than reporting one', async () => {
+      const project = await seedProject('Deep Fathom');
+      const emptyCollection = await entities.create(project.id, {
+        type: 'asset_collection',
+        name: 'Empty',
+      });
+
+      const covers = await readModel.coversByCollection(project.id);
+
+      expect(covers[emptyCollection.id]).toBeUndefined();
+    });
+
+    it('never reports another project asset as a cover', async () => {
+      const [a, b] = [await seedProject('A'), await seedProject('B')];
+      const collectionA = await entities.create(a.id, {
+        type: 'asset_collection',
+        name: 'Collection A',
+      });
+      const assetA = await assets.upload(a.id, {
+        kind: 'image',
+        filename: 'a.png',
+        mimeType: 'image/png',
+        content: Buffer.from('a'),
+      });
+      await addAssetToCollection(a.id, collectionA.id, assetA.id);
+
+      const coversB = await readModel.coversByCollection(b.id);
+
+      expect(coversB).toEqual({});
     });
   });
 });

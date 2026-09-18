@@ -506,6 +506,7 @@ export {
 export {
   DOCUMENT_SECTION_ID_ATTR,
   assignSectionIds,
+  documentSectionReferences,
   documentSections,
   type DocumentSection,
 } from './document/document-section';
@@ -588,6 +589,7 @@ export {
 } from './finding/ai-consistency-check';
 export { JUDGEMENT_FORMAT_INSTRUCTION, parseJudgedFindings } from './finding/ai-judgement';
 export { stalePrototypePinCheck } from './finding/stale-prototype-pin-check';
+export { staleSectionReferenceCheck } from './finding/stale-section-reference-check';
 export { duplicateNameCheck, normalizedEntityName } from './finding/duplicate-name-check';
 export { loreContradictionCheck } from './finding/lore-contradiction-check';
 export { nearDuplicateCheck } from './finding/near-duplicate-check';

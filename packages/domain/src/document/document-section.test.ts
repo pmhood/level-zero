@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import { sequentialIdGenerator } from '../shared/id';
 import { type DocumentContent } from './document';
-import { DOCUMENT_SECTION_ID_ATTR, assignSectionIds, documentSections } from './document-section';
+import {
+  DOCUMENT_SECTION_ID_ATTR,
+  assignSectionIds,
+  documentSectionReferences,
+  documentSections,
+} from './document-section';
 
 function heading(text: string, options: { level?: number; id?: string } = {}): unknown {
   return {
@@ -20,6 +25,14 @@ function doc(...nodes: unknown[]): DocumentContent {
 }
 
 const ids = () => sequentialIdGenerator('section');
+
+function mention(entityId: string): unknown {
+  return { type: 'entityMention', attrs: { entityId, label: 'Kael' } };
+}
+
+function paragraph(...nodes: unknown[]): unknown {
+  return { type: 'paragraph', content: nodes };
+}
 
 describe('documentSections', () => {
   it('lists top-level headings with an id, in reading order', () => {
@@ -66,6 +79,74 @@ describe('documentSections', () => {
   it('is empty for a document that has not been started', () => {
     expect(documentSections({ type: 'doc', content: [] })).toEqual([]);
     expect(documentSections({ type: 'doc' })).toEqual([]);
+  });
+});
+
+describe('documentSectionReferences', () => {
+  it('gives each section the entities its own prose names', () => {
+    const content = doc(
+      heading('Vision', { id: 'a' }),
+      paragraph(mention('ent_kael')),
+      heading('Core loop', { id: 'b' }),
+      paragraph(mention('ent_oxygen')),
+    );
+
+    expect(documentSectionReferences(content)).toEqual(
+      new Map([
+        ['a', ['ent_kael']],
+        ['b', ['ent_oxygen']],
+      ]),
+    );
+  });
+
+  it('stops a section at the next heading of any level, so a subsection is its own', () => {
+    const content = doc(
+      heading('Gameplay', { id: 'a' }),
+      heading('Movement', { level: 2, id: 'b' }),
+      paragraph(mention('ent_kael')),
+    );
+
+    expect(documentSectionReferences(content)).toEqual(
+      new Map([
+        ['a', []],
+        ['b', ['ent_kael']],
+      ]),
+    );
+  });
+
+  it('finds a reference however deeply the editor nested it, and names it once', () => {
+    const content = doc(
+      heading('Vision', { id: 'a' }),
+      {
+        type: 'bulletList',
+        content: [{ type: 'listItem', content: [paragraph(mention('ent_kael'))] }],
+      },
+      paragraph(mention('ent_kael')),
+    );
+
+    expect(documentSectionReferences(content)).toEqual(new Map([['a', ['ent_kael']]]));
+  });
+
+  it('leaves out prose before the first section, and a heading that has no id', () => {
+    const content = doc(
+      paragraph(mention('ent_preamble')),
+      heading('Unminted'),
+      paragraph(mention('ent_kael')),
+      heading('Core loop', { id: 'b' }),
+      paragraph(mention('ent_oxygen')),
+    );
+
+    expect(documentSectionReferences(content)).toEqual(new Map([['b', ['ent_oxygen']]]));
+  });
+
+  it('does not count a reference in the heading itself: the extent starts after it', () => {
+    const content = doc({
+      type: 'heading',
+      attrs: { level: 1, [DOCUMENT_SECTION_ID_ATTR]: 'a' },
+      content: [mention('ent_kael')],
+    });
+
+    expect(documentSectionReferences(content)).toEqual(new Map([['a', []]]));
   });
 });
 
