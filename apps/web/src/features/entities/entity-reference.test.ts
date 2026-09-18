@@ -1,11 +1,18 @@
 import type { Entity, EntityStatus, EntityType } from '@level-zero/domain';
+import type { JSONContent } from '@level-zero/ui';
 import { describe, expect, it } from 'vitest';
 
 import {
+  describeReferenceForExport,
+  ENTITY_EMBED_NODE,
+  ENTITY_MENTION_NODE,
   entityReferenceLabel,
   matchEntities,
   referencedEntityIds,
+  referenceNodeForExport,
   resolveEntityReference,
+  resolveEntityReferencesForExport,
+  type EntityReferenceAttributes,
 } from './entity-reference';
 
 function entity(
@@ -129,5 +136,134 @@ describe('referencedEntityIds', () => {
     expect(referencedEntityIds([mention(null), mention(''), { type: 'text', text: 'a' }])).toEqual(
       [],
     );
+  });
+});
+
+describe('describeReferenceForExport (issue #190)', () => {
+  const attrs = (
+    overrides: Partial<EntityReferenceAttributes> = {},
+  ): EntityReferenceAttributes => ({
+    entityId: KAEL.id,
+    entityType: KAEL.type,
+    label: KAEL.name,
+    ...overrides,
+  });
+
+  it('names a resolved entity by its current name', () => {
+    expect(describeReferenceForExport(attrs(), [KAEL])).toEqual({
+      name: 'Kael Voss',
+      archived: false,
+      missing: false,
+    });
+  });
+
+  it('flags an archived entity without hiding its name', () => {
+    const archived = { ...KAEL, status: 'archived' as EntityStatus };
+    expect(describeReferenceForExport(attrs(), [archived])).toEqual({
+      name: 'Kael Voss',
+      archived: true,
+      missing: false,
+    });
+  });
+
+  it('names which entity is missing, using the label it was written with', () => {
+    expect(describeReferenceForExport(attrs(), [])).toEqual({
+      name: 'Missing character: Kael Voss',
+      archived: false,
+      missing: true,
+    });
+  });
+
+  it('falls back to a generic missing message when there was never a label', () => {
+    expect(describeReferenceForExport(attrs({ label: null }), [])).toEqual({
+      name: 'Missing character',
+      archived: false,
+      missing: true,
+    });
+  });
+
+  it('says an embed was never filled in, distinctly from a broken one', () => {
+    expect(describeReferenceForExport(attrs({ entityId: null, label: null }), [])).toEqual({
+      name: 'No character chosen',
+      archived: false,
+      missing: true,
+    });
+  });
+});
+
+describe('referenceNodeForExport and resolveEntityReferencesForExport (issue #190)', () => {
+  const PROJECT_ID = 'prj_1';
+
+  function mentionNode(overrides: Partial<EntityReferenceAttributes> = {}): JSONContent {
+    return {
+      type: ENTITY_MENTION_NODE,
+      attrs: { entityId: KAEL.id, entityType: KAEL.type, label: KAEL.name, ...overrides },
+    };
+  }
+
+  it('turns a resolved mention into linked, plain text', () => {
+    expect(referenceNodeForExport(mentionNode(), [KAEL], PROJECT_ID)).toEqual({
+      type: 'text',
+      text: 'Kael Voss',
+      marks: [{ type: 'link', attrs: { href: `/projects/${PROJECT_ID}/entities/${KAEL.id}` } }],
+    });
+  });
+
+  it('turns a missing mention into unlinked text', () => {
+    expect(referenceNodeForExport(mentionNode(), [], PROJECT_ID)).toEqual({
+      type: 'text',
+      text: 'Missing character: Kael Voss',
+      marks: [],
+    });
+  });
+
+  it('turns a resolved embed into a linked heading plus its description', () => {
+    const node = referenceNodeForExport(
+      {
+        type: ENTITY_EMBED_NODE,
+        attrs: { entityId: OXYGEN.id, entityType: OXYGEN.type, label: OXYGEN.name },
+      },
+      [OXYGEN],
+      PROJECT_ID,
+    );
+
+    expect(node.type).toBe('blockquote');
+    expect(node.content?.[0]).toMatchObject({
+      type: 'paragraph',
+      content: [
+        {
+          type: 'text',
+          text: 'Oxygen Management',
+          marks: [
+            { type: 'link', attrs: { href: `/projects/${PROJECT_ID}/entities/${OXYGEN.id}` } },
+          ],
+        },
+        { type: 'text', text: ' — Mechanic' },
+      ],
+    });
+  });
+
+  it('replaces every mention and embed anywhere in the document, leaving everything else untouched', () => {
+    const doc: JSONContent = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'Air runs out for ' }, mentionNode()],
+        },
+      ],
+    };
+
+    const resolved = resolveEntityReferencesForExport(doc, [KAEL], PROJECT_ID);
+
+    expect(resolved.content?.[0]?.content?.[0]).toEqual({
+      type: 'text',
+      text: 'Air runs out for ',
+    });
+    expect(resolved.content?.[0]?.content?.[1]).toEqual({
+      type: 'text',
+      text: 'Kael Voss',
+      marks: [{ type: 'link', attrs: { href: `/projects/${PROJECT_ID}/entities/${KAEL.id}` } }],
+    });
   });
 });

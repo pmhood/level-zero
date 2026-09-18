@@ -36,6 +36,7 @@ import { ApiRequestError, apiErrorMessage } from '@/lib/api';
 
 import { recordAcceptedAiEdit } from './ai-edit-version';
 import { GddDocumentHeader } from './gdd-document-header';
+import { exportGddDocument, type DocumentExportFormat } from './gdd-export';
 import { GddHistory } from './gdd-history';
 import { GddOutline } from './gdd-outline';
 import { GddReview } from './gdd-review';
@@ -184,6 +185,19 @@ function GddDocumentEditor({
     if (editorRef.current) insertSection(editorRef.current);
   }
 
+  // Exports the document as it currently stands — the live `content` state,
+  // not a re-fetch — so a change the writer just made is included without
+  // waiting on autosave, and the stored document itself is never touched.
+  function handleExport(format: DocumentExportFormat) {
+    exportGddDocument({
+      format,
+      content,
+      projectId,
+      entities,
+      documentName: designDocument.entity.name,
+    });
+  }
+
   // Which section is "in view" as the writer scrolls, for the outline's own
   // highlight — independent of `.tiptap-surface`'s heading levels, which are
   // presentation and mix freely.
@@ -313,6 +327,7 @@ function GddDocumentEditor({
             onToggleHistory={toggleHistory}
             onToggleReview={toggleReview}
             onToggleAskAi={toggleAskingAi}
+            onExport={handleExport}
           />
 
           <div
