@@ -505,6 +505,8 @@ export interface ListAssetLibraryParams {
   markKinds?: AssetMarkKind[];
   selectionStates?: AssetSelectionState[];
   linkedEntityId?: string;
+  /** Matches assets filed in this collection (#226/#227) — not yet exposed as a toolbar filter. */
+  collectionId?: string;
   /** Inclusive lower bound on `createdAt`, as an ISO date string. */
   createdAfter?: string;
   /** Exclusive upper bound on `createdAt`, as an ISO date string. */
@@ -645,6 +647,25 @@ export function archiveAsset(projectId: string, assetId: string): Promise<Asset>
 
 export function restoreAsset(projectId: string, assetId: string): Promise<Asset> {
   return post(`/api/projects/${projectId}/assets/${assetId}/restore`);
+}
+
+// --- Asset collections ------------------------------------------------------
+
+/**
+ * Active member counts for every collection in the project that has at
+ * least one — the rail's counts (#227), read from the same aggregate the
+ * listing's `total` agrees with, not counted from a fetched page.
+ */
+export function collectionCounts(projectId: string): Promise<Record<string, number>> {
+  return apiFetch(`/api/projects/${projectId}/asset-collections/counts`);
+}
+
+/**
+ * The derived cover for every collection that has at least one active
+ * member — the newest one filed into it. Absent for a collection with none.
+ */
+export function collectionCovers(projectId: string): Promise<Record<string, Asset>> {
+  return apiFetch(`/api/projects/${projectId}/asset-collections/covers`);
 }
 
 // --- Generations ----------------------------------------------------------
