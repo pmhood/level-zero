@@ -5,7 +5,6 @@ import {
   Button,
   ChevronRightIcon,
   CommentIcon,
-  DownloadIcon,
   HistoryIcon,
   SparklesIcon,
   StatusBadge,
@@ -16,6 +15,8 @@ import type { Route } from 'next';
 import Link from 'next/link';
 
 import { DocumentSwitcher } from './document-switcher';
+import { ExportMenu } from './export-menu';
+import type { DocumentExportFormat } from './gdd-export';
 
 /**
  * The GDD's document header (issue #183): a breadcrumb and document-actions
@@ -30,9 +31,8 @@ import { DocumentSwitcher } from './document-switcher';
  *
  * Publish and Share are deliberately absent: neither has a model yet
  * (no publication state, no sharing outside the project), and a button that
- * does nothing is worse than a gap. Export does not exist yet either (#190),
- * but — unlike Publish and Share — it is scoped and coming, so it gets a
- * disabled place in the strip rather than no place at all.
+ * does nothing is worse than a gap. Export (#190) is the one that shipped:
+ * `ExportMenu` in place of the disabled button that used to hold its spot.
  */
 export function GddDocumentHeader({
   projectId,
@@ -45,6 +45,7 @@ export function GddDocumentHeader({
   onToggleHistory,
   onToggleReview,
   onToggleAskAi,
+  onExport,
 }: {
   projectId: string;
   /** Undefined while the project is still loading; the header degrades gracefully. */
@@ -58,6 +59,7 @@ export function GddDocumentHeader({
   onToggleHistory: () => void;
   onToggleReview: () => void;
   onToggleAskAi: () => void;
+  onExport: (format: DocumentExportFormat) => void;
 }) {
   const projectHref = `/projects/${projectId}` as Route;
 
@@ -107,15 +109,7 @@ export function GddDocumentHeader({
                   <CommentIcon className="size-4" />
                   Review
                 </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled
-                  title="Exporting a document is coming soon"
-                >
-                  <DownloadIcon className="size-4" />
-                  Export
-                </Button>
+                <ExportMenu onExport={onExport} />
                 {!archived && (
                   <Button variant="ai" size="sm" onClick={onToggleAskAi}>
                     <SparklesIcon className="size-4" />

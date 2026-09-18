@@ -98,6 +98,11 @@ export {
   type ToolbarGroup,
 } from './editor/editor-modes';
 export { createEditorExtensions, type EditorExtensionOptions } from './editor/editor-extensions';
+export {
+  renderDocumentMarkdown,
+  renderStandaloneHtmlDocument,
+  sanitizeDocumentForExport,
+} from './editor/document-export';
 /**
  * Inline AI editing is switched on with `RichTextEditor`'s `ai` prop, so what
  * a caller needs is the shape of that prop. The extension, the decoration, the
