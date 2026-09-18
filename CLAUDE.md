@@ -134,6 +134,18 @@ no `tailwind.config.js`), NestJS, Drizzle, Vitest, pnpm workspaces + Turborepo.
 `@source '../../../../packages/ui/src'` for Tailwind to scan it. A new shared component that never
 renders its styles is usually this line, not the component.
 
+**Don't put `'use client'` on a `packages/ui` file that exports anything but components.**
+`packages/ui/src/index.ts` is one barrel, so any server-reached import of it pulls every file it
+re-exports into the server compile graph. Next's RSC bundler then replaces _every_ export of a
+`'use client'` file with an opaque client-reference stub — plain constants and helper functions
+included, not just the components. The failure lands at module-eval time in whichever file uses one
+of those values (`CALLOUT_VARIANTS.map is not a function` from a `.map()` over what should be an
+array), and it breaks `next build` while `dev`, `typecheck` and the Vitest suites all stay green —
+so only a real build catches it. A component reached exclusively through an existing client
+boundary (a TipTap node view mounted by `ReactNodeViewRenderer` inside `RichTextEditor`, say) needs
+no boundary of its own; if a file genuinely needs one, keep its non-component exports in a separate
+file.
+
 Design system spec §1 names the intended additions — Radix, shadcn/ui, Lucide, Framer Motion,
 TanStack Table, React Flow, TipTap, Monaco, Recharts, cmdk — and says not to introduce
 other UI frameworks without a clear need.
