@@ -141,6 +141,13 @@ describe('renderStandaloneHtmlDocument', () => {
   });
 });
 
+/**
+ * The fixtures below stand in for a node type this file's schema does not
+ * define — a node some future branch adds before the export path imports it.
+ * They must therefore name types nothing will ever register: naming a real
+ * node (`callout`, say) makes the test pass only until that node lands, and
+ * then fails as a schema change rather than as an export bug.
+ */
 describe('sanitizeDocumentForExport', () => {
   it('leaves a document made only of known node types untouched', () => {
     const doc = parse('# Title\n\nSome text.');
@@ -153,7 +160,7 @@ describe('sanitizeDocumentForExport', () => {
       content: [
         { type: 'paragraph', content: [{ type: 'text', text: 'Before.' }] },
         {
-          type: 'callout',
+          type: 'sillyFutureAdmonition',
           attrs: { tone: 'warning' },
           content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Watch the oxygen.' }] }],
         },
@@ -176,7 +183,7 @@ describe('sanitizeDocumentForExport', () => {
       type: 'doc',
       content: [
         {
-          type: 'pullQuote',
+          type: 'sillyFutureQuote',
           content: [{ type: 'text', text: 'Hold onto this line.' }],
         },
       ],
