@@ -3,7 +3,7 @@ import { Editor, type JSONContent } from '@tiptap/core';
 import { describe, expect, it } from 'vitest';
 
 import { createEditorExtensions } from './editor-extensions';
-import { activeSectionId } from './section-id';
+import { activeSectionId, insertSection } from './section-id';
 
 /**
  * Loads content the way `RichTextEditor` does: as the editor's initial
@@ -42,6 +42,14 @@ function sectionIds(editor: Editor): (string | null)[] {
   return (editor.getJSON().content ?? [])
     .filter((node) => node.type === 'heading')
     .map((node) => (node.attrs?.[DOCUMENT_SECTION_ID_ATTR] as string | null) ?? null);
+}
+
+function headingTexts(editor: Editor): string[] {
+  return (editor.getJSON().content ?? [])
+    .filter((node) => node.type === 'heading')
+    .map((node) =>
+      (node.content ?? []).map((child) => ('text' in child ? child.text : '')).join(''),
+    );
 }
 
 describe('SectionId', () => {
@@ -123,6 +131,62 @@ describe('SectionId', () => {
     editor.commands.undo();
 
     expect(sectionIds(editor)).toEqual([minted]);
+  });
+});
+
+describe('insertSection', () => {
+  it('adds a new, addressable empty section at the end of the document', async () => {
+    const editor = await createEditor({
+      type: 'doc',
+      content: [heading('Vision', 'section-a'), paragraph('A haunting journey.')],
+    });
+
+    insertSection(editor);
+
+    const content = editor.getJSON().content ?? [];
+    expect(content).toHaveLength(4);
+    expect(content[2]).toMatchObject({ type: 'heading', attrs: { level: 1 } });
+    expect(content[3]).toMatchObject({ type: 'paragraph' });
+
+    const ids = sectionIds(editor);
+    expect(ids[0]).toBe('section-a');
+    expect(typeof ids[1]).toBe('string');
+    expect(ids[1]).not.toBe('section-a');
+  });
+
+  it('puts the caret in the new heading', async () => {
+    const editor = await createEditor({ type: 'doc', content: [heading('Vision', 'section-a')] });
+
+    insertSection(editor);
+
+    expect(activeSectionId(editor)).not.toBeNull();
+    expect(activeSectionId(editor)).not.toBe('section-a');
+  });
+
+  it('inserts before the Appendices group rather than among the appendices', async () => {
+    const editor = await createEditor({
+      type: 'doc',
+      content: [
+        heading('Vision', 'section-a'),
+        heading('Appendices', 'section-app'),
+        heading('Changelog', 'section-c'),
+      ],
+    });
+
+    insertSection(editor);
+
+    expect(headingTexts(editor)).toEqual(['Vision', '', 'Appendices', 'Changelog']);
+  });
+
+  it('recognises the appendix heading case-insensitively, trimmed', async () => {
+    const editor = await createEditor({
+      type: 'doc',
+      content: [heading('Vision', 'section-a'), heading('  APPENDIX  ', 'section-app')],
+    });
+
+    insertSection(editor);
+
+    expect(headingTexts(editor)).toEqual(['Vision', '', '  APPENDIX  ']);
   });
 });
 

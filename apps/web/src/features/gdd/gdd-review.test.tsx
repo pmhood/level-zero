@@ -118,7 +118,9 @@ function renderOutline(activeSectionId: string | null = null) {
         documentId="doc_1"
         content={body}
         activeSectionId={activeSectionId}
+        canAddSection
         onSelect={vi.fn()}
+        onAddSection={vi.fn()}
       />
     </QueryClientProvider>,
   );
@@ -178,7 +180,9 @@ describe('GddOutline — a status per section', () => {
           documentId="doc_1"
           content={{ type: 'doc', content: [heading('Old section')] }}
           activeSectionId={null}
+          canAddSection
           onSelect={vi.fn()}
+          onAddSection={vi.fn()}
         />
       </QueryClientProvider>,
     );
