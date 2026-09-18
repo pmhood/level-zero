@@ -16,6 +16,8 @@ export const assetKeys = {
   all: (projectId: string) => ['projects', projectId, 'assets'] as const,
   library: (projectId: string, page: number, params: api.ListAssetLibraryParams) =>
     ['projects', projectId, 'assets', 'library', page, params] as const,
+  pipelineStageCounts: (projectId: string) =>
+    ['projects', projectId, 'assets', 'pipeline-stage-counts'] as const,
   generation: (projectId: string, assetId: string) =>
     ['projects', projectId, 'assets', assetId, 'generation'] as const,
   lineage: (projectId: string, assetId: string, generationId: string | null) =>
@@ -48,6 +50,19 @@ export function useAssetLibrary(
       }),
     enabled: Boolean(projectId),
     placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * Active asset counts per pipeline stage, project-wide (issue #230's strip)
+ * — one grouped read behind the count, not one `useAssetLibrary` call per
+ * stage.
+ */
+export function useAssetPipelineStageCounts(projectId: string) {
+  return useQuery({
+    queryKey: assetKeys.pipelineStageCounts(projectId),
+    queryFn: () => api.getAssetPipelineStageCounts(projectId),
+    enabled: Boolean(projectId),
   });
 }
 
