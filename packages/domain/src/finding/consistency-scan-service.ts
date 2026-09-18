@@ -1,7 +1,10 @@
+import { type Entity } from '../entity/entity';
 import { type EntityRepository } from '../entity/entity-repository';
 import { ACTIVE_JOB_STATUSES, type Job } from '../job/job';
 import { type JobService } from '../job/job-service';
 import { type PrototypeVersionRepository } from '../prototype/prototype-version-repository';
+import { type ReviewDecision } from '../review/review-decision';
+import { type ReviewDecisionRepository } from '../review/review-decision-repository';
 import { type Clock } from '../shared/clock';
 import { type IdGenerator } from '../shared/id';
 import { MAX_PAGE_SIZE } from '../shared/paging';
@@ -55,6 +58,7 @@ export class ConsistencyScanService {
   constructor(
     private readonly entities: EntityRepository,
     private readonly prototypeVersions: PrototypeVersionRepository,
+    private readonly reviewDecisions: ReviewDecisionRepository,
     private readonly findings: FindingRepository,
     private readonly jobs: JobService,
     private readonly deps: ConsistencyScanServiceDeps,
@@ -99,7 +103,31 @@ export class ConsistencyScanService {
       ),
     ]);
 
-    return { projectId, entities, prototypeVersions };
+    return {
+      projectId,
+      entities,
+      prototypeVersions,
+      sectionDecisions: await this.loadSectionDecisions(projectId, entities),
+    };
+  }
+
+  /**
+   * The decisions anchored inside this project's documents, read one document
+   * at a time because that is the grain the port offers and a project has a
+   * handful of documents rather than a table's worth.
+   */
+  private async loadSectionDecisions(
+    projectId: string,
+    entities: readonly Entity[],
+  ): Promise<ReviewDecision[]> {
+    const documents = entities.filter((entity) => entity.type === 'document');
+    const perDocument = await Promise.all(
+      documents.map((document) =>
+        this.reviewDecisions.listAnchoredByTarget(projectId, 'entity', document.id),
+      ),
+    );
+
+    return perDocument.flat();
   }
 
   /**

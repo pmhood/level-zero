@@ -4,16 +4,25 @@ import {
   documentSections,
   type AnchoredReviewStatus,
   type DocumentContent,
+  type Finding,
 } from '@level-zero/domain';
 import { Field, Select, StatusBadge, type JSONContent } from '@level-zero/ui';
 import { useMemo } from 'react';
 
+import { FindingRow } from '@/features/consistency/finding-row';
+import { useEntityFindings } from '@/features/consistency/use-findings';
 import { CommentThreads } from '@/features/review/comment-threads';
 import { formatDecidedAt, reviewStateBadge } from '@/features/review/review';
 import { ReviewSection } from '@/features/review/review-section';
 import { useAnchoredCommentThreads, useAnchoredReviewStatuses } from '@/features/review/use-review';
 
-import { documentTarget, orphanedAnchors, sectionHeading, sectionTarget } from './section-review';
+import {
+  documentTarget,
+  orphanedAnchors,
+  sectionFindings,
+  sectionHeading,
+  sectionTarget,
+} from './section-review';
 
 /**
  * Review and discussion for a design document: the document as a whole, and
@@ -23,7 +32,8 @@ import { documentTarget, orphanedAnchors, sectionHeading, sectionTarget } from '
  * `ReviewSection` carries the status, the state changes and the threads, and a
  * section is the document entity with its heading's minted id as the anchor.
  * There is no GDD-specific review record, no second vocabulary of states, and
- * nothing that edits a stored target.
+ * nothing that edits a stored target — staleness included, which arrives as an
+ * ordinary consistency finding addressed to the section (#188).
  *
  * An archived document is read-only for its prose and not for its review: a
  * decision and a thread are about the writing rather than changes to it, they
@@ -54,6 +64,7 @@ export function GddReview({
 
   const statuses = useAnchoredReviewStatuses(projectId, target);
   const threads = useAnchoredCommentThreads(projectId, target);
+  const findings = useEntityFindings(projectId, documentId);
 
   const live = useMemo(() => new Set(sections.map((section) => section.id)), [sections]);
   // A section the writer has just deleted stops being reviewable the moment it
@@ -63,6 +74,8 @@ export function GddReview({
   const selectedTitle = sections.find((section) => section.id === selected)?.text ?? '';
 
   const orphans = orphanedAnchors(threads.data ?? [], statuses.data ?? [], live);
+  const stale =
+    selected === null ? [] : (sectionFindings(findings.data ?? [], documentId).get(selected) ?? []);
 
   return (
     <div className="flex flex-col gap-4">
@@ -96,6 +109,8 @@ export function GddReview({
         }
       />
 
+      {stale.length > 0 && <StaleSection projectId={projectId} findings={stale} />}
+
       {orphans.length > 0 && (
         <RemovedSections
           projectId={projectId}
@@ -105,6 +120,46 @@ export function GddReview({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * The design that moved underneath this section since it was last reviewed.
+ *
+ * Stale is not a fifth review state (#188): it sits beside the status above
+ * rather than replacing it, because a section can be Approved *and* out of
+ * date, and that pair is the message. Clearing it is a human act — approving
+ * the section again above, or dismissing the finding, which is why these are
+ * the Consistency surface's own rows rather than a GDD-shaped copy of them:
+ * naming what moved, the way through to it and Dismiss all come with
+ * `FindingRow`, and a dismissal made here is the same dismissal made there.
+ *
+ * What is shown is the last scan's answer, not a live recompute: re-approving
+ * clears the finding when the scan next runs (`docs/decisions/consistency-findings.md` §5).
+ */
+function StaleSection({
+  projectId,
+  findings,
+}: {
+  projectId: string;
+  findings: readonly Finding[];
+}) {
+  return (
+    <section aria-label="Out of date" className="flex flex-col gap-2">
+      <div>
+        <h3 className="text-[15px] font-semibold text-foreground">Out of date</h3>
+        <p className="mt-0.5 text-xs text-faint-foreground">
+          Entities this section references have changed since it was last reviewed. Approving it
+          again clears this, and so does dismissing the finding.
+        </p>
+      </div>
+
+      <ul className="divide-y divide-border-subtle rounded-md border border-border-subtle bg-raised">
+        {findings.map((finding) => (
+          <FindingRow key={finding.id} projectId={projectId} finding={finding} />
+        ))}
+      </ul>
+    </section>
   );
 }
 

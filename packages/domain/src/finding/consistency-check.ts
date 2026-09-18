@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { type Entity } from '../entity/entity';
 import { type PrototypeVersion } from '../prototype/prototype-version';
+import { type ReviewDecision } from '../review/review-decision';
 import { type CheckFinding } from './finding';
 
 /**
@@ -24,6 +25,16 @@ export interface ProjectFacts {
   entities: readonly Entity[];
   /** Every prototype version in the project, in no guaranteed order. */
   prototypeVersions: readonly PrototypeVersion[];
+  /**
+   * Every review decision anchored inside an entity — today, the ones recorded
+   * against a GDD section, whose anchor is its heading's minted `sectionId`.
+   * In no guaranteed order.
+   *
+   * Decisions about a whole entity are deliberately absent: they are pinned to
+   * the version the reviewer read (`pinJudgement`), so they already go out of
+   * date on their own and nothing here has to notice.
+   */
+  sectionDecisions: readonly ReviewDecision[];
 }
 
 /**

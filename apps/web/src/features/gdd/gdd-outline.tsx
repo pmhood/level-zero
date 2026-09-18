@@ -12,12 +12,14 @@ import {
 } from '@level-zero/ui';
 import { useMemo, useState } from 'react';
 
+import { useEntityFindings } from '@/features/consistency/use-findings';
 import { reviewStateBadge } from '@/features/review/review';
 import { useAnchoredCommentThreads, useAnchoredReviewStatuses } from '@/features/review/use-review';
 
 import { documentOutline, type OutlineEntry } from './document-outline';
 import {
   documentTarget,
+  sectionFindings,
   sectionHeading,
   sectionStates,
   unresolvedThreadCounts,
@@ -28,6 +30,10 @@ import {
  * numbered sections, an Appendices group lettered separately, an affordance to
  * add a section, and where each section stands and how much of the
  * conversation about it is still open.
+ *
+ * Stale sits beside the review state rather than among its values: it is
+ * computed by the consistency scan from an entity the section references
+ * having moved, so a section can be Approved *and* stale (#188).
  *
  * Numbering and the appendix group are presentation, recomputed from reading
  * order on every render (`documentOutline`) — nothing here is stored. A
@@ -64,13 +70,19 @@ export function GddOutline({
 
   const statuses = useAnchoredReviewStatuses(projectId, target);
   const threads = useAnchoredCommentThreads(projectId, target);
+  const findings = useEntityFindings(projectId, documentId);
 
   const states = useMemo(() => sectionStates(statuses.data ?? []), [statuses.data]);
   const openThreads = useMemo(() => unresolvedThreadCounts(threads.data ?? []), [threads.data]);
+  const stale = useMemo(
+    () => sectionFindings(findings.data ?? [], documentId),
+    [findings.data, documentId],
+  );
 
   const stateFor = (id: string | null): ReviewState | null =>
     id === null ? null : (states.get(id) ?? 'draft');
   const threadsFor = (id: string | null): number => (id === null ? 0 : (openThreads.get(id) ?? 0));
+  const isStale = (id: string | null): boolean => id !== null && stale.has(id);
 
   const empty = outline.sections.length === 0 && appendices === null;
 
@@ -139,6 +151,7 @@ export function GddOutline({
                   active={entry.id !== null && entry.id === activeSectionId}
                   openThreads={threadsFor(entry.id)}
                   state={stateFor(entry.id)}
+                  stale={isStale(entry.id)}
                   onSelect={() => onSelect(entry)}
                 />
               </li>
@@ -153,6 +166,7 @@ export function GddOutline({
               active={appendices.heading.id !== null && appendices.heading.id === activeSectionId}
               openThreads={threadsFor(appendices.heading.id)}
               state={stateFor(appendices.heading.id)}
+              stale={isStale(appendices.heading.id)}
               heading
               onSelect={() => onSelect(appendices.heading)}
             />
@@ -164,6 +178,7 @@ export function GddOutline({
                     active={entry.id !== null && entry.id === activeSectionId}
                     openThreads={threadsFor(entry.id)}
                     state={stateFor(entry.id)}
+                    stale={isStale(entry.id)}
                     onSelect={() => onSelect(entry)}
                   />
                 </li>
@@ -193,6 +208,7 @@ function OutlineRow({
   active,
   openThreads,
   state,
+  stale,
   heading = false,
   onSelect,
 }: {
@@ -201,6 +217,8 @@ function OutlineRow({
   openThreads: number;
   /** Null for a heading with no id yet: there is nothing to have a status. */
   state: ReviewState | null;
+  /** Beside the review state rather than replacing it: a section can be Approved and stale. */
+  stale: boolean;
   /** True for the Appendices heading itself: a group label, not a numbered row. */
   heading?: boolean;
   onSelect: () => void;
@@ -232,8 +250,9 @@ function OutlineRow({
         <span className="truncate">{label}</span>
       </span>
       {badge && (
-        <span className="mt-1 flex items-center gap-1.5">
+        <span className="mt-1 flex flex-wrap items-center gap-1.5">
           <StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>
+          {stale && <StatusBadge tone="warning">Stale</StatusBadge>}
           {openThreads > 0 && (
             <span className="text-[11px] text-faint-foreground">
               {openThreads} open {openThreads === 1 ? 'comment' : 'comments'}

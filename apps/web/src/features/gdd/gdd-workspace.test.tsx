@@ -46,6 +46,8 @@ vi.mock('@/lib/api', () => ({
   getReviewStatus: vi.fn(),
   listReviewHistory: vi.fn(),
   recordReviewDecision: vi.fn(),
+  listFindings: vi.fn(),
+  getEntity: vi.fn(),
 }));
 
 const api = await import('@/lib/api');
@@ -114,6 +116,7 @@ beforeEach(() => {
   vi.mocked(api.listCommentThreads).mockResolvedValue([]);
   vi.mocked(api.listAnchoredCommentThreads).mockResolvedValue([]);
   vi.mocked(api.listAnchoredReviewStatuses).mockResolvedValue([]);
+  vi.mocked(api.listFindings).mockResolvedValue({ items: [], total: 0 });
   vi.mocked(api.listReviewHistory).mockResolvedValue([]);
   vi.mocked(api.getReviewStatus).mockResolvedValue({
     target: {

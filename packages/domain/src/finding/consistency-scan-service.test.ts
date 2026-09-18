@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { documentData } from '../document/document';
 import { createEntity, type Entity } from '../entity/entity';
 import { JobService } from '../job/job-service';
 import { createProject, type Project } from '../project/project';
 import { createPrototypeVersion, type PrototypeVersion } from '../prototype/prototype-version';
+import { createReviewDecision, type ReviewDecision } from '../review/review-decision';
 import { ConflictError } from '../shared/errors';
 import { fixedClock } from '../shared/clock';
 import { sequentialIdGenerator } from '../shared/id';
@@ -15,6 +17,7 @@ import {
   InMemoryJobRepository,
   InMemoryProjectRepository,
   InMemoryPrototypeVersionRepository,
+  InMemoryReviewDecisionRepository,
 } from '../testing';
 import { type AiCheckContext } from './ai-consistency-check';
 import { AI_CONSISTENCY_CHECKS } from './ai-consistency-checks';
@@ -30,6 +33,7 @@ const deps = { clock, ids: sequentialIdGenerator('id') };
 let projectRepo: InMemoryProjectRepository;
 let entityRepo: InMemoryEntityRepository;
 let prototypeVersionRepo: InMemoryPrototypeVersionRepository;
+let decisionRepo: InMemoryReviewDecisionRepository;
 let findingRepo: InMemoryFindingRepository;
 let jobs: JobService;
 let scans: ConsistencyScanService;
@@ -39,6 +43,7 @@ beforeEach(async () => {
   projectRepo = new InMemoryProjectRepository();
   entityRepo = new InMemoryEntityRepository();
   prototypeVersionRepo = new InMemoryPrototypeVersionRepository();
+  decisionRepo = new InMemoryReviewDecisionRepository();
   findingRepo = new InMemoryFindingRepository();
   jobs = new JobService(
     new InMemoryJobRepository(),
@@ -47,7 +52,14 @@ beforeEach(async () => {
     new InMemoryJobEvents(),
     deps,
   );
-  scans = new ConsistencyScanService(entityRepo, prototypeVersionRepo, findingRepo, jobs, deps);
+  scans = new ConsistencyScanService(
+    entityRepo,
+    prototypeVersionRepo,
+    decisionRepo,
+    findingRepo,
+    jobs,
+    deps,
+  );
 
   project = createProject({ name: 'Deep Six' }, deps);
   await projectRepo.insert(project);
@@ -365,7 +377,12 @@ describe('the two check registries', () => {
   });
 
   it('keeps every deterministic check synchronous and provider-free', () => {
-    const facts: ProjectFacts = { projectId: project.id, entities: [], prototypeVersions: [] };
+    const facts: ProjectFacts = {
+      projectId: project.id,
+      entities: [],
+      prototypeVersions: [],
+      sectionDecisions: [],
+    };
 
     for (const check of CONSISTENCY_CHECKS) {
       // A model call cannot happen in a function that returns before it could
@@ -373,5 +390,117 @@ describe('the two check registries', () => {
       expect(Array.isArray(check.run(facts))).toBe(true);
       expect(check.run).toHaveLength(1);
     }
+  });
+});
+
+describe('a GDD section going stale', () => {
+  const SECTION = 'section-core-loop';
+
+  /** A design document whose only section mentions `entityId`. */
+  function gddMentioning(entityId: string): Entity {
+    return createEntity(
+      {
+        projectId: project.id,
+        type: 'document',
+        name: 'Game Design Document',
+        data: documentData({
+          type: 'doc',
+          content: [
+            {
+              type: 'heading',
+              attrs: { level: 1, sectionId: SECTION },
+              content: [{ type: 'text', text: 'Core loop' }],
+            },
+            { type: 'paragraph', content: [{ type: 'entityMention', attrs: { entityId } }] },
+          ],
+        }),
+      },
+      deps,
+    );
+  }
+
+  function approval(documentId: string, decidedWith = clock): ReviewDecision {
+    return createReviewDecision(
+      {
+        projectId: project.id,
+        target: { type: 'entity', id: documentId, anchor: SECTION },
+        state: 'approved',
+        actor: 'Ada',
+      },
+      { clock: decidedWith, ids: deps.ids },
+    );
+  }
+
+  /** An approved section, and the entity it names edited afterwards. */
+  async function approvedThenEdited(): Promise<{ kael: Entity; gdd: Entity }> {
+    const kael = await entityRepo.insert(entity({ name: 'Kael' }));
+    const gdd = await entityRepo.insert(gddMentioning(kael.id));
+    await decisionRepo.insert(approval(gdd.id));
+    await entityRepo.save({ ...kael, updatedAt: new Date('2026-03-01T09:10:00.000Z') });
+
+    return { kael, gdd };
+  }
+
+  it('reports the section once the scan runs, and cites what moved', async () => {
+    const { kael, gdd } = await approvedThenEdited();
+
+    await scans.runDeterministicChecks(await scans.loadProjectFacts(project.id));
+
+    const { items } = await findingRepo.listByProject(project.id, { statuses: ['open'] });
+    expect(items).toMatchObject([{ checkId: 'stale-section-reference', status: 'open' }]);
+    expect(items[0]!.evidence).toEqual([
+      expect.objectContaining({ entityId: gdd.id, anchor: SECTION }),
+      expect.objectContaining({ entityId: kael.id }),
+    ]);
+  });
+
+  it('closes it when the section is approved again', async () => {
+    const { gdd } = await approvedThenEdited();
+    await scans.runDeterministicChecks(await scans.loadProjectFacts(project.id));
+
+    await decisionRepo.insert(approval(gdd.id, fixedClock('2026-03-01T09:20:00.000Z')));
+    await scans.runDeterministicChecks(await scans.loadProjectFacts(project.id));
+
+    const { items } = await findingRepo.listByProject(project.id);
+    expect(items).toMatchObject([{ checkId: 'stale-section-reference', status: 'resolved' }]);
+  });
+
+  it('keeps a dismissal through the next scan, which still reproduces it', async () => {
+    await approvedThenEdited();
+    await scans.runDeterministicChecks(await scans.loadProjectFacts(project.id));
+
+    const { items: opened } = await findingRepo.listByProject(project.id);
+    await findingRepo.save(
+      dismissFinding(opened[0]!, { dismissedBy: 'pete' }, { clock: laterClock }),
+    );
+
+    await scans.runDeterministicChecks(await scans.loadProjectFacts(project.id));
+
+    const { items } = await findingRepo.listByProject(project.id);
+    expect(items).toMatchObject([{ status: 'dismissed', dismissedBy: 'pete' }]);
+  });
+
+  it('loads only the requesting project’s anchored decisions', async () => {
+    const otherProject = createProject({ name: 'Other' }, deps);
+    await projectRepo.insert(otherProject);
+    const theirGdd = await entityRepo.insert(
+      createEntity({ projectId: otherProject.id, type: 'document', name: 'Their GDD' }, deps),
+    );
+    await decisionRepo.insert(
+      createReviewDecision(
+        {
+          projectId: otherProject.id,
+          target: { type: 'entity', id: theirGdd.id, anchor: SECTION },
+          state: 'approved',
+          actor: 'Someone else',
+        },
+        deps,
+      ),
+    );
+    const { gdd } = await approvedThenEdited();
+
+    const facts = await scans.loadProjectFacts(project.id);
+
+    expect(facts.sectionDecisions.map((decision) => decision.target.id)).toEqual([gdd.id]);
   });
 });
