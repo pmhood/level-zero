@@ -1,6 +1,6 @@
 'use client';
 
-import type { Asset, AssetLibraryPage, AssetSummary } from '@level-zero/domain';
+import type { Asset, AssetLibraryPage, AssetPipelineStage, AssetSummary } from '@level-zero/domain';
 import {
   Button,
   EmptyState,
@@ -31,6 +31,8 @@ import { AssetSelectionSummary } from './asset-selection-summary';
 import { AssetUploadButton } from './asset-upload-button';
 import { AssetUploadQueue } from './asset-upload-queue';
 import { CollectionsIcon, PipelineIcon } from './asset-view-icons';
+import { PipelineStrip } from './pipeline-strip';
+import { PipelineView } from './pipeline-view';
 import { useAssetLibraryFilters } from './use-asset-library-filters';
 import { type AssetClickModifiers, useAssetSelection } from './use-asset-selection';
 import { useAssetUpload } from './use-asset-upload';
@@ -49,7 +51,6 @@ const VIEW_ITEMS: ViewSwitcherItem<AssetView>[] = [
     value: 'pipeline',
     label: 'Pipeline',
     icon: <PipelineIcon className="size-4" />,
-    disabled: true,
   },
 ];
 
@@ -74,10 +75,12 @@ const VIEW_ITEMS: ViewSwitcherItem<AssetView>[] = [
  * page holds the only `Asset` records the bar and the inspector have to
  * act on.
  *
- * The Pipeline view is a later issue (#179). Collections (#227) is the rail
- * above the grid/list plus the switcher's third view, both reading #226's
- * collections and per-collection counts — never counting or picking a cover
- * from a fetched page.
+ * The Pipeline view and the strip beneath the grid/list (#230) read #229's
+ * stage counts. Collections (#227) is the rail above the grid/list plus the
+ * switcher's fourth view, both reading #226's collections and per-collection
+ * counts — never counting or picking a cover from a fetched page. Each view
+ * hides the other's redundant chrome: the rail steps aside in the
+ * Collections view, and the strip steps aside in the Pipeline view.
  */
 export function AssetsWorkspace({ projectId }: { projectId: string }) {
   const [view, changeView] = useAssetView();
@@ -142,6 +145,20 @@ export function AssetsWorkspace({ projectId }: { projectId: string }) {
   function switchView(next: AssetView) {
     changeView(next);
     changePage(0);
+  }
+
+  // A second click on the already-selected stage clears it — the strip's
+  // cards are a toggle, not a one-way drill-down.
+  function selectPipelineStage(stage: AssetPipelineStage) {
+    setFilter('pipelineStage', filters.pipelineStage === stage ? null : stage);
+  }
+
+  // The Pipeline view's tiles are read-only (issue #230: advancing a stage
+  // is a separate issue), so a click there filters the Grid view to that
+  // stage and switches to it, rather than opening the inspector in place.
+  function viewPipelineStageInGrid(stage: AssetPipelineStage) {
+    setFilter('pipelineStage', stage);
+    switchView('grid');
   }
 
   // Files dragged from outside the browser carry a "Files" type; the
@@ -231,8 +248,8 @@ export function AssetsWorkspace({ projectId }: { projectId: string }) {
         )}
 
         {/* Generations in flight for this project (#180) — what is
-            generating now, not the pipeline or Collections views this
-            workspace's view switcher still has disabled. */}
+            generating now, shown regardless of which of the workspace's
+            views is active. */}
         <GenerationQueuePanel projectId={projectId} />
 
         <AssetUploadQueue items={upload.items} onRetry={upload.retry} onDismiss={upload.dismiss} />
@@ -259,28 +276,41 @@ export function AssetsWorkspace({ projectId }: { projectId: string }) {
             b={comparedWith}
             onClose={() => setComparedWith(null)}
           />
+        ) : view === 'pipeline' ? (
+          <PipelineView
+            projectId={projectId}
+            listParams={listParams}
+            onDrillIntoStage={viewPipelineStageInGrid}
+          />
         ) : view === 'collections' ? (
           <AssetCollectionsView projectId={projectId} listParams={listParams} />
         ) : (
-          <AssetsBody
-            projectId={projectId}
-            view={view}
-            page={page}
-            onPageChange={changePage}
-            isSelected={selection.isSelected}
-            selectedCount={selection.selectedCount}
-            onAssetClick={handleAssetClick}
-            onAssetToggle={handleAssetToggle}
-            onSelectAll={handleSelectAll}
-            onClearSelection={clearSelection}
-            isPending={libraryQuery.isPending}
-            error={libraryQuery.error}
-            onRetry={() => void libraryQuery.refetch()}
-            data={libraryQuery.data}
-            summaries={summaries}
-            hasActiveFilters={hasActiveAssetLibraryFilters(filters)}
-            onClearFilters={clearAll}
-          />
+          <>
+            <AssetsBody
+              projectId={projectId}
+              view={view}
+              page={page}
+              onPageChange={changePage}
+              isSelected={selection.isSelected}
+              selectedCount={selection.selectedCount}
+              onAssetClick={handleAssetClick}
+              onAssetToggle={handleAssetToggle}
+              onSelectAll={handleSelectAll}
+              onClearSelection={clearSelection}
+              isPending={libraryQuery.isPending}
+              error={libraryQuery.error}
+              onRetry={() => void libraryQuery.refetch()}
+              data={libraryQuery.data}
+              summaries={summaries}
+              hasActiveFilters={hasActiveAssetLibraryFilters(filters)}
+              onClearFilters={clearAll}
+            />
+            <PipelineStrip
+              projectId={projectId}
+              selectedStage={filters.pipelineStage}
+              onSelectStage={selectPipelineStage}
+            />
+          </>
         )}
       </div>
     </WorkspacePage>

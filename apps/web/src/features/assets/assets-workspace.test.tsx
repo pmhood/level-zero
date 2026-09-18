@@ -20,6 +20,7 @@ vi.mock('@/lib/api', () => ({
   apiErrorMessage: (error: unknown, fallback = 'Something went wrong talking to the API.') =>
     error instanceof Error ? error.message : fallback,
   listAssetLibrary: vi.fn(),
+  getAssetPipelineStageCounts: vi.fn(),
   listEntities: vi.fn(),
   getEntity: vi.fn(),
   collectionCounts: vi.fn(),
@@ -151,6 +152,7 @@ describe('Assets workspace', () => {
     window.localStorage.clear();
     currentSearch = '';
     vi.mocked(api.listAssetLibrary).mockResolvedValue(libraryPage([], []));
+    vi.mocked(api.getAssetPipelineStageCounts).mockResolvedValue({});
     vi.mocked(api.listEntities).mockResolvedValue({ items: [], total: 0 });
     vi.mocked(api.getEntity).mockRejectedValue(new Error('not found'));
     vi.mocked(api.collectionCounts).mockResolvedValue({});
@@ -735,6 +737,133 @@ describe('Assets workspace', () => {
     });
   });
 
+  describe('Asset Pipeline (#230)', () => {
+    it('shows the strip beneath the grid, with a server-side count per stage', async () => {
+      vi.mocked(api.listAssetLibrary).mockResolvedValue(libraryPage([asset()], [summary()]));
+      vi.mocked(api.getAssetPipelineStageCounts).mockResolvedValue({
+        concept: 2,
+        production_ready: 5,
+      });
+
+      renderWorkspace();
+
+      await screen.findByText('Asset Pipeline');
+      await screen.findByText('2 assets');
+      expect(screen.getByText('5 assets')).toBeDefined();
+      expect(screen.getByText('0 assets')).toBeDefined(); // in_progress: absent from the counts map
+    });
+
+    it('filters the grid to a stage when its card is clicked, and the header count reflects it', async () => {
+      vi.mocked(api.listAssetLibrary).mockResolvedValue(libraryPage([asset()], [summary()], 342));
+      vi.mocked(api.getAssetPipelineStageCounts).mockResolvedValue({ concept: 342 });
+
+      renderWorkspace();
+      await screen.findByText('All Assets (342)');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Concept: 342 assets' }));
+
+      await waitFor(() =>
+        expect(vi.mocked(api.listAssetLibrary).mock.calls.at(-1)![1]).toMatchObject({
+          pipelineStages: ['concept'],
+        }),
+      );
+
+      vi.mocked(api.listAssetLibrary).mockResolvedValue(libraryPage([asset()], [summary()], 342));
+      await screen.findByText('All Assets (342)');
+    });
+
+    it('clears the stage filter on a second click of the same card', async () => {
+      vi.mocked(api.listAssetLibrary).mockResolvedValue(libraryPage([asset()], [summary()]));
+      vi.mocked(api.getAssetPipelineStageCounts).mockResolvedValue({ concept: 1 });
+
+      renderWorkspace();
+
+      const card = await screen.findByRole('button', { name: 'Concept: 1 asset' });
+      fireEvent.click(card);
+      await waitFor(() =>
+        expect(vi.mocked(api.listAssetLibrary).mock.calls.at(-1)![1]).toMatchObject({
+          pipelineStages: ['concept'],
+        }),
+      );
+
+      fireEvent.click(card);
+      await waitFor(() =>
+        expect(vi.mocked(api.listAssetLibrary).mock.calls.at(-1)![1]).toMatchObject({
+          pipelineStages: undefined,
+        }),
+      );
+    });
+
+    it('enables the Pipeline position in the switcher and groups assets by stage', async () => {
+      vi.mocked(api.listAssetLibrary).mockImplementation((_projectId, params) => {
+        if (params?.pipelineStages?.includes('concept')) {
+          return Promise.resolve(libraryPage([asset()], [summary()]));
+        }
+        return Promise.resolve(libraryPage([], []));
+      });
+      vi.mocked(api.getAssetPipelineStageCounts).mockResolvedValue({ concept: 1 });
+
+      renderWorkspace();
+      await screen.findByText('No assets yet'); // the unfiltered grid, before any stage is chosen
+
+      const pipelineButton = screen.getByRole('button', { name: 'Pipeline' });
+      expect(pipelineButton).toHaveProperty('disabled', false);
+      // Collections (#227) fills the switcher's other reserved slot.
+      expect(screen.getByRole('button', { name: 'Collections' })).toHaveProperty('disabled', false);
+
+      fireEvent.click(pipelineButton);
+
+      await waitFor(() => expect(screen.getAllByText('kael-suit.png')).toHaveLength(1));
+      expect(screen.getByText('In Progress')).toBeDefined();
+      expect(screen.getByText('Production Ready')).toBeDefined();
+      // The strip is a grid/list affordance — it does not also render under the Pipeline view.
+      expect(screen.queryByText('Asset Pipeline')).toBeNull();
+    });
+
+    it('drilling into a stage from the Pipeline view switches to Grid, filtered', async () => {
+      vi.mocked(api.listAssetLibrary).mockImplementation((_projectId, params) => {
+        if (params?.pipelineStages?.includes('concept')) {
+          return Promise.resolve(libraryPage([asset()], [summary()]));
+        }
+        return Promise.resolve(libraryPage([], []));
+      });
+      vi.mocked(api.getAssetPipelineStageCounts).mockResolvedValue({ concept: 1 });
+
+      renderWorkspace();
+      fireEvent.click(screen.getByRole('button', { name: 'Pipeline' }));
+
+      const tile = await screen.findByRole('button', { name: 'kael-suit.png' });
+      fireEvent.click(tile);
+
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Grid' }).getAttribute('aria-pressed')).toBe(
+          'true',
+        ),
+      );
+      await waitFor(() =>
+        expect(vi.mocked(api.listAssetLibrary).mock.calls.at(-1)![1]).toMatchObject({
+          pipelineStages: ['concept'],
+        }),
+      );
+    });
+
+    it('persists a choice of the Pipeline view across a remount', async () => {
+      vi.mocked(api.listAssetLibrary).mockResolvedValue(libraryPage([], []));
+      vi.mocked(api.getAssetPipelineStageCounts).mockResolvedValue({});
+
+      const { unmount } = renderWorkspace();
+      fireEvent.click(await screen.findByRole('button', { name: 'Pipeline' }));
+      await screen.findAllByText('No assets in this stage yet');
+      unmount();
+
+      renderWorkspace();
+      await screen.findAllByText('No assets in this stage yet');
+      expect(screen.getByRole('button', { name: 'Pipeline' }).getAttribute('aria-pressed')).toBe(
+        'true',
+      );
+    });
+  });
+
   describe('collections rail and view', () => {
     it('shows every collection with its count and cover, reading both from the read model', async () => {
       const props = collectionEntity({ id: 'col_props', name: 'Props & Gear' });
@@ -762,7 +891,7 @@ describe('Assets workspace', () => {
       await screen.findByText('No collections yet');
     });
 
-    it('enables the Collections slot in the switcher, leaving Pipeline reserved', async () => {
+    it('enables the Collections slot in the switcher, alongside Pipeline', async () => {
       mockCollections([]);
       renderWorkspace();
       await screen.findByText('No collections yet');
@@ -770,7 +899,7 @@ describe('Assets workspace', () => {
       const collectionsButton = screen.getByRole('button', { name: 'Collections' });
       const pipelineButton = screen.getByRole('button', { name: 'Pipeline' });
       expect(collectionsButton).toHaveProperty('disabled', false);
-      expect(pipelineButton).toHaveProperty('disabled', true);
+      expect(pipelineButton).toHaveProperty('disabled', false);
     });
 
     it('opens the Collections view from the switcher and groups assets by collection', async () => {

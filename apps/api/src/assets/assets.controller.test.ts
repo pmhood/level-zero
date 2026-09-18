@@ -576,6 +576,84 @@ describe('pipeline stage', () => {
   });
 });
 
+describe('pipeline stage counts', () => {
+  it('reports active counts per stage, agreeing with the filtered listing total', async () => {
+    const concept = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'concept.png',
+        mimeType: 'image/png',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+    const inProgress = await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'in-progress.png',
+        mimeType: 'image/png',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+    await http()
+      .post(`/api/projects/${project.id}/assets/${inProgress.body.id}/pipeline-stage`)
+      .send({ stage: 'in_progress' })
+      .expect(201);
+
+    const counts = await http()
+      .get(`/api/projects/${project.id}/assets/pipeline-stage-counts`)
+      .expect(200);
+
+    expect(counts.body).toEqual({ concept: 1, in_progress: 1 });
+
+    const filtered = await http()
+      .get(`/api/projects/${project.id}/assets`)
+      .query({ pipelineStages: ['concept'] })
+      .expect(200);
+
+    expect(filtered.body.total).toBe(counts.body.concept);
+    expect(concept.body.pipelineStage).toBe('concept');
+  });
+
+  it('omits a stage with no active assets rather than reporting zero', async () => {
+    await http()
+      .post(`/api/projects/${project.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'concept.png',
+        mimeType: 'image/png',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+
+    const counts = await http()
+      .get(`/api/projects/${project.id}/assets/pipeline-stage-counts`)
+      .expect(200);
+
+    expect(counts.body).toEqual({ concept: 1 });
+    expect(counts.body.production_ready).toBeUndefined();
+  });
+
+  it('never counts another project into this one', async () => {
+    await http()
+      .post(`/api/projects/${otherProject.id}/assets`)
+      .send({
+        kind: 'image',
+        filename: 'other-project.png',
+        mimeType: 'image/png',
+        contentBase64: pngBase64,
+      })
+      .expect(201);
+
+    const counts = await http()
+      .get(`/api/projects/${project.id}/assets/pipeline-stage-counts`)
+      .expect(200);
+
+    expect(counts.body).toEqual({});
+  });
+});
+
 describe('asset library summaries', () => {
   async function uploadAsset(filename: string): Promise<string> {
     const created = await http()
