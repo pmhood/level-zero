@@ -5,12 +5,18 @@ import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { useDuplicateGddDocument, useGddDocuments } from './use-gdd-documents';
+import {
+  useApplyGddStartingStructure,
+  useCreateGddDocument,
+  useDuplicateGddDocument,
+  useGddDocuments,
+} from './use-gdd-documents';
 
 vi.mock('@/lib/api', () => ({
   listDocuments: vi.fn(),
   getDocument: vi.fn(),
   createDocument: vi.fn(),
+  applyDocumentStartingStructure: vi.fn(),
 }));
 
 const api = await import('@/lib/api');
@@ -130,5 +136,55 @@ describe('useDuplicateGddDocument', () => {
       expect.not.objectContaining({ currentVersionId: expect.anything() }),
     );
     expect(created.entity.id).toBe('doc_2');
+  });
+});
+
+/**
+ * Offered, not imposed (#189): the same create endpoint either way, with the
+ * starting structure's body attached only when a writer opted into it.
+ */
+describe('useCreateGddDocument', () => {
+  it('creates a plain document when the structure is not requested', async () => {
+    vi.mocked(api.createDocument).mockResolvedValue(document());
+
+    const { result } = renderHook(() => useCreateGddDocument('prj_1'), { wrapper });
+    await result.current.mutateAsync({ name: 'Combat Brief' });
+
+    expect(api.createDocument).toHaveBeenCalledWith('prj_1', { name: 'Combat Brief' });
+  });
+
+  it('attaches the GDD starting structure as the starting body when chosen', async () => {
+    vi.mocked(api.createDocument).mockResolvedValue(document());
+
+    const { result } = renderHook(() => useCreateGddDocument('prj_1'), { wrapper });
+    await result.current.mutateAsync({ name: 'Combat Brief', startingStructure: true });
+
+    expect(api.createDocument).toHaveBeenCalledWith('prj_1', {
+      name: 'Combat Brief',
+      content: expect.objectContaining({ type: 'doc' }),
+    });
+  });
+});
+
+describe('useApplyGddStartingStructure', () => {
+  it('seeds the document that has nothing in it yet', async () => {
+    vi.mocked(api.applyDocumentStartingStructure).mockResolvedValue(
+      document({
+        content: {
+          type: 'doc',
+          content: [{ type: 'heading', content: [{ type: 'text', text: 'High Concept' }] }],
+        },
+      }),
+    );
+
+    const { result } = renderHook(() => useApplyGddStartingStructure('prj_1', 'doc_1'), {
+      wrapper,
+    });
+    const applied = await result.current.mutateAsync();
+
+    expect(api.applyDocumentStartingStructure).toHaveBeenCalledWith('prj_1', 'doc_1');
+    expect(applied.content.content).toEqual([
+      { type: 'heading', content: [{ type: 'text', text: 'High Concept' }] },
+    ]);
   });
 });
