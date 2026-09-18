@@ -90,6 +90,107 @@
   color: var(--color-muted-foreground);
 }
 
+/*
+ * Callout (issue #193) — a titled, tinted aside. `data-variant` carries the
+ * fixed variant set; colour comes from the existing semantic tokens (never a
+ * new one): blue for the North Star, warning amber for a Design Note, each at
+ * the same 12%/35% background/border opacity `status-badge.tsx` already uses.
+ */
+.tiptap-surface .lz-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75em;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0.9em 1.1em;
+}
+
+.tiptap-surface .lz-callout[data-variant='northStar'] {
+  background-color: rgba(66, 165, 255, 0.12);
+  border-color: rgba(66, 165, 255, 0.35);
+}
+
+.tiptap-surface .lz-callout[data-variant='northStar'] .lz-callout-icon {
+  color: var(--color-primary);
+}
+
+.tiptap-surface .lz-callout[data-variant='note'] {
+  background-color: rgba(232, 185, 76, 0.12);
+  border-color: rgba(232, 185, 76, 0.35);
+}
+
+.tiptap-surface .lz-callout[data-variant='note'] .lz-callout-icon {
+  color: var(--color-warning);
+}
+
+.tiptap-surface .lz-callout-icon {
+  flex: none;
+  margin-top: 0.2em;
+}
+
+.tiptap-surface .lz-callout-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.tiptap-surface .lz-callout-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--color-foreground);
+}
+
+.tiptap-surface .lz-callout-body {
+  margin-top: 0.35em;
+  color: var(--color-muted-foreground);
+}
+
+.tiptap-surface .lz-callout-body > * + * {
+  margin-top: 0.5em;
+}
+
+/*
+ * Pull-quote (issue #193) — a quotation with an attribution. The inner
+ * `<blockquote>` resets the plain blockquote rule above so the two don't
+ * stack (the pull-quote supplies its own left border and mark instead).
+ */
+.tiptap-surface .lz-pull-quote {
+  margin: 0;
+}
+
+.tiptap-surface .lz-pull-quote-text {
+  position: relative;
+  margin: 0;
+  border-left: 2px solid var(--color-primary);
+  padding-left: 1.4em;
+  font-size: 1.05em;
+  font-style: italic;
+  color: var(--color-foreground);
+}
+
+.tiptap-surface .lz-pull-quote-text::before {
+  content: '\201C';
+  position: absolute;
+  left: 0.25em;
+  top: -0.2em;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: normal;
+  font-size: 1.8em;
+  line-height: 1;
+  color: var(--color-primary);
+}
+
+.tiptap-surface .lz-pull-quote-attribution {
+  margin-top: 0.5em;
+  padding-left: 1.4em;
+  font-size: 0.85em;
+  font-style: normal;
+  color: var(--color-muted-foreground);
+}
+
+.tiptap-surface .lz-pull-quote-attribution::before {
+  content: '\2014\a0';
+}
+
 .tiptap-surface code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.9em;

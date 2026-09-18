@@ -159,8 +159,10 @@ describe('matchEditorCommands', () => {
   });
 
   it('matches on the title and on extra keywords', () => {
+    // Both the built-in quote and the pull-quote (#193) carry "quote".
     expect(matchEditorCommands(BASE_EDITOR_COMMANDS, 'quo').map((c) => c.id)).toEqual([
       'blockquote',
+      'pull-quote',
     ]);
     expect(matchEditorCommands(BASE_EDITOR_COMMANDS, 'todo').map((c) => c.id)).toEqual([
       'task-list',
