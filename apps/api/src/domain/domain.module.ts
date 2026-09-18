@@ -460,6 +460,7 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
       inject: [
         ENTITY_REPOSITORY,
         PROTOTYPE_VERSION_REPOSITORY,
+        REVIEW_DECISION_REPOSITORY,
         FINDING_REPOSITORY,
         JobService,
         DOMAIN_DEPS,
@@ -467,11 +468,19 @@ export const DOMAIN_DEPS = Symbol('DOMAIN_DEPS');
       useFactory: (
         entities: EntityRepository,
         prototypeVersions: PrototypeVersionRepository,
+        reviewDecisions: ReviewDecisionRepository,
         findings: FindingRepository,
         jobs: JobService,
         deps: EntityServiceDeps,
       ): ConsistencyScanService =>
-        new ConsistencyScanService(entities, prototypeVersions, findings, jobs, deps),
+        new ConsistencyScanService(
+          entities,
+          prototypeVersions,
+          reviewDecisions,
+          findings,
+          jobs,
+          deps,
+        ),
     },
     {
       provide: COMMENT_REPOSITORY,

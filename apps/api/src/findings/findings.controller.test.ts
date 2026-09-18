@@ -18,6 +18,7 @@ import {
   InMemoryJobRepository,
   InMemoryProjectRepository,
   InMemoryPrototypeVersionRepository,
+  InMemoryReviewDecisionRepository,
 } from '@level-zero/domain/testing';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
@@ -77,6 +78,7 @@ beforeEach(async () => {
   scans = new ConsistencyScanService(
     new InMemoryEntityRepository(),
     new InMemoryPrototypeVersionRepository(),
+    new InMemoryReviewDecisionRepository(),
     findingRepo,
     jobs,
     deps,

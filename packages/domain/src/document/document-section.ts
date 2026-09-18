@@ -37,6 +37,39 @@ export function documentSections(content: DocumentContent): DocumentSection[] {
 }
 
 /**
+ * The entities each section's prose points at, keyed by the section's id.
+ *
+ * A section's *extent* is the top-level nodes after its heading, up to the next
+ * heading of any level — so an entity named in 3.2 belongs to 3.2 and not also
+ * to 3 (docs/decisions/gdd-section-identity.md §4). A heading's own words are
+ * outside its extent, and prose before the first section belongs to no section.
+ *
+ * Any node carrying a non-empty `entityId` attribute counts, whatever it calls
+ * itself: mentions and embeds both store the reference that way, and the domain
+ * carries the editor's custom nodes through without learning their names.
+ */
+export function documentSectionReferences(content: DocumentContent): Map<string, string[]> {
+  const sections = new Map<string, Set<string>>();
+  let extent: Set<string> | null = null;
+
+  for (const node of topLevelNodes(content)) {
+    if (isHeading(node)) {
+      const id = sectionIdOf(node);
+      if (id === null) {
+        extent = null;
+        continue;
+      }
+      extent = sections.get(id) ?? new Set();
+      sections.set(id, extent);
+      continue;
+    }
+    if (extent) collectEntityIds(node, extent);
+  }
+
+  return new Map([...sections].map(([id, ids]) => [id, [...ids]]));
+}
+
+/**
  * Mints ids for headings without one and re-mints duplicates, the first
  * occurrence in reading order keeping the id it had.
  *
@@ -98,6 +131,20 @@ function sectionIdOf(node: ContentNode): string | null {
 function headingLevel(node: ContentNode): number {
   const level = node.attrs?.level;
   return typeof level === 'number' ? level : 1;
+}
+
+/** Every non-empty `entityId` attribute under `node`, however deeply it is nested. */
+function collectEntityIds(node: unknown, into: Set<string>): void {
+  if (Array.isArray(node)) {
+    for (const child of node) collectEntityIds(child, into);
+    return;
+  }
+  if (typeof node !== 'object' || node === null) return;
+
+  const { attrs, content } = node as { attrs?: Record<string, unknown>; content?: unknown };
+  const entityId = attrs?.entityId;
+  if (typeof entityId === 'string' && entityId.length > 0) into.add(entityId);
+  if (content !== undefined) collectEntityIds(content, into);
 }
 
 /** A heading's own words. Its children are text nodes, whatever marks they carry. */

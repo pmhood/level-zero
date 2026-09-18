@@ -1,8 +1,15 @@
-import type { AnchoredReviewStatus, Comment, CommentThread } from '@level-zero/domain';
+import type {
+  AnchoredReviewStatus,
+  Comment,
+  CommentThread,
+  Finding,
+  FindingEvidence,
+} from '@level-zero/domain';
 import { describe, expect, it } from 'vitest';
 
 import {
   orphanedAnchors,
+  sectionFindings,
   sectionHeading,
   sectionStates,
   sectionTarget,
@@ -105,5 +112,66 @@ describe('sectionHeading', () => {
   it('names a heading nobody has titled yet', () => {
     expect(sectionHeading('  ')).toBe('Untitled section');
     expect(sectionHeading('Core loop')).toBe('Core loop');
+  });
+});
+
+describe('sectionFindings', () => {
+  function finding(id: string, evidence: FindingEvidence[]): Finding {
+    return {
+      id,
+      projectId: 'prj_1',
+      checkId: 'stale-section-reference',
+      fingerprint: id,
+      origin: 'deterministic',
+      generationId: null,
+      severity: 'warning',
+      summary: 'Kael has changed.',
+      evidence,
+      status: 'open',
+      firstSeenAt: new Date('2026-03-02T09:00:00.000Z'),
+      lastSeenAt: new Date('2026-03-02T09:00:00.000Z'),
+      resolvedAt: null,
+      dismissedAt: null,
+      dismissedBy: null,
+      dismissedReason: null,
+    };
+  }
+
+  const onSection = (id: string, anchor: string) =>
+    finding(id, [
+      { entityId: 'doc_1', anchor, where: 'Core loop', states: 'approved' },
+      { entityId: 'ent_kael', where: 'Kael', states: 'has changed' },
+    ]);
+
+  it('groups findings by the section their evidence addresses', () => {
+    const grouped = sectionFindings(
+      [onSection('fnd_1', 'section-core-loop'), onSection('fnd_2', 'section-pillars')],
+      'doc_1',
+    );
+
+    expect([...grouped.keys()]).toEqual(['section-core-loop', 'section-pillars']);
+    expect(grouped.get('section-core-loop')?.map((item) => item.id)).toEqual(['fnd_1']);
+  });
+
+  it('collects every finding about one section', () => {
+    const grouped = sectionFindings(
+      [onSection('fnd_1', 'section-core-loop'), onSection('fnd_2', 'section-core-loop')],
+      'doc_1',
+    );
+
+    expect(grouped.get('section-core-loop')?.map((item) => item.id)).toEqual(['fnd_1', 'fnd_2']);
+  });
+
+  it('leaves out evidence with no anchor, which is about the whole document', () => {
+    const wholeDocument = finding('fnd_1', [
+      { entityId: 'doc_1', where: 'Game Design Document', states: 'also named GDD' },
+      { entityId: 'doc_2', where: 'GDD', states: 'also named Game Design Document' },
+    ]);
+
+    expect(sectionFindings([wholeDocument], 'doc_1').size).toBe(0);
+  });
+
+  it('leaves out an anchor that belongs to another document', () => {
+    expect(sectionFindings([onSection('fnd_1', 'section-core-loop')], 'doc_2').size).toBe(0);
   });
 });

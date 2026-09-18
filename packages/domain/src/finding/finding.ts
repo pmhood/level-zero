@@ -47,6 +47,14 @@ export interface FindingEvidence {
   entityId: string;
   /** Set when the evidence is a specific pinned version rather than the entity as it stands. */
   entityVersionId?: string;
+  /**
+   * A stable address inside the entity, the same one `ReviewTarget.anchor`
+   * uses — today, the minted `sectionId` of a GDD section
+   * (docs/decisions/gdd-section-identity.md §3). Stored and matched, never
+   * parsed, so a surface that knows about sections can show the finding on the
+   * one it is about instead of reading `where`, which is prose.
+   */
+  anchor?: string;
   where: string;
   /** What that place asserts, already formatted: `120 s`, `v3`, `Oxygen Management`. */
   states: string;
@@ -234,6 +242,10 @@ function normalizeEvidence(evidence: readonly FindingEvidence[]): FindingEvidenc
       item.entityVersionId === undefined
         ? undefined
         : requireText(`evidence[${index}].entityVersionId`, item.entityVersionId, 200),
+    anchor:
+      item.anchor === undefined
+        ? undefined
+        : requireText(`evidence[${index}].anchor`, item.anchor, 200),
     where: requireText(`evidence[${index}].where`, item.where, MAX_FINDING_EVIDENCE_WHERE_LENGTH),
     states: requireText(
       `evidence[${index}].states`,
