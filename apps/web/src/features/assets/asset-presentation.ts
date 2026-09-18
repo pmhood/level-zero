@@ -1,4 +1,4 @@
-import type { Asset, AssetKind, AssetSummary } from '@level-zero/domain';
+import type { Asset, AssetKind, AssetPipelineStage, AssetSummary } from '@level-zero/domain';
 import type { StatusTone } from '@level-zero/ui';
 
 const ASSET_KIND_LABELS: Record<AssetKind, string> = {
@@ -13,6 +13,22 @@ const ASSET_KIND_LABELS: Record<AssetKind, string> = {
 
 export function assetKindLabel(kind: AssetKind): string {
   return ASSET_KIND_LABELS[kind];
+}
+
+/**
+ * The Level Zero name for each of #229's three stages
+ * (`docs/decisions/asset-library-model.md` §6.3). `production_ready` is the
+ * same stage as the Build workspace's "Engine Ready" — one vocabulary, not
+ * two, so the Assets workspace never shows that second name.
+ */
+const ASSET_PIPELINE_STAGE_LABELS: Record<AssetPipelineStage, string> = {
+  concept: 'Concept',
+  in_progress: 'In Progress',
+  production_ready: 'Production Ready',
+};
+
+export function assetPipelineStageLabel(stage: AssetPipelineStage): string {
+  return ASSET_PIPELINE_STAGE_LABELS[stage];
 }
 
 export interface AssetBadge {

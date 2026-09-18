@@ -131,6 +131,40 @@ describe('POST /projects/:projectId/documents', () => {
   });
 });
 
+describe('POST /projects/:projectId/documents/:documentId/starting-structure', () => {
+  it('seeds the GDD sections into a document that has nothing in it', async () => {
+    const documentId = await createGdd();
+
+    const response = await http()
+      .post(`${documentsUrl()}/${documentId}/starting-structure`)
+      .send()
+      .expect(201);
+
+    expect(response.body.content.content[0]).toMatchObject({
+      type: 'heading',
+      content: [{ type: 'text', text: 'High Concept' }],
+    });
+
+    const reloaded = await http().get(`${documentsUrl()}/${documentId}`).expect(200);
+    expect(reloaded.body.content).toEqual(response.body.content);
+  });
+
+  it('refuses once the document already holds content', async () => {
+    const documentId = await createGdd();
+    await http()
+      .put(`${documentsUrl()}/${documentId}/content`)
+      .send({ content: prose('Already writing.') })
+      .expect(200);
+
+    const response = await http()
+      .post(`${documentsUrl()}/${documentId}/starting-structure`)
+      .send()
+      .expect(400);
+
+    expect(response.body).toMatchObject({ error: 'validation_failed' });
+  });
+});
+
 describe('GET /projects/:projectId/documents', () => {
   it('lists the project documents and nothing else', async () => {
     await createGdd();

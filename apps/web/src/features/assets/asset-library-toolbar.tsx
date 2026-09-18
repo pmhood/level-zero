@@ -29,7 +29,7 @@ import {
   type AssetSortOption,
   type MimeFamilyOption,
 } from './asset-library-filters';
-import { assetKindLabel } from './asset-presentation';
+import { assetKindLabel, assetPipelineStageLabel } from './asset-presentation';
 import { LinkedEntityFilter } from './linked-entity-filter';
 
 const ORIGIN_LABELS: Record<AssetOrigin, string> = {
@@ -295,6 +295,11 @@ export function AssetLibraryToolbar({
               entityId={filters.linkedEntityId}
               onRemove={() => clearFilter('linkedEntityId')}
             />
+          )}
+          {filters.pipelineStage && (
+            <Tag onRemove={() => clearFilter('pipelineStage')}>
+              {`Stage: ${assetPipelineStageLabel(filters.pipelineStage)}`}
+            </Tag>
           )}
           {filters.createdAfter && (
             <Tag onRemove={() => clearFilter('createdAfter')}>{`From ${filters.createdAfter}`}</Tag>

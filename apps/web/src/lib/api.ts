@@ -8,6 +8,7 @@ import type {
   AssetMark,
   AssetMarkKind,
   AssetOrigin,
+  AssetPipelineStage,
   AssetSelection,
   AssetSelectionContext,
   AssetSelectionState,
@@ -385,6 +386,14 @@ export function createDocument(projectId: string, input: CreateDocumentInput): P
   return post(`/api/projects/${projectId}/documents`, input);
 }
 
+/** Seeds the GDD starting structure into a document that has nothing in it yet (#189). */
+export function applyDocumentStartingStructure(
+  projectId: string,
+  documentId: string,
+): Promise<Document> {
+  return post(`/api/projects/${projectId}/documents/${documentId}/starting-structure`);
+}
+
 /** Autosave. The API replaces the body and deliberately writes no version. */
 export function saveDocumentContent(
   projectId: string,
@@ -505,6 +514,10 @@ export interface ListAssetLibraryParams {
   markKinds?: AssetMarkKind[];
   selectionStates?: AssetSelectionState[];
   linkedEntityId?: string;
+  /** Asset matches when its pipeline stage is one of these (#229/#230). */
+  pipelineStages?: AssetPipelineStage[];
+  /** Matches assets filed in this collection (#226/#227) — not yet exposed as a toolbar filter. */
+  collectionId?: string;
   /** Inclusive lower bound on `createdAt`, as an ISO date string. */
   createdAfter?: string;
   /** Exclusive upper bound on `createdAt`, as an ISO date string. */
@@ -550,6 +563,18 @@ export function listGenerationsForAsset(
 
 export function getAsset(projectId: string, assetId: string): Promise<Asset> {
   return apiFetch(`/api/projects/${projectId}/assets/${assetId}`);
+}
+
+/**
+ * Active asset counts per pipeline stage, project-wide (issue #230's strip)
+ * — the same grouped read `AssetLibraryService.stageCounts` exposes, not one
+ * `listAssetLibrary` call per stage. A stage with no active assets is simply
+ * absent from the result rather than present with `0`.
+ */
+export function getAssetPipelineStageCounts(
+  projectId: string,
+): Promise<Partial<Record<AssetPipelineStage, number>>> {
+  return apiFetch(`/api/projects/${projectId}/assets/pipeline-stage-counts`);
 }
 
 export interface UploadAssetInput {
@@ -645,6 +670,25 @@ export function archiveAsset(projectId: string, assetId: string): Promise<Asset>
 
 export function restoreAsset(projectId: string, assetId: string): Promise<Asset> {
   return post(`/api/projects/${projectId}/assets/${assetId}/restore`);
+}
+
+// --- Asset collections ------------------------------------------------------
+
+/**
+ * Active member counts for every collection in the project that has at
+ * least one — the rail's counts (#227), read from the same aggregate the
+ * listing's `total` agrees with, not counted from a fetched page.
+ */
+export function collectionCounts(projectId: string): Promise<Record<string, number>> {
+  return apiFetch(`/api/projects/${projectId}/asset-collections/counts`);
+}
+
+/**
+ * The derived cover for every collection that has at least one active
+ * member — the newest one filed into it. Absent for a collection with none.
+ */
+export function collectionCovers(projectId: string): Promise<Record<string, Asset>> {
+  return apiFetch(`/api/projects/${projectId}/asset-collections/covers`);
 }
 
 // --- Generations ----------------------------------------------------------

@@ -227,3 +227,53 @@ describe('collection counts', () => {
     expect(response.body).toEqual({});
   });
 });
+
+describe('collection covers', () => {
+  // The "newest by edge createdAt" ordering itself — the part that matters
+  // when more than one member is active at once — is
+  // `DrizzleAssetLibraryReadModel.coversByCollection`'s own integration test,
+  // where each edge is stamped at a controlled, distinct timestamp. Every
+  // relationship in this suite shares one `fixedClock`, so two active
+  // members here would tie on `createdAt` and fall to an id tiebreak that
+  // says nothing about which one this test filed second — these cases stay
+  // to exactly one active candidate so the wiring is what's under test.
+  it('reports the sole active member as the cover', async () => {
+    const board = await collection();
+    const asset = await image('reef.png');
+    await http()
+      .post(collectionsPath(project.id, `/${board.id}/assets`))
+      .send({ assetId: asset.id })
+      .expect(201);
+
+    const response = await http().get(collectionsPath(project.id, '/covers')).expect(200);
+
+    expect(response.body[board.id]).toMatchObject({ id: asset.id, filename: 'reef.png' });
+  });
+
+  it('omits a collection with no active members', async () => {
+    await collection();
+
+    const response = await http().get(collectionsPath(project.id, '/covers')).expect(200);
+
+    expect(response.body).toEqual({});
+  });
+
+  it('falls back to the remaining active member once the other is archived', async () => {
+    const board = await collection();
+    const archived = await image('a.png');
+    const active = await image('b.png');
+    await http()
+      .post(collectionsPath(project.id, `/${board.id}/assets`))
+      .send({ assetId: archived.id })
+      .expect(201);
+    await http()
+      .post(collectionsPath(project.id, `/${board.id}/assets`))
+      .send({ assetId: active.id })
+      .expect(201);
+    await assets.archive(project.id, archived.id);
+
+    const response = await http().get(collectionsPath(project.id, '/covers')).expect(200);
+
+    expect(response.body[board.id]).toMatchObject({ id: active.id });
+  });
+});

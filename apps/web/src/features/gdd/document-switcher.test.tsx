@@ -135,6 +135,30 @@ describe('DocumentSwitcher', () => {
     await waitFor(() => expect(push).toHaveBeenCalledWith('/projects/prj_1/gdd/doc_new'));
   });
 
+  it('creates a document from the GDD starting structure when offered and chosen', async () => {
+    vi.mocked(api.createDocument).mockResolvedValue(
+      documentOf(entity({ id: 'doc_new', name: 'Combat Brief' })),
+    );
+    renderSwitcher(entity());
+    await openSwitcher();
+
+    fireEvent.change(screen.getByLabelText('New document name'), {
+      target: { value: 'Combat Brief' },
+    });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Start from the GDD structure' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    await waitFor(() =>
+      expect(api.createDocument).toHaveBeenCalledWith(
+        'prj_1',
+        expect.objectContaining({
+          name: 'Combat Brief',
+          content: expect.objectContaining({ type: 'doc' }),
+        }),
+      ),
+    );
+  });
+
   it('duplicates the current document with a fresh id and no history', async () => {
     vi.mocked(api.getDocument).mockResolvedValue(
       documentOf(entity({ data: { content: { type: 'doc', content: [] } } })),

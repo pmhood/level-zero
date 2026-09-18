@@ -5,6 +5,7 @@ import {
   type AssetLibraryPage,
   type AssetListFilter,
   type AssetPage,
+  type AssetPipelineStage,
 } from '@level-zero/domain';
 import { Body, Controller, Get, Param, Post, Query, Res } from '@nestjs/common';
 import { type Response } from 'express';
@@ -82,6 +83,20 @@ export class AssetsController {
     }
 
     return this.assets.listByProject(projectId, filter);
+  }
+
+  /**
+   * Active asset counts per pipeline stage (issue #230's strip, reading
+   * #229's `AssetLibraryService.stageCounts`) — one grouped read rather than
+   * a `listByProject` call per stage. Declared before `:assetId` so the
+   * literal path wins, the same reason `asset-collections`' `/counts` comes
+   * before its own `:collectionId` routes.
+   */
+  @Get('pipeline-stage-counts')
+  pipelineStageCounts(
+    @Param('projectId') projectId: string,
+  ): Promise<Partial<Record<AssetPipelineStage, number>>> {
+    return this.library.stageCounts(projectId);
   }
 
   @Get(':assetId')
