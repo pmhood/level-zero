@@ -32,6 +32,13 @@ export interface RichTextEditorProps {
    * without reaching into the editor itself.
    */
   onSectionChange?: (sectionId: string | null) => void;
+  /**
+   * Called with the live TipTap editor once it is created, and with `null`
+   * when it is torn down — the seam a feature uses to command the editor
+   * imperatively (inserting a section, say) without this package growing a
+   * bespoke prop for every such command.
+   */
+  onEditorReady?: (editor: Editor | null) => void;
   /** Which chrome this surface shows; see `EDITOR_MODE_CONFIG`. */
   mode?: EditorMode;
   /** Overrides the mode's default placeholder. */
@@ -67,6 +74,7 @@ export function RichTextEditor({
   content,
   onChange,
   onSectionChange,
+  onEditorReady,
   mode = 'document',
   placeholder,
   editable = true,
@@ -145,6 +153,16 @@ export function RichTextEditor({
   React.useEffect(() => {
     editor?.setEditable(editable);
   }, [editor, editable]);
+
+  const onEditorReadyRef = React.useRef(onEditorReady);
+  React.useEffect(() => {
+    onEditorReadyRef.current = onEditorReady;
+  }, [onEditorReady]);
+
+  React.useEffect(() => {
+    onEditorReadyRef.current?.(editor);
+    return () => onEditorReadyRef.current?.(null);
+  }, [editor]);
 
   return (
     <div ref={surfaceRef} className={cn('relative flex min-w-0 flex-col gap-3', className)}>

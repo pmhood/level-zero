@@ -203,6 +203,101 @@ describe('GddWorkspace — review and comments', () => {
   });
 });
 
+describe('GddWorkspace — table of contents', () => {
+  it('numbers sections and groups the run after "Appendices" separately', async () => {
+    vi.mocked(api.getDocument).mockResolvedValue(
+      document({
+        content: {
+          type: 'doc',
+          content: [
+            { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Vision' }] },
+            {
+              type: 'heading',
+              attrs: { level: 1 },
+              content: [{ type: 'text', text: 'Appendices' }],
+            },
+            {
+              type: 'heading',
+              attrs: { level: 1 },
+              content: [{ type: 'text', text: 'Changelog' }],
+            },
+          ],
+        },
+      }),
+    );
+
+    renderWorkspace({ projectId: 'prj_1', documentId: 'doc_1' });
+
+    expect(await screen.findByTitle('Vision')).toBeDefined();
+    expect(screen.getByText('1.')).toBeDefined();
+    expect(screen.getByTitle('Appendices')).toBeDefined();
+    expect(screen.getByTitle('Changelog')).toBeDefined();
+    expect(screen.getByText('A.')).toBeDefined();
+  });
+
+  it('jumps to the section addressed by its id rather than by counting heading tags', async () => {
+    vi.mocked(api.getDocument).mockResolvedValue(
+      document({
+        content: {
+          type: 'doc',
+          content: [
+            { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Vision' }] },
+            {
+              type: 'heading',
+              attrs: { level: 2 },
+              content: [{ type: 'text', text: 'Core loop' }],
+            },
+          ],
+        },
+      }),
+    );
+
+    // jsdom does not implement `scrollIntoView` at all, so it has to be
+    // defined before it can be spied on.
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+
+    renderWorkspace({ projectId: 'prj_1', documentId: 'doc_1' });
+
+    await screen.findByTitle('Core loop');
+
+    // The section id is minted asynchronously once the editor mounts; retry
+    // the click until it lands rather than assuming it has happened already.
+    await waitFor(() => {
+      fireEvent.click(screen.getByTitle('Core loop'));
+      expect(scrollIntoView).toHaveBeenCalled();
+    });
+    const scrolled = scrollIntoView.mock.instances.at(-1) as HTMLElement;
+    expect(scrolled.textContent).toBe('Core loop');
+
+    Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+  });
+
+  it('adds a section from the outline and shows it there', async () => {
+    vi.mocked(api.getDocument).mockResolvedValue(document());
+
+    renderWorkspace({ projectId: 'prj_1', documentId: 'doc_1' });
+
+    await screen.findByRole('button', { name: 'Add Section' });
+
+    // The editor announces itself to the outline asynchronously once it
+    // mounts, so retry the click until the section actually lands.
+    await waitFor(() => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add Section' }));
+      expect(screen.queryByTitle('Untitled section')).not.toBeNull();
+    });
+    expect(screen.getByText('1.')).toBeDefined();
+  });
+
+  it('offers a way into the outline at narrow widths instead of hiding it', async () => {
+    vi.mocked(api.getDocument).mockResolvedValue(document());
+
+    renderWorkspace({ projectId: 'prj_1', documentId: 'doc_1' });
+
+    expect(await screen.findByRole('button', { name: 'Show table of contents' })).toBeDefined();
+  });
+});
+
 describe('GddWorkspace — archived documents', () => {
   it('opens read-only, with no editing toolbar and no way to start editing', async () => {
     vi.mocked(api.getDocument).mockResolvedValue(

@@ -91,7 +91,7 @@ export { EditorToolbar, type EditorToolbarProps } from './editor/editor-toolbar'
 export { MarkdownPaste, looksLikeMarkdown } from './editor/markdown-paste';
 export { SaveStatusLabel, type SaveStatusLabelProps } from './editor/save-status-label';
 /** A GDD section's identity lives on its heading; see `section-id.ts`. */
-export { SectionId, activeSectionId } from './editor/section-id';
+export { SectionId, activeSectionId, insertSection } from './editor/section-id';
 export {
   BASE_EDITOR_COMMANDS,
   createSlashMenuExtension,

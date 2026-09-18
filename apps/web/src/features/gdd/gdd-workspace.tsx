@@ -8,9 +8,11 @@ import {
   Inspector,
   RichTextEditor,
   SaveStatusLabel,
+  insertSection,
   useEditorAutosave,
   type AcceptedAiEdit,
   type AiEditingOptions,
+  type Editor,
   type JSONContent,
 } from '@level-zero/ui';
 import type { Route } from 'next';
@@ -38,6 +40,7 @@ import { GddHistory } from './gdd-history';
 import { GddOutline } from './gdd-outline';
 import { GddReview } from './gdd-review';
 import { gddDocumentRoute, gddRoute } from './gdd-route';
+import { sectionInView } from './scroll-position';
 import {
   GDD_DOCUMENT_NAME,
   useCreateGddDocument,
@@ -73,6 +76,10 @@ function GddDocumentEditor({
   const saveDocument = useSaveGddDocument(projectId, documentId);
   const snapshotDocument = useSnapshotGddDocument(projectId, documentId);
   const surfaceRef = useRef<HTMLDivElement>(null);
+  // The live TipTap editor, for commands the outline needs to run against it
+  // ("+ Add Section") rather than through `content`, which `RichTextEditor`
+  // only reads when the surface is created.
+  const editorRef = useRef<Editor | null>(null);
   const [aiEditError, setAiEditError] = useState<string | null>(null);
   // Compare is a mode of the document surface rather than a page of its own:
   // the writer stays where they were writing, and the outline steps aside so
@@ -162,10 +169,52 @@ function GddDocumentEditor({
     autosave.onChange(next);
   }
 
-  function scrollToHeading(index: number) {
-    const headings = surfaceRef.current?.querySelectorAll('.tiptap-surface :is(h1, h2, h3)');
-    headings?.item(index)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // Addresses the heading by the id the outline gave it, rather than counting
+  // `h1, h2, h3` nodes in the DOM: that count only agreed with the outline's
+  // own list as long as both were built the same way, which a mixed-level
+  // document broke.
+  function scrollToSection(sectionId: string) {
+    const target = surfaceRef.current?.querySelector<HTMLElement>(
+      `[data-section-id="${sectionId}"]`,
+    );
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
+
+  function handleAddSection() {
+    if (editorRef.current) insertSection(editorRef.current);
+  }
+
+  // Which section is "in view" as the writer scrolls, for the outline's own
+  // highlight — independent of `.tiptap-surface`'s heading levels, which are
+  // presentation and mix freely.
+  const updateVisibleSection = useCallback(() => {
+    const container = surfaceRef.current;
+    if (!container) return;
+
+    const containerTop = container.getBoundingClientRect().top;
+    const positions = Array.from(
+      container.querySelectorAll<HTMLElement>('.tiptap-surface [data-section-id]'),
+    ).map((element) => ({
+      id: element.dataset.sectionId ?? '',
+      top: element.getBoundingClientRect().top - containerTop + container.scrollTop,
+    }));
+
+    setActiveSectionId(sectionInView(positions, container.scrollTop));
+  }, []);
+
+  useEffect(() => {
+    const container = surfaceRef.current;
+    if (!container || comparing) return;
+
+    container.addEventListener('scroll', updateVisibleSection, { passive: true });
+    return () => container.removeEventListener('scroll', updateVisibleSection);
+  }, [comparing, updateVisibleSection]);
+
+  // Headings move, appear and disappear as the writer types, and none of that
+  // fires a scroll event on its own.
+  useEffect(() => {
+    if (!comparing) updateVisibleSection();
+  }, [content, comparing, updateVisibleSection]);
 
   /**
    * A restore replaces the body from outside the editor's own edits, so the
@@ -242,10 +291,13 @@ function GddDocumentEditor({
             documentId={documentId}
             content={content}
             activeSectionId={activeSectionId}
-            onSelect={(heading, index) => {
-              setActiveSectionId(heading.id);
-              scrollToHeading(index);
+            canAddSection={!archived}
+            onSelect={(entry) => {
+              if (entry.id === null) return;
+              setActiveSectionId(entry.id);
+              scrollToSection(entry.id);
             }}
+            onAddSection={handleAddSection}
           />
         )}
 
@@ -281,6 +333,9 @@ function GddDocumentEditor({
                   content={content}
                   onChange={handleChange}
                   onSectionChange={setActiveSectionId}
+                  onEditorReady={(instance) => {
+                    editorRef.current = instance;
+                  }}
                   editable={!archived}
                   extensions={referenceExtensions}
                   commands={ENTITY_EMBED_COMMANDS}

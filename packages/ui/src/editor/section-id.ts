@@ -119,6 +119,41 @@ export const SectionId = Extension.create({
   },
 });
 
+/** Whether a top-level heading is the one that opens the Appendices group. */
+function isAppendixHeading(node: ProseMirrorNode): boolean {
+  if (node.type.name !== 'heading' || node.attrs.level !== 1) return false;
+  const text = node.textContent.trim().toLowerCase();
+  return text === 'appendices' || text === 'appendix';
+}
+
+/**
+ * Inserts a level-1 heading with an empty paragraph after it and puts the
+ * caret in the heading — what "+ Add Section" creates and nothing else: no
+ * row, no API call, no record (docs/decisions/gdd-section-identity.md §7).
+ * The section becomes addressable the moment the mint pass above reaches it,
+ * which is the very next transaction.
+ *
+ * Lands at the end of the document, or immediately before the Appendices
+ * group when there is one — otherwise the new section would land among the
+ * appendices and be lettered instead of numbered.
+ */
+export function insertSection(editor: Editor): void {
+  const { doc } = editor.state;
+  let pos = doc.content.size;
+
+  doc.forEach((node, offset) => {
+    if (pos === doc.content.size && isAppendixHeading(node)) pos = offset;
+  });
+
+  editor
+    .chain()
+    .focus()
+    .insertContentAt(pos, [{ type: 'heading', attrs: { level: 1 } }, { type: 'paragraph' }])
+    .setTextSelection(pos + 1)
+    .scrollIntoView()
+    .run();
+}
+
 /**
  * The section the selection sits in: the nearest top-level heading at or before
  * it. Null before the document's first heading, and for a heading the mint pass
