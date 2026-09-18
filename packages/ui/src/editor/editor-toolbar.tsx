@@ -4,7 +4,9 @@ import * as React from 'react';
 
 import { Button, type ButtonProps } from '../button';
 import { cn } from '../cn';
+import { insertCallout } from './callout';
 import type { ToolbarGroup } from './editor-modes';
+import { insertPullQuote } from './pull-quote';
 
 /**
  * The design system's small ghost button (spec section 14/16), plus the one
@@ -203,6 +205,10 @@ export function EditorToolbar({ editor, groups, actions }: EditorToolbarProps) {
           Table
         </ToolbarButton>
         <ToolbarButton onClick={insertImage}>Image</ToolbarButton>
+        <ToolbarButton onClick={() => editor && insertCallout(editor, 'note')}>
+          Callout
+        </ToolbarButton>
+        <ToolbarButton onClick={() => editor && insertPullQuote(editor)}>Pull-quote</ToolbarButton>
       </>
     ),
     export: (

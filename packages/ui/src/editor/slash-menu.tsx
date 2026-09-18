@@ -5,6 +5,8 @@ import Suggestion, { type SuggestionKeyDownProps, type SuggestionProps } from '@
 import * as React from 'react';
 
 import { cn } from '../cn';
+import { CALLOUT_VARIANT_CONFIG, CALLOUT_VARIANTS, insertCallout } from './callout';
+import { insertPullQuote } from './pull-quote';
 
 export interface EditorCommand {
   id: string;
@@ -64,6 +66,26 @@ export const BASE_EDITOR_COMMANDS: EditorCommand[] = [
     title: 'Quote',
     keywords: ['blockquote'],
     run: (editor, range) => editor.chain().focus().deleteRange(range).toggleBlockquote().run(),
+  },
+  // One command per callout variant, so the menu names each precisely
+  // (CALLOUT_VARIANT_CONFIG lives with the node in `callout.tsx`; this file
+  // stays the one place all base commands, including these, are assembled).
+  ...CALLOUT_VARIANTS.map((variant): EditorCommand => {
+    const config = CALLOUT_VARIANT_CONFIG[variant];
+    return {
+      id: `callout-${variant}`,
+      title: config.title,
+      hint: config.hint,
+      keywords: ['callout', 'aside', variant === 'northStar' ? 'vision' : 'note'],
+      run: (editor, range) => insertCallout(editor, variant, range),
+    };
+  }),
+  {
+    id: 'pull-quote',
+    title: 'Pull-quote',
+    hint: 'A quotation with an attribution',
+    keywords: ['quote', 'blockquote', 'attribution', 'pullquote'],
+    run: (editor, range) => insertPullQuote(editor, range),
   },
   {
     id: 'code-block',
