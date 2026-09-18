@@ -27,6 +27,7 @@ describe('parseAssetLibraryFilters', () => {
       mark: 'favorite',
       selection: 'approved',
       linkedEntityId: 'ent_kael',
+      stage: 'in_progress',
       createdAfter: '2026-01-01',
       createdBefore: '2026-02-01',
       archived: '1',
@@ -41,6 +42,7 @@ describe('parseAssetLibraryFilters', () => {
       markKind: 'favorite',
       selectionState: 'approved',
       linkedEntityId: 'ent_kael',
+      pipelineStage: 'in_progress',
       createdAfter: '2026-01-01',
       createdBefore: '2026-02-01',
       includeArchived: true,
@@ -49,12 +51,17 @@ describe('parseAssetLibraryFilters', () => {
   });
 
   it('falls back to the default rather than trusting an invalid enum value', () => {
-    const params = new URLSearchParams({ kind: 'not-a-kind', sort: 'not-a-sort' });
+    const params = new URLSearchParams({
+      kind: 'not-a-kind',
+      sort: 'not-a-sort',
+      stage: 'approved_concept',
+    });
 
     const result = parseAssetLibraryFilters(params);
 
     expect(result.kind).toBeNull();
     expect(result.sort).toBe('newest');
+    expect(result.pipelineStage).toBeNull();
   });
 });
 
@@ -68,6 +75,7 @@ describe('assetLibraryFiltersToSearchParams', () => {
       search: 'crate',
       kind: 'model_3d',
       origin: 'imported',
+      pipelineStage: 'production_ready',
       includeArchived: true,
       sort: 'size',
     });
@@ -90,6 +98,7 @@ describe('assetLibraryFiltersToListParams', () => {
       markKinds: undefined,
       selectionStates: undefined,
       linkedEntityId: undefined,
+      pipelineStages: undefined,
       createdAfter: undefined,
       includeArchived: false,
     });
@@ -121,6 +130,7 @@ describe('assetLibraryFiltersToListParams', () => {
         mimeFamily: 'image',
         markKind: 'favorite',
         selectionState: 'approved',
+        pipelineStage: 'in_progress',
       }),
     );
 
@@ -128,6 +138,7 @@ describe('assetLibraryFiltersToListParams', () => {
     expect(params.mimeFamily).toEqual(['image']);
     expect(params.markKinds).toEqual(['favorite']);
     expect(params.selectionStates).toEqual(['approved']);
+    expect(params.pipelineStages).toEqual(['in_progress']);
   });
 
   it('pushes createdBefore one day out so the picked end date is included, not excluded', () => {
@@ -156,6 +167,7 @@ describe('hasActiveAssetLibraryFilters', () => {
     expect(hasActiveAssetLibraryFilters(filters({ kind: 'image' }))).toBe(true);
     expect(hasActiveAssetLibraryFilters(filters({ includeArchived: true }))).toBe(true);
     expect(hasActiveAssetLibraryFilters(filters({ linkedEntityId: 'ent_1' }))).toBe(true);
+    expect(hasActiveAssetLibraryFilters(filters({ pipelineStage: 'concept' }))).toBe(true);
   });
 
   it('does not count sort alone as a narrowing filter', () => {

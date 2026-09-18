@@ -8,6 +8,7 @@ import type {
   AssetMark,
   AssetMarkKind,
   AssetOrigin,
+  AssetPipelineStage,
   AssetSelection,
   AssetSelectionContext,
   AssetSelectionState,
@@ -513,6 +514,8 @@ export interface ListAssetLibraryParams {
   markKinds?: AssetMarkKind[];
   selectionStates?: AssetSelectionState[];
   linkedEntityId?: string;
+  /** Asset matches when its pipeline stage is one of these (#229/#230). */
+  pipelineStages?: AssetPipelineStage[];
   /** Matches assets filed in this collection (#226/#227) — not yet exposed as a toolbar filter. */
   collectionId?: string;
   /** Inclusive lower bound on `createdAt`, as an ISO date string. */
@@ -560,6 +563,18 @@ export function listGenerationsForAsset(
 
 export function getAsset(projectId: string, assetId: string): Promise<Asset> {
   return apiFetch(`/api/projects/${projectId}/assets/${assetId}`);
+}
+
+/**
+ * Active asset counts per pipeline stage, project-wide (issue #230's strip)
+ * — the same grouped read `AssetLibraryService.stageCounts` exposes, not one
+ * `listAssetLibrary` call per stage. A stage with no active assets is simply
+ * absent from the result rather than present with `0`.
+ */
+export function getAssetPipelineStageCounts(
+  projectId: string,
+): Promise<Partial<Record<AssetPipelineStage, number>>> {
+  return apiFetch(`/api/projects/${projectId}/assets/pipeline-stage-counts`);
 }
 
 export interface UploadAssetInput {
