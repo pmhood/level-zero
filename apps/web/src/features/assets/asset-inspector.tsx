@@ -1,10 +1,17 @@
 'use client';
 
-import type { Asset, AssetSummary } from '@level-zero/domain';
+import {
+  ASSET_PIPELINE_STAGES,
+  type Asset,
+  type AssetPipelineStage,
+  type AssetSummary,
+} from '@level-zero/domain';
 import {
   Button,
+  Field,
   HistoryIcon,
   Inspector,
+  Select,
   SparklesIcon,
   StatusBadge,
   Tabs,
@@ -18,11 +25,11 @@ import { apiErrorMessage, assetContentUrl, assetDownloadUrl } from '@/lib/api';
 import { AssetHistory } from './asset-history';
 import { AssetInspectorPreview } from './asset-inspector-preview';
 import { AssetOverview } from './asset-overview';
-import { assetKindLabel, assetStatusBadge } from './asset-presentation';
+import { assetKindLabel, assetPipelineStageLabel, assetStatusBadge } from './asset-presentation';
 import { AssetProvenance } from './asset-provenance';
 import { AssetReview } from './asset-review';
 import { AssetUsage } from './asset-usage';
-import { useArchiveAsset, useRestoreAsset } from './use-assets';
+import { useArchiveAsset, useRestoreAsset, useSetAssetPipelineStage } from './use-assets';
 
 /** The AI-purple treatment for the "Generated" pill — purple is for AI/generative only. */
 const AI_BADGE_CLASSNAME =
@@ -48,11 +55,10 @@ type InspectorTab = 'overview' | 'usage' | 'generation' | 'history';
  * where it came from, who uses it, what has been decided about it — and the
  * handful of actions the project can actually carry out on it today.
  *
- * Every action here is wired to infrastructure that exists. Promote to
- * Production Ready is not offered because no such state exists (#177), and
- * delete is not offered because assets archive and restore instead. The
- * generative action is the only purple one: opening, downloading, deciding and
- * archiving are ordinary interaction.
+ * Every action here is wired to infrastructure that exists. Delete is not
+ * offered because assets archive and restore instead. The generative action
+ * is the only purple one: opening, downloading, deciding, changing stage and
+ * archiving are ordinary interaction, in `--lz-blue`.
  */
 export function AssetInspector({
   projectId,
@@ -74,10 +80,11 @@ export function AssetInspector({
 
   const archive = useArchiveAsset(projectId);
   const restore = useRestoreAsset(projectId);
+  const setStage = useSetAssetPipelineStage(projectId);
 
   const archived = asset.status === 'archived';
   const badge = assetStatusBadge(asset, summary);
-  const error = archive.error ?? restore.error;
+  const error = archive.error ?? restore.error ?? setStage.error;
 
   return (
     <Inspector
@@ -140,6 +147,26 @@ export function AssetInspector({
             </Button>
           )}
         </div>
+
+        <Field label="Pipeline stage" htmlFor="asset-pipeline-stage" className="max-w-40">
+          <Select
+            id="asset-pipeline-stage"
+            value={asset.pipelineStage}
+            disabled={setStage.isPending}
+            onChange={(event) =>
+              setStage.mutate({
+                assetId: asset.id,
+                stage: event.target.value as AssetPipelineStage,
+              })
+            }
+          >
+            {ASSET_PIPELINE_STAGES.map((stage) => (
+              <option key={stage} value={stage}>
+                {assetPipelineStageLabel(stage)}
+              </option>
+            ))}
+          </Select>
+        </Field>
 
         {error != null && (
           <p className="text-xs text-error">

@@ -1,6 +1,6 @@
 'use client';
 
-import type { Asset, Generation } from '@level-zero/domain';
+import type { Asset, AssetPipelineStage, Generation } from '@level-zero/domain';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import * as api from '@/lib/api';
@@ -177,8 +177,28 @@ export function useRestoreAsset(projectId: string) {
   return useAssetMutation(projectId, (assetId: string) => api.restoreAsset(projectId, assetId));
 }
 
+export interface SetAssetPipelineStageVariables {
+  assetId: string;
+  stage: AssetPipelineStage;
+}
+
+/**
+ * Advances (or sends back) an asset's pipeline stage from the inspector
+ * (issue #231). Invalidating the same `assetKeys.all` prefix archive/restore
+ * do is what makes the change show up in the grid badge and the list without
+ * a manual refresh.
+ */
+export function useSetAssetPipelineStage(projectId: string) {
+  return useAssetMutation(projectId, ({ assetId, stage }: SetAssetPipelineStageVariables) =>
+    api.setAssetPipelineStage(projectId, assetId, stage),
+  );
+}
+
 /** Archiving changes what the listing, the badge and the lineage all say: re-read them together. */
-function useAssetMutation(projectId: string, mutationFn: (assetId: string) => Promise<Asset>) {
+function useAssetMutation<TVariables>(
+  projectId: string,
+  mutationFn: (variables: TVariables) => Promise<Asset>,
+) {
   const queryClient = useQueryClient();
 
   return useMutation({
