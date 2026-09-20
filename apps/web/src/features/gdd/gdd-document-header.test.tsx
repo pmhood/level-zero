@@ -91,6 +91,7 @@ function renderHeader(props: Partial<ComponentProps<typeof GddDocumentHeader>> =
         onToggleHistory={vi.fn()}
         onToggleReview={vi.fn()}
         onToggleAskAi={vi.fn()}
+        onToggleFind={vi.fn()}
         onExport={vi.fn()}
         {...props}
       />
@@ -168,6 +169,29 @@ describe('GddDocumentHeader — actions reach the right surface', () => {
     expect(onToggleHistory).toHaveBeenCalledOnce();
   });
 
+  it('Find opens the find-in-document field from #191', () => {
+    const onToggleFind = vi.fn();
+    renderHeader({ onToggleFind });
+
+    fireEvent.click(screen.getByRole('button', { name: /Find/ }));
+    expect(onToggleFind).toHaveBeenCalledOnce();
+  });
+
+  it('renders the find bar it is handed, as part of the same sticky strip', () => {
+    renderHeader({ findBar: <div data-testid="find-bar">Find bar</div> });
+
+    expect(screen.getByTestId('find-bar')).toBeDefined();
+  });
+
+  it('hides the find bar while comparing, along with the rest of the actions', () => {
+    renderHeader({
+      comparing: true,
+      findBar: <div data-testid="find-bar">Find bar</div>,
+    });
+
+    expect(screen.queryByTestId('find-bar')).toBeNull();
+  });
+
   it('Compare enters the existing compare mode, and offers a way back', () => {
     const onToggleCompare = vi.fn();
     const { rerender } = renderHeader({ onToggleCompare, comparing: false });
@@ -191,6 +215,7 @@ describe('GddDocumentHeader — actions reach the right surface', () => {
           onToggleHistory={vi.fn()}
           onToggleReview={vi.fn()}
           onToggleAskAi={vi.fn()}
+          onToggleFind={vi.fn()}
           onExport={vi.fn()}
         />
       </QueryClientProvider>,

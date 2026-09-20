@@ -120,6 +120,15 @@ export { SaveStatusLabel, type SaveStatusLabelProps } from './editor/save-status
 /** A GDD section's identity lives on its heading; see `section-id.ts`. */
 export { SectionId, activeSectionId, insertSection } from './editor/section-id';
 export {
+  FindInDocument,
+  findInDocumentState,
+  setFindQuery,
+  stepFindMatch,
+  type FindInDocumentState,
+  type FindMatch,
+} from './editor/find-in-document';
+export { useFindInDocument, type UseFindInDocumentResult } from './editor/use-find-in-document';
+export {
   BASE_EDITOR_COMMANDS,
   createSlashMenuExtension,
   matchEditorCommands,
