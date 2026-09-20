@@ -672,6 +672,20 @@ export function restoreAsset(projectId: string, assetId: string): Promise<Asset>
   return post(`/api/projects/${projectId}/assets/${assetId}/restore`);
 }
 
+/**
+ * Moves an asset to a new pipeline stage (#229's endpoint;
+ * `docs/decisions/asset-library-model.md` §6.3/§6.4). Any stage may move to
+ * any other — the service records the transition as an activity, this is
+ * never a bare column write.
+ */
+export function setAssetPipelineStage(
+  projectId: string,
+  assetId: string,
+  stage: AssetPipelineStage,
+): Promise<Asset> {
+  return post(`/api/projects/${projectId}/assets/${assetId}/pipeline-stage`, { stage });
+}
+
 // --- Asset collections ------------------------------------------------------
 
 /**

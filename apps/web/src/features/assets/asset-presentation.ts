@@ -39,22 +39,24 @@ export interface AssetBadge {
 }
 
 /**
- * The single badge slot on an asset tile/row, filled by precedence
- * (`docs/decisions/asset-library-model.md` §6.5): archived beats every
- * derived state, then a current approval, then generation origin, then the
- * reference kind. Production Ready, In Progress and Concept need the
- * pipeline stage #177 adds and are left out until it lands — rendering none
- * of them is the documented answer, not an omission.
+ * The single badge slot on an asset tile/row, filled by the first matching
+ * row of `docs/decisions/asset-library-model.md` §6.5, in order: archived,
+ * production-ready stage, a current approval in any context, in-progress
+ * stage, generation origin, the reference kind, otherwise concept.
  */
 export function assetStatusBadge(
   asset: Asset,
   summary: AssetSummary | undefined,
 ): AssetBadge | null {
   if (asset.status === 'archived') return { tone: 'neutral', label: 'Archived' };
+  if (asset.pipelineStage === 'production_ready') {
+    return { tone: 'success', label: 'Production Ready' };
+  }
   if (summary?.approved) return { tone: 'success', label: 'Approved' };
+  if (asset.pipelineStage === 'in_progress') return { tone: 'warning', label: 'In Progress' };
   if (summary?.origin === 'generated') return { tone: 'neutral', label: 'Generated', ai: true };
   if (asset.kind === 'reference') return { tone: 'neutral', label: 'Reference' };
-  return null;
+  return { tone: 'neutral', label: 'Concept' };
 }
 
 const BYTE_UNITS = ['B', 'KB', 'MB', 'GB'] as const;
