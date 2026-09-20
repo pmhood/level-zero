@@ -90,12 +90,28 @@ describe('assetStatusBadge', () => {
     });
   });
 
-  it('renders no badge for a plain imported, unapproved, non-reference asset', () => {
-    expect(assetStatusBadge(asset(), summary())).toBeNull();
+  it('puts production ready ahead of a current approval', () => {
+    const productionReady = asset({ pipelineStage: 'production_ready' });
+    expect(assetStatusBadge(productionReady, summary({ approved: true }))).toEqual({
+      tone: 'success',
+      label: 'Production Ready',
+    });
   });
 
-  it('renders no badge when the summary has not loaded yet', () => {
-    expect(assetStatusBadge(asset(), undefined)).toBeNull();
+  it('marks an in-progress asset when nothing higher in precedence applies', () => {
+    const inProgress = asset({ pipelineStage: 'in_progress' });
+    expect(assetStatusBadge(inProgress, summary({ origin: 'generated' }))).toEqual({
+      tone: 'warning',
+      label: 'In Progress',
+    });
+  });
+
+  it('falls all the way back to concept for a plain imported, unapproved, non-reference asset', () => {
+    expect(assetStatusBadge(asset(), summary())).toEqual({ tone: 'neutral', label: 'Concept' });
+  });
+
+  it('falls back to concept when the summary has not loaded yet', () => {
+    expect(assetStatusBadge(asset(), undefined)).toEqual({ tone: 'neutral', label: 'Concept' });
   });
 });
 

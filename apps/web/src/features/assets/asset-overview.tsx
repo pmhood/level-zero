@@ -10,6 +10,7 @@ import { AssetCollectionField } from './asset-collection-field';
 import { PropertyRow } from './asset-property-row';
 import {
   assetKindLabel,
+  assetPipelineStageLabel,
   assetStatusBadge,
   formatByteSize,
   formatDate,
@@ -47,6 +48,7 @@ export function AssetOverview({
         {assetKindLabel(asset.kind)} · {asset.mimeType}
       </PropertyRow>
       <PropertyRow label="Status">{badge?.label ?? 'Active'}</PropertyRow>
+      <PropertyRow label="Stage">{assetPipelineStageLabel(asset.pipelineStage)}</PropertyRow>
       <PropertyRow label="Size">{formatByteSize(asset.byteSize)}</PropertyRow>
       <PropertyRow label="Dimensions">{formatDimensionsOrDuration(asset)}</PropertyRow>
       <PropertyRow label="Added">{formatDate(asset.createdAt)}</PropertyRow>

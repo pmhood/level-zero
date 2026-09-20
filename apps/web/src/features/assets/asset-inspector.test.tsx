@@ -32,6 +32,7 @@ vi.mock('@/lib/api', () => ({
   listAssets: vi.fn(),
   archiveAsset: vi.fn(),
   restoreAsset: vi.fn(),
+  setAssetPipelineStage: vi.fn(),
   getAssetSelectionSummary: vi.fn(),
   listAssetSelectionsForAsset: vi.fn(),
   listAssetMarks: vi.fn(),
@@ -550,5 +551,107 @@ describe('actions', () => {
     });
 
     expect(screen.queryByRole('button', { name: /Variations/ })).toBeNull();
+  });
+});
+
+describe('pipeline stage', () => {
+  it('advances a concept asset to in progress, then to production ready', async () => {
+    vi.mocked(api.setAssetPipelineStage).mockResolvedValue(asset({ pipelineStage: 'in_progress' }));
+
+    renderInspector({ asset: asset({ pipelineStage: 'concept' }) });
+
+    const select = screen.getByLabelText('Pipeline stage') as HTMLSelectElement;
+    expect(select.value).toBe('concept');
+
+    fireEvent.change(select, { target: { value: 'in_progress' } });
+
+    await waitFor(() => {
+      expect(vi.mocked(api.setAssetPipelineStage)).toHaveBeenCalledWith(
+        'prj_1',
+        'ast_1',
+        'in_progress',
+      );
+    });
+  });
+
+  it('advances a concept asset straight to production ready', async () => {
+    vi.mocked(api.setAssetPipelineStage).mockResolvedValue(
+      asset({ pipelineStage: 'production_ready' }),
+    );
+
+    renderInspector({ asset: asset({ pipelineStage: 'concept' }) });
+
+    fireEvent.change(screen.getByLabelText('Pipeline stage'), {
+      target: { value: 'production_ready' },
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(api.setAssetPipelineStage)).toHaveBeenCalledWith(
+        'prj_1',
+        'ast_1',
+        'production_ready',
+      );
+    });
+  });
+
+  it('sends a production ready asset back to concept just as readily', async () => {
+    vi.mocked(api.setAssetPipelineStage).mockResolvedValue(asset({ pipelineStage: 'concept' }));
+
+    renderInspector({ asset: asset({ pipelineStage: 'production_ready' }) });
+
+    const select = screen.getByLabelText('Pipeline stage') as HTMLSelectElement;
+    expect(select.value).toBe('production_ready');
+
+    fireEvent.change(select, { target: { value: 'concept' } });
+
+    await waitFor(() => {
+      expect(vi.mocked(api.setAssetPipelineStage)).toHaveBeenCalledWith(
+        'prj_1',
+        'ast_1',
+        'concept',
+      );
+    });
+  });
+
+  it('sends an in-progress asset back to concept', async () => {
+    vi.mocked(api.setAssetPipelineStage).mockResolvedValue(asset({ pipelineStage: 'concept' }));
+
+    renderInspector({ asset: asset({ pipelineStage: 'in_progress' }) });
+
+    fireEvent.change(screen.getByLabelText('Pipeline stage'), { target: { value: 'concept' } });
+
+    await waitFor(() => {
+      expect(vi.mocked(api.setAssetPipelineStage)).toHaveBeenCalledWith(
+        'prj_1',
+        'ast_1',
+        'concept',
+      );
+    });
+  });
+
+  it('reports an error rather than losing it silently', async () => {
+    vi.mocked(api.setAssetPipelineStage).mockRejectedValue(new Error('Network down'));
+
+    renderInspector({ asset: asset({ pipelineStage: 'concept' }) });
+    fireEvent.change(screen.getByLabelText('Pipeline stage'), {
+      target: { value: 'in_progress' },
+    });
+
+    expect(await screen.findByText('Network down')).toBeDefined();
+  });
+});
+
+describe('overview', () => {
+  it('shows the pipeline stage as its own row, alongside the status badge', () => {
+    renderInspector({
+      asset: asset({ pipelineStage: 'in_progress' }),
+      summary: summary({ approved: true }),
+    });
+
+    // Status is the badge summary ("Approved" wins precedence over the raw
+    // stage); Stage is the axis on its own, per §6.5's note. Scoped off the
+    // dt so it isn't confused with the stage select's own "In Progress" option.
+    expect(screen.getAllByText('Approved').length).toBeGreaterThan(0);
+    expect(screen.getByText('Stage').nextElementSibling?.textContent).toBe('In Progress');
   });
 });
