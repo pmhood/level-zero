@@ -207,6 +207,71 @@ describe('GddWorkspace — review and comments', () => {
   });
 });
 
+describe('GddWorkspace — find in document (#191)', () => {
+  it('counts matches, steps through them, and reports none for a query the document lacks', async () => {
+    vi.mocked(api.getDocument).mockResolvedValue(
+      document({
+        content: {
+          type: 'doc',
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'The oxygen tank is empty.' }] },
+            { type: 'paragraph', content: [{ type: 'text', text: 'Oxygen runs out at zero.' }] },
+          ],
+        },
+      }),
+    );
+
+    // jsdom does not implement `scrollIntoView` at all, so it has to be
+    // defined before the current match can be scrolled to.
+    const scrollIntoView = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+
+    renderWorkspace({ projectId: 'prj_1', documentId: 'doc_1' });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Find' }));
+    const field = screen.getByLabelText('Find in this document');
+
+    fireEvent.change(field, { target: { value: 'oxygen' } });
+    await waitFor(() => expect(screen.getByText('1 of 2')).toBeDefined());
+    expect(scrollIntoView).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() => expect(screen.getByText('2 of 2')).toBeDefined());
+
+    fireEvent.change(field, { target: { value: 'dragon' } });
+    await waitFor(() => expect(screen.getByText('No matches')).toBeDefined());
+
+    // Searching is never an edit: nothing it does should reach autosave.
+    expect(api.saveDocumentContent).not.toHaveBeenCalled();
+
+    Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView');
+  });
+
+  it('offers a way into project search, pre-scoped to documents', async () => {
+    vi.mocked(api.getDocument).mockResolvedValue(document());
+
+    renderWorkspace({ projectId: 'prj_1', documentId: 'doc_1' });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Find' }));
+
+    const link = screen.getByRole('link', { name: 'Search all documents' });
+    expect(link.getAttribute('href')).toBe('/projects/prj_1/search?scope=document');
+  });
+
+  it('closes when Escape is pressed in the field', async () => {
+    vi.mocked(api.getDocument).mockResolvedValue(document());
+
+    renderWorkspace({ projectId: 'prj_1', documentId: 'doc_1' });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Find' }));
+    const field = screen.getByLabelText('Find in this document');
+
+    fireEvent.keyDown(field, { key: 'Escape' });
+
+    expect(screen.queryByLabelText('Find in this document')).toBeNull();
+  });
+});
+
 describe('GddWorkspace — the GDD starting structure (#189)', () => {
   it('offers the structure or a blank document when a project has none at all', async () => {
     vi.mocked(api.listDocuments).mockResolvedValue(page([]));

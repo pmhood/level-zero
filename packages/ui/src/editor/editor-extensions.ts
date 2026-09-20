@@ -7,6 +7,7 @@ import { Markdown } from '@tiptap/markdown';
 import StarterKit from '@tiptap/starter-kit';
 
 import { Callout, CalloutBody, CalloutTitle } from './callout';
+import { FindInDocument } from './find-in-document';
 import { MarkdownPaste } from './markdown-paste';
 import { PullQuote, PullQuoteAttribution, PullQuoteText } from './pull-quote';
 import { SectionId } from './section-id';
@@ -77,6 +78,11 @@ export function createEditorExtensions({
     // background gets an id nothing reads, which is cheaper than giving one
     // surface a different extension set from its neighbours.
     SectionId,
+    // Same reasoning: find-in-document (#191) is a capability of the one
+    // writing surface, not a second configuration the GDD carries alone. It
+    // costs nothing on a surface nobody has searched — the plugin does no
+    // work until something dispatches a query.
+    FindInDocument,
     ...(slashMenu ? [createSlashMenuExtension([...BASE_EDITOR_COMMANDS, ...commands])] : []),
     ...extensions,
   ];

@@ -6,6 +6,7 @@ import {
   ChevronRightIcon,
   CommentIcon,
   HistoryIcon,
+  SearchIcon,
   SparklesIcon,
   StatusBadge,
   Tag,
@@ -13,6 +14,7 @@ import {
 } from '@level-zero/ui';
 import type { Route } from 'next';
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 
 import { DocumentSwitcher } from './document-switcher';
 import { ExportMenu } from './export-menu';
@@ -33,6 +35,11 @@ import type { DocumentExportFormat } from './gdd-export';
  * (no publication state, no sharing outside the project), and a button that
  * does nothing is worse than a gap. Export (#190) is the one that shipped:
  * `ExportMenu` in place of the disabled button that used to hold its spot.
+ *
+ * Find (#191) opens `findBar` as an extra row of this same sticky strip
+ * rather than a sibling of its own — two independently `sticky` elements
+ * stack on top of each other, not below one another, so the field the writer
+ * is stepping through stays pinned however far they scroll to reach a match.
  */
 export function GddDocumentHeader({
   projectId,
@@ -45,6 +52,8 @@ export function GddDocumentHeader({
   onToggleHistory,
   onToggleReview,
   onToggleAskAi,
+  onToggleFind,
+  findBar,
   onExport,
 }: {
   projectId: string;
@@ -59,6 +68,9 @@ export function GddDocumentHeader({
   onToggleHistory: () => void;
   onToggleReview: () => void;
   onToggleAskAi: () => void;
+  onToggleFind: () => void;
+  /** The find-in-document field (`GddFindBar`), or null while it is closed. */
+  findBar?: ReactNode;
   onExport: (format: DocumentExportFormat) => void;
 }) {
   const projectHref = `/projects/${projectId}` as Route;
@@ -99,6 +111,10 @@ export function GddDocumentHeader({
                   <HistoryIcon className="size-4" />
                   History
                 </Button>
+                <Button variant="secondary" size="sm" onClick={onToggleFind}>
+                  <SearchIcon className="size-4" />
+                  Find
+                </Button>
                 <Button variant="secondary" size="sm" onClick={onToggleCompare}>
                   Compare
                 </Button>
@@ -120,6 +136,8 @@ export function GddDocumentHeader({
             )}
           </div>
         </div>
+
+        {!comparing && findBar}
       </div>
 
       <WorkspaceHeader

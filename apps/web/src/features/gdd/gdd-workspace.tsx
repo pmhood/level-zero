@@ -42,6 +42,7 @@ import { ApiRequestError, apiErrorMessage } from '@/lib/api';
 import { recordAcceptedAiEdit } from './ai-edit-version';
 import { GddDocumentHeader } from './gdd-document-header';
 import { exportGddDocument, type DocumentExportFormat } from './gdd-export';
+import { GddFindBar } from './gdd-find-bar';
 import { GddHistory } from './gdd-history';
 import { GddOutline } from './gdd-outline';
 import { GddReview } from './gdd-review';
@@ -88,6 +89,11 @@ function GddDocumentEditor({
   // ("+ Add Section") rather than through `content`, which `RichTextEditor`
   // only reads when the surface is created.
   const editorRef = useRef<Editor | null>(null);
+  // The same instance, but in state rather than a ref: find-in-document
+  // (#191) reads the editor's own plugin state through `useEditorState`,
+  // which needs a value React re-renders on, not one it can only read
+  // imperatively at click time the way `editorRef` is used elsewhere here.
+  const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
   const [aiEditError, setAiEditError] = useState<string | null>(null);
   // Compare is a mode of the document surface rather than a page of its own:
   // the writer stays where they were writing, and the outline steps aside so
@@ -102,6 +108,11 @@ function GddDocumentEditor({
   // the section being written, the states it can be moved through, and the
   // threads on it. The section itself follows the caret.
   const [reviewOpen, setReviewOpen] = useState(false);
+  // Find-in-document (#191) is a field over the writing itself, not another
+  // side panel in the History/Review/Ask AI/Compare slot — it stays open
+  // alongside whichever of those is open, the way the browser's own Ctrl+F
+  // never closes anything else on the page.
+  const [findOpen, setFindOpen] = useState(false);
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
 
   const entitiesQuery = useReferenceableEntities(projectId);
@@ -293,10 +304,33 @@ function GddDocumentEditor({
         setAskingAi(false);
         setReviewOpen(false);
         setOpenEntityId(null);
+        setFindOpen(false);
       }
       return next;
     });
   }
+
+  function toggleFind() {
+    setFindOpen((current) => !current);
+  }
+
+  // `Cmd+F`/`Ctrl+F` opens the field instead of the browser's own find, which
+  // is the whole reason this issue exists: it finds nothing scrolled out of
+  // the editor. Mounted only while this document is open, the same scoping
+  // `CommandPalette`'s `Cmd+K` listener relies on.
+  useEffect(() => {
+    if (comparing) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        setFindOpen(true);
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [comparing]);
 
   return (
     <EntityReferenceProvider
@@ -334,6 +368,16 @@ function GddDocumentEditor({
             onToggleHistory={toggleHistory}
             onToggleReview={toggleReview}
             onToggleAskAi={toggleAskingAi}
+            onToggleFind={toggleFind}
+            findBar={
+              findOpen && (
+                <GddFindBar
+                  projectId={projectId}
+                  editor={editorInstance}
+                  onClose={() => setFindOpen(false)}
+                />
+              )
+            }
             onExport={handleExport}
           />
 
@@ -357,6 +401,7 @@ function GddDocumentEditor({
                   onSectionChange={setActiveSectionId}
                   onEditorReady={(instance) => {
                     editorRef.current = instance;
+                    setEditorInstance(instance);
                   }}
                   editable={!archived}
                   extensions={referenceExtensions}

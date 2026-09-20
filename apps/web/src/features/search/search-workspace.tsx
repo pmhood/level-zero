@@ -43,12 +43,20 @@ const SOURCE_TYPE_TAG_LABEL: Partial<Record<SearchSourceType, string>> = {
  * surface has a second one of its own. This only seeds the request; there is
  * no broader source-type picker here; wiring one is more than either small
  * addition scoped itself to.
+ *
+ * `?scope=document` seeds the entity-type scope instead, pre-selected rather
+ * than "only" — the GDD's (#191) way in, so a writer lands already scoped to
+ * documents but one tap away from everything if that turns out to be too
+ * narrow.
  */
 export function SearchWorkspace({ projectId }: { projectId: string }) {
   const searchParams = useSearchParams();
   const [question, setQuestion] = useState('');
   const [mode, setMode] = useState<NonNullable<SearchParams['mode']>>('keyword');
-  const [scope, setScope] = useState<EntityType | null>(null);
+  const [scope, setScope] = useState<EntityType | null>(() => {
+    const seeded = searchParams.get('scope');
+    return SCOPES.find((type) => type === seeded) ?? null;
+  });
   const [sourceTypeOnly, setSourceTypeOnly] = useState<SearchSourceType | null>(() => {
     const seeded = searchParams.get('sourceType');
     return SEEDABLE_SOURCE_TYPES.find((sourceType) => sourceType === seeded) ?? null;
