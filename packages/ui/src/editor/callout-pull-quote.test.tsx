@@ -15,12 +15,19 @@ import { RichTextEditor } from './rich-text-editor';
 import { BASE_EDITOR_COMMANDS, matchEditorCommands } from './slash-menu';
 
 /**
- * jsdom has no layout engine, so it doesn't implement `Range.getClientRects`
- * at all (unlike `getBoundingClientRect`, which it stubs). ProseMirror's
- * `scrollIntoView` — which `insertCallout`/`insertPullQuote` call after
- * inserting, same as `insertSection` — needs it to find the inserted node's
- * position on screen. Only the tests below that mount a real, attached
- * `RichTextEditor` (rather than a bare headless `Editor`) exercise that path.
+ * jsdom has no layout engine, so it implements neither `getClientRects` nor
+ * `getBoundingClientRect` on `Range` — it stubs the latter on `Element` only.
+ * ProseMirror's `scrollIntoView` — which `insertCallout`/`insertPullQuote`
+ * call after inserting, same as `insertSection` — needs both: its `singleRect`
+ * falls through to `getBoundingClientRect` whenever `getClientRects` yields no
+ * non-zero rect, which a layout-free stub always does. Only the tests below
+ * that mount a real, attached `RichTextEditor` (rather than a bare headless
+ * `Editor`) exercise that path.
+ *
+ * Stubbing only `getClientRects` therefore still throws, and throws from
+ * inside TipTap's deferred `scrollIntoView` — so it surfaces as an *uncaught*
+ * exception that fails the run while every test still reports passing, and
+ * only on hosts slow enough for the callback to land before the run ends.
  */
 beforeAll(() => {
   if (!Range.prototype.getClientRects) {
@@ -30,6 +37,20 @@ beforeAll(() => {
         item: () => null,
         [Symbol.iterator]: function* () {},
       }) as unknown as DOMRectList;
+  }
+  if (!Range.prototype.getBoundingClientRect) {
+    Range.prototype.getBoundingClientRect = () =>
+      ({
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: 0,
+        height: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
   }
 });
 
