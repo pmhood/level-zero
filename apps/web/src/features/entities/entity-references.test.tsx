@@ -1,14 +1,26 @@
 // @vitest-environment jsdom
 import type { Entity, EntityStatus, EntityType } from '@level-zero/domain';
-import { createEditorExtensions, RichTextEditor, type JSONContent } from '@level-zero/ui';
+import {
+  createEditorExtensions,
+  renderDocumentMarkdown,
+  renderStandaloneHtmlDocument,
+  RichTextEditor,
+  type JSONContent,
+} from '@level-zero/ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Editor } from '@tiptap/core';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { entityRoute } from '@/features/entity-detail/entity-route';
+
 import { insertEntityMention } from './entity-mention';
-import { ENTITY_EMBED_NODE, ENTITY_MENTION_NODE } from './entity-reference';
+import {
+  ENTITY_EMBED_NODE,
+  ENTITY_MENTION_NODE,
+  resolveEntityReferencesForExport,
+} from './entity-reference';
 import { EntityReferenceProvider } from './entity-reference-context';
 import {
   createEntityReferenceExtensions,
@@ -365,5 +377,110 @@ describe('when the entity changes', () => {
     await screen.findByRole('heading', { name: 'Oxygen Management' });
     const saved = onChange.mock.calls.at(-1)?.[0] as JSONContent;
     expect(saved.content?.[0]?.attrs?.entityId).toBe(OXYGEN.id);
+  });
+});
+
+describe('exporting a reference (issue #190)', () => {
+  const ARCHIVED_DRIFT = entity('ent_drift', 'Driftwake Station', 'location', 'archived');
+  const PROJECT_ID = 'prj_1';
+
+  // The same pipeline `renderGddDocumentMarkdown`/`renderGddDocumentHtml` run
+  // for a real export: resolve mentions and embeds against `entities` first,
+  // then hand the result to a plain schema that has never heard of either.
+  const EXTENSIONS = createEditorExtensions({ placeholder: 'Write…', slashMenu: false });
+
+  function markdownFor(content: JSONContent, entities: Entity[]): string {
+    const resolved = resolveEntityReferencesForExport(content, entities, PROJECT_ID);
+    return renderDocumentMarkdown(resolved, EXTENSIONS);
+  }
+
+  function htmlFor(content: JSONContent, entities: Entity[]): string {
+    const resolved = resolveEntityReferencesForExport(content, entities, PROJECT_ID);
+    return renderStandaloneHtmlDocument(resolved, EXTENSIONS, { title: 'Export' });
+  }
+
+  describe('a mention', () => {
+    it('exports the entity’s current name, linked to its canonical route', () => {
+      const doc = documentWith({ type: 'paragraph', content: [mention(KAEL)] });
+
+      expect(markdownFor(doc, [KAEL])).toContain(
+        `[Kael Voss](${entityRoute(PROJECT_ID, KAEL.id)})`,
+      );
+      expect(htmlFor(doc, [KAEL])).toMatch(
+        new RegExp(`<a[^>]*href="${entityRoute(PROJECT_ID, KAEL.id)}"[^>]*>Kael Voss</a>`),
+      );
+    });
+
+    it('exports a renamed entity under its current name, not the name it was written with', () => {
+      const renamed = { ...KAEL, name: 'Kael, Salvage Lead' };
+      const doc = documentWith({ type: 'paragraph', content: [mention(KAEL)] });
+
+      expect(markdownFor(doc, [renamed])).toContain('Kael, Salvage Lead');
+      expect(markdownFor(doc, [renamed])).not.toContain('[Kael Voss]');
+    });
+
+    it('says so when the entity is archived, without hiding the link', () => {
+      const doc = documentWith({ type: 'paragraph', content: [mention(ARCHIVED_DRIFT)] });
+
+      expect(markdownFor(doc, [ARCHIVED_DRIFT])).toContain(
+        `[Driftwake Station (archived)](${entityRoute(PROJECT_ID, ARCHIVED_DRIFT.id)})`,
+      );
+      expect(htmlFor(doc, [ARCHIVED_DRIFT])).toContain('Driftwake Station (archived)');
+    });
+
+    it('says so honestly when the entity no longer exists, and does not link anywhere', () => {
+      const doc = documentWith({ type: 'paragraph', content: [mention(KAEL)] });
+
+      const markdown = markdownFor(doc, []);
+      expect(markdown).toContain('Missing character');
+      expect(markdown).not.toContain('](');
+
+      const html = htmlFor(doc, []);
+      expect(html).toContain('Missing character');
+      expect(html).not.toContain('<a ');
+    });
+  });
+
+  describe('an embed', () => {
+    it('exports the entity’s name, type and description, linked to its canonical route', () => {
+      const doc = documentWith(embed(OXYGEN));
+
+      const markdown = markdownFor(doc, [OXYGEN]);
+      expect(markdown).toContain(`[Oxygen Management](${entityRoute(PROJECT_ID, OXYGEN.id)})`);
+      expect(markdown).toContain('Mechanic');
+      expect(markdown).toContain(OXYGEN.description);
+
+      const html = htmlFor(doc, [OXYGEN]);
+      expect(html).toMatch(
+        new RegExp(
+          `<a[^>]*href="${entityRoute(PROJECT_ID, OXYGEN.id)}"[^>]*>Oxygen Management</a>`,
+        ),
+      );
+      expect(html).toContain(OXYGEN.description);
+    });
+
+    it('says so when the embedded entity is archived', () => {
+      const doc = documentWith(embed(ARCHIVED_DRIFT));
+
+      expect(markdownFor(doc, [ARCHIVED_DRIFT])).toContain('(archived)');
+      expect(htmlFor(doc, [ARCHIVED_DRIFT])).toContain('(archived)');
+    });
+
+    it('says so honestly when the referenced entity no longer exists', () => {
+      const doc = documentWith(embed(OXYGEN));
+
+      expect(markdownFor(doc, [])).toContain('Missing mechanic');
+      expect(htmlFor(doc, [])).toContain('Missing mechanic');
+    });
+
+    it('says so honestly when the embed was never filled in', () => {
+      const doc = documentWith({
+        type: ENTITY_EMBED_NODE,
+        attrs: { entityId: null, entityType: 'character', label: null },
+      });
+
+      expect(markdownFor(doc, [])).toContain('No character chosen');
+      expect(htmlFor(doc, [])).toContain('No character chosen');
+    });
   });
 });

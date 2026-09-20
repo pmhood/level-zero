@@ -91,6 +91,7 @@ function renderHeader(props: Partial<ComponentProps<typeof GddDocumentHeader>> =
         onToggleHistory={vi.fn()}
         onToggleReview={vi.fn()}
         onToggleAskAi={vi.fn()}
+        onExport={vi.fn()}
         {...props}
       />
     </QueryClientProvider>,
@@ -190,6 +191,7 @@ describe('GddDocumentHeader — actions reach the right surface', () => {
           onToggleHistory={vi.fn()}
           onToggleReview={vi.fn()}
           onToggleAskAi={vi.fn()}
+          onExport={vi.fn()}
         />
       </QueryClientProvider>,
     );
@@ -217,10 +219,19 @@ describe('GddDocumentHeader — actions reach the right surface', () => {
     expect(onToggleReview).toHaveBeenCalledOnce();
   });
 
-  it('Export has a place in the strip, disabled ahead of #190', () => {
-    renderHeader();
+  it('Export offers Markdown and HTML, and reports which one was chosen', () => {
+    const onExport = vi.fn();
+    renderHeader({ onExport });
 
-    expect(screen.getByRole('button', { name: /Export/ }).hasAttribute('disabled')).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: /Export/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Markdown (.md)' }));
+    expect(onExport).toHaveBeenCalledOnce();
+    expect(onExport).toHaveBeenCalledWith('markdown');
+
+    fireEvent.click(screen.getByRole('button', { name: /Export/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'HTML (.html)' }));
+    expect(onExport).toHaveBeenCalledTimes(2);
+    expect(onExport).toHaveBeenCalledWith('html');
   });
 
   it('never offers Publish or Share — neither has a model yet', () => {
