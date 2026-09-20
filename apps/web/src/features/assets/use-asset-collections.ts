@@ -1,15 +1,23 @@
 'use client';
 
 import type { Asset, AssetLibraryPage, Entity } from '@level-zero/domain';
-import { useQueries, useQuery, type UseQueryResult } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+  type UseQueryResult,
+} from '@tanstack/react-query';
 
 import * as api from '@/lib/api';
+
+import { assetKeys } from './use-assets';
 
 /**
  * How many members a Collections-view group shows before the rest are just
  * reflected in its own total — a group is a shelf, not a second paginated
- * grid; the toolbar's own collection filter (a later issue) is where seeing
- * the rest of one collection belongs.
+ * grid; the toolbar's own collection filter (#228) is where seeing the rest
+ * of one collection belongs.
  */
 export const COLLECTION_GROUP_PAGE_SIZE = 24;
 
@@ -18,6 +26,8 @@ const collectionKeys = {
   covers: (projectId: string) => ['projects', projectId, 'asset-collections', 'covers'] as const,
   group: (projectId: string, collectionId: string, params: api.ListAssetLibraryParams) =>
     ['projects', projectId, 'assets', 'library', 'collection', collectionId, params] as const,
+  forAsset: (projectId: string, assetId: string) =>
+    ['projects', projectId, 'asset-collections', 'for-asset', assetId] as const,
 };
 
 /** Active member counts for every collection in the project (issue #227's rail). */
@@ -73,4 +83,50 @@ export function useCollectionGroups(
       enabled: Boolean(projectId),
     })),
   });
+}
+
+/** Every collection the selected asset currently belongs to (the inspector's Collection field, #228). */
+export function useAssetCollections(projectId: string, assetId: string) {
+  return useQuery({
+    queryKey: collectionKeys.forAsset(projectId, assetId),
+    queryFn: () => api.collectionsForAsset(projectId, assetId),
+    enabled: Boolean(projectId) && Boolean(assetId),
+  });
+}
+
+/**
+ * Filing an asset into a collection, or taking it out of one, from the
+ * inspector (#228). Both invalidate every read that depends on membership:
+ * the asset's own collection list, the rail's counts and cover (#227), and,
+ * since `collectionId` is now a toolbar filter too, the library listing
+ * itself — a removal made here should drop the asset from a
+ * collection-filtered grid without a reload.
+ */
+function useAssetCollectionMutation(
+  projectId: string,
+  mutationFn: (input: { collectionId: string; assetId: string }) => Promise<unknown>,
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn,
+    onSuccess: (_data, { assetId }) => {
+      queryClient.invalidateQueries({ queryKey: collectionKeys.forAsset(projectId, assetId) });
+      queryClient.invalidateQueries({ queryKey: collectionKeys.counts(projectId) });
+      queryClient.invalidateQueries({ queryKey: collectionKeys.covers(projectId) });
+      queryClient.invalidateQueries({ queryKey: assetKeys.all(projectId) });
+    },
+  });
+}
+
+export function useAddAssetToCollection(projectId: string) {
+  return useAssetCollectionMutation(projectId, ({ collectionId, assetId }) =>
+    api.addAssetToCollection(projectId, collectionId, assetId),
+  );
+}
+
+export function useRemoveAssetFromCollection(projectId: string) {
+  return useAssetCollectionMutation(projectId, ({ collectionId, assetId }) =>
+    api.removeAssetFromCollection(projectId, collectionId, assetId),
+  );
 }

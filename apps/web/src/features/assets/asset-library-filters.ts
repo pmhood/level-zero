@@ -74,6 +74,8 @@ export interface AssetLibraryFilters {
   linkedEntityId: string | null;
   /** Set by clicking a stage in the Asset Pipeline strip (#230), never a toolbar dropdown. */
   pipelineStage: AssetPipelineStage | null;
+  /** The collection to narrow by, server-side — the toolbar's All Collections control (#228). */
+  collectionId: string | null;
   /** ISO calendar date (`yyyy-mm-dd`), as an `<input type="date">` gives it. */
   createdAfter: string | null;
   /** ISO calendar date (`yyyy-mm-dd`), inclusive — the exclusive-bound math lives in `toListParams`. */
@@ -91,6 +93,7 @@ export const DEFAULT_ASSET_LIBRARY_FILTERS: AssetLibraryFilters = {
   selectionState: null,
   linkedEntityId: null,
   pipelineStage: null,
+  collectionId: null,
   createdAfter: null,
   createdBefore: null,
   includeArchived: false,
@@ -115,6 +118,7 @@ export function parseAssetLibraryFilters(searchParams: URLSearchParams): AssetLi
     selectionState: enumOrNull(searchParams.get('selection'), ASSET_SELECTION_STATES),
     linkedEntityId: searchParams.get('linkedEntityId'),
     pipelineStage: enumOrNull(searchParams.get('stage'), ASSET_PIPELINE_STAGES),
+    collectionId: searchParams.get('collectionId'),
     createdAfter: searchParams.get('createdAfter'),
     createdBefore: searchParams.get('createdBefore'),
     includeArchived: searchParams.get('archived') === '1',
@@ -137,6 +141,7 @@ export function assetLibraryFiltersToSearchParams(filters: AssetLibraryFilters):
   if (filters.selectionState) params.set('selection', filters.selectionState);
   if (filters.linkedEntityId) params.set('linkedEntityId', filters.linkedEntityId);
   if (filters.pipelineStage) params.set('stage', filters.pipelineStage);
+  if (filters.collectionId) params.set('collectionId', filters.collectionId);
   if (filters.createdAfter) params.set('createdAfter', filters.createdAfter);
   if (filters.createdBefore) params.set('createdBefore', filters.createdBefore);
   if (filters.includeArchived) params.set('archived', '1');
@@ -171,6 +176,7 @@ export function assetLibraryFiltersToListParams(
     selectionStates: filters.selectionState ? [filters.selectionState] : undefined,
     linkedEntityId: filters.linkedEntityId ?? undefined,
     pipelineStages: filters.pipelineStage ? [filters.pipelineStage] : undefined,
+    collectionId: filters.collectionId ?? undefined,
     createdAfter: filters.createdAfter ?? undefined,
     createdBefore: filters.createdBefore ? dayAfter(filters.createdBefore) : undefined,
     includeArchived: filters.includeArchived,
@@ -189,6 +195,7 @@ export function hasActiveAssetLibraryFilters(filters: AssetLibraryFilters): bool
     filters.selectionState !== null ||
     filters.linkedEntityId !== null ||
     filters.pipelineStage !== null ||
+    filters.collectionId !== null ||
     filters.createdAfter !== null ||
     filters.createdBefore !== null ||
     filters.includeArchived

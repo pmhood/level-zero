@@ -205,6 +205,40 @@ describe('membership', () => {
   });
 });
 
+describe('collections for an asset', () => {
+  it('lists every collection the asset is currently in', async () => {
+    const propsCollection = await collection('Props & Gear');
+    const uiCollection = await collection('UI & HUD');
+    const asset = await image();
+    await http()
+      .post(collectionsPath(project.id, `/${propsCollection.id}/assets`))
+      .send({ assetId: asset.id })
+      .expect(201);
+    await http()
+      .post(collectionsPath(project.id, `/${uiCollection.id}/assets`))
+      .send({ assetId: asset.id })
+      .expect(201);
+
+    const response = await http()
+      .get(collectionsPath(project.id, `/for-asset/${asset.id}`))
+      .expect(200);
+
+    expect((response.body as Entity[]).map((entity) => entity.id).sort()).toEqual(
+      [propsCollection.id, uiCollection.id].sort(),
+    );
+  });
+
+  it('is empty for an asset in no collection', async () => {
+    const asset = await image();
+
+    const response = await http()
+      .get(collectionsPath(project.id, `/for-asset/${asset.id}`))
+      .expect(200);
+
+    expect(response.body).toEqual([]);
+  });
+});
+
 describe('collection counts', () => {
   it('reports active member counts per collection', async () => {
     const board = await collection();

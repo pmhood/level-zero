@@ -691,6 +691,32 @@ export function collectionCovers(projectId: string): Promise<Record<string, Asse
   return apiFetch(`/api/projects/${projectId}/asset-collections/covers`);
 }
 
+/** Every collection this asset currently belongs to — the inspector's Collection field (#228). */
+export function collectionsForAsset(projectId: string, assetId: string): Promise<Entity[]> {
+  return apiFetch(`/api/projects/${projectId}/asset-collections/for-asset/${assetId}`);
+}
+
+/** Files an asset into a collection (#228), through #226's membership endpoint. */
+export function addAssetToCollection(
+  projectId: string,
+  collectionId: string,
+  assetId: string,
+): Promise<EntityRelationship> {
+  return post(`/api/projects/${projectId}/asset-collections/${collectionId}/assets`, { assetId });
+}
+
+/** Removes the membership only — the asset itself is untouched (#228). */
+export function removeAssetFromCollection(
+  projectId: string,
+  collectionId: string,
+  assetId: string,
+): Promise<void> {
+  return apiFetch(
+    `/api/projects/${projectId}/asset-collections/${collectionId}/assets/${assetId}`,
+    { method: 'DELETE' },
+  );
+}
+
 // --- Generations ----------------------------------------------------------
 
 /** What the user pointed at, for the API's `ContextResolver` to assemble. */

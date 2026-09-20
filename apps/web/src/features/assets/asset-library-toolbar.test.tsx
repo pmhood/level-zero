@@ -138,8 +138,52 @@ describe('AssetLibraryToolbar', () => {
     expect(setFilter).toHaveBeenCalledWith('includeArchived', true);
   });
 
+  it('sets the collection filter from the collection dropdown', async () => {
+    vi.mocked(api.listEntities).mockImplementation((_projectId, params) =>
+      Promise.resolve(
+        params?.type?.includes('asset_collection')
+          ? entityPage([
+              entity({ id: 'col_props', type: 'asset_collection', name: 'Props & Gear' }),
+            ])
+          : entityPage([]),
+      ),
+    );
+    const { setFilter } = renderToolbar();
+
+    const select = await screen.findByLabelText('Collection');
+    await screen.findByRole('option', { name: 'Props & Gear' });
+    fireEvent.change(select, { target: { value: 'col_props' } });
+
+    expect(setFilter).toHaveBeenCalledWith('collectionId', 'col_props');
+  });
+
+  it('shows the collection chip by name, resolved from the same fetched list', async () => {
+    vi.mocked(api.listEntities).mockImplementation((_projectId, params) =>
+      Promise.resolve(
+        params?.type?.includes('asset_collection')
+          ? entityPage([
+              entity({ id: 'col_props', type: 'asset_collection', name: 'Props & Gear' }),
+            ])
+          : entityPage([]),
+      ),
+    );
+    const { clearFilter } = renderToolbar({ collectionId: 'col_props' });
+
+    const chip = await screen.findByRole('button', { name: 'Remove tag Collection: Props & Gear' });
+    fireEvent.click(chip);
+
+    expect(clearFilter).toHaveBeenCalledWith('collectionId');
+  });
+
   it('picks a linked entity from the search results', async () => {
-    vi.mocked(api.listEntities).mockResolvedValue(entityPage([entity()]));
+    // Discriminated by type: the toolbar's own Collection select (#228) calls
+    // the same `listEntities`, and would otherwise pick up this fixture too
+    // and offer it as a same-named, same-`id` option.
+    vi.mocked(api.listEntities).mockImplementation((_projectId, params) =>
+      Promise.resolve(
+        params?.type?.includes('asset_collection') ? entityPage([]) : entityPage([entity()]),
+      ),
+    );
     const { setFilter } = renderToolbar();
 
     const field = screen.getByLabelText('Linked entity');
