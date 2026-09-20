@@ -96,4 +96,18 @@ export class AssetCollectionsController {
   ): Promise<void> {
     await this.collections.removeAsset(projectId, collectionId, assetId);
   }
+
+  /**
+   * Every collection this asset currently belongs to — the inspector's
+   * Collection field (#228). Two path segments, so it never collides with
+   * the single-segment `:collectionId` routes above regardless of
+   * declaration order.
+   */
+  @Get('for-asset/:assetId')
+  forAsset(
+    @Param('projectId') projectId: string,
+    @Param('assetId') assetId: string,
+  ): Promise<Entity[]> {
+    return this.collections.listForAsset(projectId, assetId);
+  }
 }

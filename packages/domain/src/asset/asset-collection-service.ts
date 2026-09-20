@@ -110,6 +110,28 @@ export class AssetCollectionService {
     await this.relationships.unlink(projectId, edge.id);
   }
 
+  /**
+   * Every collection this asset currently belongs to (the inspector's
+   * Collection field, #228).
+   *
+   * Reads the same edge `addAsset` writes, from the other end: the asset's
+   * `asset_reference` entity's incoming `contains` edges, sourced from
+   * whichever collections currently point at it. Empty when the asset has no
+   * `asset_reference` entity yet — never filed into any collection — rather
+   * than materializing one just to find it empty.
+   */
+  async listForAsset(projectId: string, assetId: string): Promise<Entity[]> {
+    const reference = await this.entities.findAssetReference(projectId, assetId);
+    if (!reference) return [];
+
+    const { incoming } = await this.relationships.neighborhood(projectId, reference.id, {
+      direction: 'incoming',
+      relations: ['contains'],
+    });
+
+    return incoming.map((edge) => edge.entity);
+  }
+
   /** Collections are entities, so a wrong-typed id reads the same as a missing one. */
   private async requireCollection(projectId: string, collectionId: string): Promise<Entity> {
     const collection = await this.entities.getById(projectId, collectionId);

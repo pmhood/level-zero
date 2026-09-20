@@ -28,6 +28,7 @@ describe('parseAssetLibraryFilters', () => {
       selection: 'approved',
       linkedEntityId: 'ent_kael',
       stage: 'in_progress',
+      collectionId: 'col_props',
       createdAfter: '2026-01-01',
       createdBefore: '2026-02-01',
       archived: '1',
@@ -43,6 +44,7 @@ describe('parseAssetLibraryFilters', () => {
       selectionState: 'approved',
       linkedEntityId: 'ent_kael',
       pipelineStage: 'in_progress',
+      collectionId: 'col_props',
       createdAfter: '2026-01-01',
       createdBefore: '2026-02-01',
       includeArchived: true,
@@ -76,6 +78,7 @@ describe('assetLibraryFiltersToSearchParams', () => {
       kind: 'model_3d',
       origin: 'imported',
       pipelineStage: 'production_ready',
+      collectionId: 'col_props',
       includeArchived: true,
       sort: 'size',
     });
@@ -99,6 +102,7 @@ describe('assetLibraryFiltersToListParams', () => {
       selectionStates: undefined,
       linkedEntityId: undefined,
       pipelineStages: undefined,
+      collectionId: undefined,
       createdAfter: undefined,
       includeArchived: false,
     });
@@ -141,6 +145,12 @@ describe('assetLibraryFiltersToListParams', () => {
     expect(params.pipelineStages).toEqual(['in_progress']);
   });
 
+  it('sends collectionId straight through, unwrapped — the read model takes one id, not an array', () => {
+    const params = assetLibraryFiltersToListParams(filters({ collectionId: 'col_props' }));
+
+    expect(params.collectionId).toBe('col_props');
+  });
+
   it('pushes createdBefore one day out so the picked end date is included, not excluded', () => {
     const params = assetLibraryFiltersToListParams(filters({ createdBefore: '2026-03-15' }));
 
@@ -168,6 +178,7 @@ describe('hasActiveAssetLibraryFilters', () => {
     expect(hasActiveAssetLibraryFilters(filters({ includeArchived: true }))).toBe(true);
     expect(hasActiveAssetLibraryFilters(filters({ linkedEntityId: 'ent_1' }))).toBe(true);
     expect(hasActiveAssetLibraryFilters(filters({ pipelineStage: 'concept' }))).toBe(true);
+    expect(hasActiveAssetLibraryFilters(filters({ collectionId: 'col_props' }))).toBe(true);
   });
 
   it('does not count sort alone as a narrowing filter', () => {

@@ -235,3 +235,38 @@ describe('removing an asset from a collection', () => {
     expect(await entities.findAssetReference(project.id, asset.id)).toBeNull();
   });
 });
+
+describe('listing the collections an asset is in', () => {
+  it('is empty for an asset that was never filed into any collection', async () => {
+    const asset = await image();
+
+    expect(await collections.listForAsset(project.id, asset.id)).toEqual([]);
+  });
+
+  it('lists every collection the asset currently belongs to', async () => {
+    const propsCollection = await collection('Props & Gear');
+    const uiCollection = await collection('UI & HUD');
+    const asset = await image('icon.png');
+    await collections.addAsset(project.id, propsCollection.id, asset.id);
+    await collections.addAsset(project.id, uiCollection.id, asset.id);
+
+    const found = await collections.listForAsset(project.id, asset.id);
+
+    expect(found.map((entity) => entity.id).sort()).toEqual(
+      [propsCollection.id, uiCollection.id].sort(),
+    );
+  });
+
+  it('drops a collection once the asset is removed from it', async () => {
+    const propsCollection = await collection('Props & Gear');
+    const uiCollection = await collection('UI & HUD');
+    const asset = await image('icon.png');
+    await collections.addAsset(project.id, propsCollection.id, asset.id);
+    await collections.addAsset(project.id, uiCollection.id, asset.id);
+
+    await collections.removeAsset(project.id, propsCollection.id, asset.id);
+
+    const found = await collections.listForAsset(project.id, asset.id);
+    expect(found.map((entity) => entity.id)).toEqual([uiCollection.id]);
+  });
+});

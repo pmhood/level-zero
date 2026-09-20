@@ -5,6 +5,7 @@ import type {
   AssetSelection,
   AssetSelectionContext,
   AssetSummary,
+  Entity,
   Generation,
 } from '@level-zero/domain';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -39,6 +40,10 @@ vi.mock('@/lib/api', () => ({
   rejectAssetSelection: vi.fn(),
   markAsset: vi.fn(),
   unmarkAsset: vi.fn(),
+  listEntities: vi.fn(),
+  collectionsForAsset: vi.fn(),
+  addAssetToCollection: vi.fn(),
+  removeAssetFromCollection: vi.fn(),
 }));
 
 const api = await import('@/lib/api');
@@ -84,6 +89,24 @@ function summary(overrides: Partial<AssetSummary> = {}): AssetSummary {
 
 function linkedEntity(overrides: Partial<AssetLinkedEntity> = {}): AssetLinkedEntity {
   return { entityId: 'ent_kael', type: 'character', name: 'Kael', ...overrides };
+}
+
+function collectionEntity(overrides: Partial<Entity> = {}): Entity {
+  return {
+    id: 'col_props',
+    projectId: 'prj_1',
+    type: 'asset_collection',
+    name: 'Props & Gear',
+    description: '',
+    status: 'active',
+    tags: [],
+    data: {},
+    currentVersionId: null,
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+    updatedAt: new Date('2026-01-01T00:00:00Z'),
+    archivedAt: null,
+    ...overrides,
+  };
 }
 
 function generation(overrides: Partial<Generation> = {}): Generation {
@@ -164,6 +187,8 @@ beforeEach(() => {
     (_projectId: string, context: AssetSelectionContext) =>
       Promise.resolve({ context, current: [], history: [] }),
   );
+  vi.mocked(api.listEntities).mockResolvedValue({ items: [], total: 0 });
+  vi.mocked(api.collectionsForAsset).mockResolvedValue([]);
 });
 
 afterEach(cleanup);
@@ -223,6 +248,64 @@ describe('the preview', () => {
 
     expect(screen.queryByRole('img')).toBeNull();
     expect(screen.getByText('These bytes could not be read from storage.')).toBeDefined();
+  });
+});
+
+describe('overview', () => {
+  it('says the file is in no collection when it is in none', async () => {
+    renderInspector();
+
+    expect(await screen.findByText('Not in a collection')).toBeDefined();
+  });
+
+  it('lists every collection the file is in — the multi-collection case', async () => {
+    vi.mocked(api.collectionsForAsset).mockResolvedValue([
+      collectionEntity(),
+      collectionEntity({ id: 'col_ui', name: 'UI & HUD' }),
+    ]);
+
+    renderInspector();
+
+    expect(await screen.findByText('Props & Gear')).toBeDefined();
+    expect(screen.getByText('UI & HUD')).toBeDefined();
+  });
+
+  it('removes only the membership, never the asset, from a chip', async () => {
+    vi.mocked(api.collectionsForAsset).mockResolvedValue([collectionEntity()]);
+    vi.mocked(api.removeAssetFromCollection).mockResolvedValue(undefined);
+    renderInspector();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove tag Props & Gear' }));
+
+    await waitFor(() =>
+      expect(api.removeAssetFromCollection).toHaveBeenCalledWith('prj_1', 'col_props', 'ast_1'),
+    );
+    expect(api.archiveAsset).not.toHaveBeenCalled();
+  });
+
+  it('adds the file to a collection chosen from the picker', async () => {
+    vi.mocked(api.listEntities).mockResolvedValue({
+      items: [collectionEntity({ id: 'col_ui', name: 'UI & HUD' })],
+      total: 1,
+    });
+    vi.mocked(api.addAssetToCollection).mockResolvedValue({
+      id: 'rel_1',
+      projectId: 'prj_1',
+      sourceEntityId: 'col_ui',
+      targetEntityId: 'ref_1',
+      relation: 'contains',
+      metadata: {},
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+    });
+    renderInspector();
+
+    const picker = await screen.findByLabelText('Add to collection');
+    fireEvent.change(picker, { target: { value: 'col_ui' } });
+
+    await waitFor(() =>
+      expect(api.addAssetToCollection).toHaveBeenCalledWith('prj_1', 'col_ui', 'ast_1'),
+    );
   });
 });
 

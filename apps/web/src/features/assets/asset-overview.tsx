@@ -6,6 +6,7 @@ import Link from 'next/link';
 
 import { entityRoute } from '@/features/entity-detail/entity-route';
 
+import { AssetCollectionField } from './asset-collection-field';
 import { PropertyRow } from './asset-property-row';
 import {
   assetKindLabel,
@@ -18,12 +19,14 @@ import {
 import { useAssetGeneration } from './use-assets';
 
 /**
- * What this file is: the facts on the row itself, who uses it, and — where a
- * generation produced it — the model and the prompt that did.
+ * What this file is: the facts on the row itself, who uses it, which
+ * collections it's filed in, and — where a generation produced it — the
+ * model and the prompt that did.
  *
- * The mockup's Version, Collection and Tags rows are left out rather than
- * faked: assets have no version model and no tags column
- * (`docs/decisions/asset-library-model.md` §5, §7), and collections are #178.
+ * The mockup's Version and Tags rows are left out rather than faked: assets
+ * have no version model and no tags column
+ * (`docs/decisions/asset-library-model.md` §5, §7). Collection (#228) is not
+ * left out — it's the row below.
  */
 export function AssetOverview({
   projectId,
@@ -51,6 +54,9 @@ export function AssetOverview({
       <PropertyRow label="Added">{formatDate(asset.createdAt)}</PropertyRow>
       <PropertyRow label="Used by">
         <UsedBy projectId={projectId} summary={summary} />
+      </PropertyRow>
+      <PropertyRow label="Collection">
+        <AssetCollectionField projectId={projectId} assetId={asset.id} />
       </PropertyRow>
       <PropertyRow label="Source">{generated ? 'AI generated' : 'Imported'}</PropertyRow>
       {generated && model && <PropertyRow label="Model">{model}</PropertyRow>}
