@@ -15,7 +15,7 @@ import type { Route } from 'next';
 import Link from 'next/link';
 import { useEffect, useState, type ReactNode } from 'react';
 
-import { useEntity } from '@/features/entities/use-entities';
+import { useEntitiesByType, useEntity } from '@/features/entities/use-entities';
 import { assetMarkLabel, assetSelectionBadge } from '@/features/selection/selection';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 
@@ -59,10 +59,12 @@ export interface AssetLibraryToolbarProps {
  * sort #169/#170/#200/#201/#202 expose, driving the same server-side query
  * `useAssetLibrary` runs — nothing here narrows an already-fetched page.
  *
- * Collections (#178) and Generate Asset (the generation panel) are named in
- * the mockup but not built here; this only leaves their layout position —
- * the toolbar's trailing edge, beside the view switcher `assets-workspace.tsx`
- * already renders — free for them to land in later.
+ * #178 split into #226 (the collection model), #227 (the rail and the
+ * Collections view `assets-workspace.tsx` switches to) and this issue, #228
+ * (the Collection select below). Generate Asset (the generation panel) is
+ * still only named in the mockup, not built here; this leaves its layout
+ * position — the toolbar's trailing edge, beside the view switcher
+ * `assets-workspace.tsx` already renders — free for it to land in later.
  */
 export function AssetLibraryToolbar({
   projectId,
@@ -74,6 +76,13 @@ export function AssetLibraryToolbar({
 }: AssetLibraryToolbarProps) {
   const [searchInput, setSearchInput] = useState(filters.search);
   const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_MS);
+
+  // Every collection in the project, not just the ones with an active member
+  // (unlike the rail's `useCollectionCounts`) — the filter can still be set
+  // to an empty one. Shared between the select and its chip's label so
+  // resolving the chosen collection's name never needs a second request.
+  const collectionsQuery = useEntitiesByType(projectId, 'asset_collection');
+  const collections = collectionsQuery.data?.items ?? [];
 
   // The URL (a paste, a "clear" chip) is the source of truth for what is
   // typed, not just what was searched — this keeps the box in sync when
@@ -134,6 +143,22 @@ export function AssetLibraryToolbar({
             {ASSET_ORIGINS.map((origin) => (
               <option key={origin} value={origin}>
                 {ORIGIN_LABELS[origin]}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        <Field label="Collection" htmlFor="asset-filter-collection">
+          <Select
+            id="asset-filter-collection"
+            value={filters.collectionId ?? ''}
+            onChange={(event) => setFilter('collectionId', event.target.value || null)}
+            className="w-36"
+          >
+            <option value="">All Collections</option>
+            {collections.map((collection) => (
+              <option key={collection.id} value={collection.id}>
+                {collection.name}
               </option>
             ))}
           </Select>
@@ -299,6 +324,14 @@ export function AssetLibraryToolbar({
           {filters.pipelineStage && (
             <Tag onRemove={() => clearFilter('pipelineStage')}>
               {`Stage: ${assetPipelineStageLabel(filters.pipelineStage)}`}
+            </Tag>
+          )}
+          {filters.collectionId && (
+            <Tag onRemove={() => clearFilter('collectionId')}>
+              {`Collection: ${
+                collections.find((collection) => collection.id === filters.collectionId)?.name ??
+                filters.collectionId
+              }`}
             </Tag>
           )}
           {filters.createdAfter && (

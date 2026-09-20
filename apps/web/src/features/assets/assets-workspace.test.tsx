@@ -38,6 +38,7 @@ vi.mock('@/lib/api', () => ({
   listAssets: vi.fn(),
   archiveAsset: vi.fn(),
   restoreAsset: vi.fn(),
+  setAssetPipelineStage: vi.fn(),
   uploadAsset: vi.fn(),
   listAssetSelectionsForAsset: vi.fn(),
   getAssetSelectionSummary: vi.fn(),
@@ -328,6 +329,38 @@ describe('Assets workspace', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Close inspector' }));
     expect(screen.queryByRole('complementary')).toBeNull();
+  });
+
+  it('reflects a pipeline stage change made in the inspector in the grid badge, without a manual refresh', async () => {
+    vi.mocked(api.listAssetLibrary).mockResolvedValue(libraryPage([asset()], [summary()]));
+
+    renderWorkspace();
+    fireEvent.click(await screen.findByRole('button', { name: 'kael-suit.png' }));
+
+    const inspector = await screen.findByRole('complementary');
+    const grid = screen.getByRole('list', { name: 'Assets' });
+    expect(within(grid).queryByText('Production Ready')).toBeNull();
+
+    vi.mocked(api.setAssetPipelineStage).mockResolvedValue(
+      asset({ pipelineStage: 'production_ready' }),
+    );
+    vi.mocked(api.listAssetLibrary).mockResolvedValue(
+      libraryPage([asset({ pipelineStage: 'production_ready' })], [summary()]),
+    );
+
+    fireEvent.change(within(inspector).getByLabelText('Pipeline stage'), {
+      target: { value: 'production_ready' },
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(api.setAssetPipelineStage)).toHaveBeenCalledWith(
+        'prj_1',
+        'ast_1',
+        'production_ready',
+      );
+    });
+
+    await within(grid).findByText('Production Ready', { selector: 'span' });
   });
 
   it('pages server-side rather than slicing a fetched list on the client', async () => {
@@ -876,11 +909,15 @@ describe('Assets workspace', () => {
       renderWorkspace();
 
       await screen.findByRole('heading', { name: 'Collections' });
-      expect(screen.getByText('Props & Gear')).toBeDefined();
-      expect(screen.getByText('92 assets')).toBeDefined();
-      expect(screen.getByText('UI & HUD')).toBeDefined();
-      expect(screen.getByText('1 asset')).toBeDefined();
-      expect(screen.getByRole('img', { name: 'crate.png' })).toBeDefined();
+      // Scoped to the rail: the toolbar's own Collection filter (#228) lists
+      // the same collections by name, in a `<select>` this query would
+      // otherwise match too.
+      const rail = within(screen.getByRole('region', { name: 'Collections' }));
+      expect(rail.getByText('Props & Gear')).toBeDefined();
+      expect(rail.getByText('92 assets')).toBeDefined();
+      expect(rail.getByText('UI & HUD')).toBeDefined();
+      expect(rail.getByText('1 asset')).toBeDefined();
+      expect(rail.getByRole('img', { name: 'crate.png' })).toBeDefined();
     });
 
     it('says so when the project has no collections yet', async () => {
