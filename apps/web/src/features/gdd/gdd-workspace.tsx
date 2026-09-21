@@ -47,6 +47,7 @@ import { GddHistory } from './gdd-history';
 import { GddOutline } from './gdd-outline';
 import { GddReview } from './gdd-review';
 import { gddDocumentRoute, gddRoute } from './gdd-route';
+import { resolveInspectorSlot } from './inspector-slot';
 import { sectionInView } from './scroll-position';
 import {
   GDD_DOCUMENT_NAME,
@@ -332,6 +333,15 @@ function GddDocumentEditor({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [comparing]);
 
+  const inspectorSlot = resolveInspectorSlot({
+    openEntity,
+    reviewOpen,
+    askingAi,
+    historyOpen,
+    comparing,
+    archived,
+  });
+
   return (
     <EntityReferenceProvider
       entities={entities}
@@ -450,11 +460,14 @@ function GddDocumentEditor({
           </div>
         </div>
 
-        {openEntity && !comparing && (
-          <EntityReferenceInspector entity={openEntity} onClose={() => setOpenEntityId(null)} />
+        {inspectorSlot.kind === 'entity' && (
+          <EntityReferenceInspector
+            entity={inspectorSlot.entity}
+            onClose={() => setOpenEntityId(null)}
+          />
         )}
 
-        {!openEntity && reviewOpen && !comparing && (
+        {inspectorSlot.kind === 'review' && (
           <Inspector
             title="Review"
             description={designDocument.entity.name}
@@ -471,7 +484,7 @@ function GddDocumentEditor({
           </Inspector>
         )}
 
-        {!openEntity && !reviewOpen && askingAi && !comparing && !archived && (
+        {inspectorSlot.kind === 'ai' && (
           <Inspector
             title={designDocument.entity.name}
             description="Design document"
@@ -484,7 +497,7 @@ function GddDocumentEditor({
           </Inspector>
         )}
 
-        {!openEntity && !reviewOpen && !askingAi && historyOpen && !comparing && (
+        {inspectorSlot.kind === 'history' && (
           <Inspector
             title="History"
             description={designDocument.entity.name}

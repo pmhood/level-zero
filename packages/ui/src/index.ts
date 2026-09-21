@@ -102,6 +102,22 @@ export {
   insertStepFlow,
 } from './editor/step-flow';
 export {
+  CARD_BODY_NODE,
+  CARD_GRID_NODE,
+  CARD_ICONS,
+  CARD_NODE,
+  CARD_TITLE_NODE,
+  CardGrid,
+  CardGridCard,
+  CardGridCardBody,
+  CardGridCardTitle,
+  addCard,
+  insertCardGrid,
+  moveCard,
+  removeCard,
+  type CardIcon,
+} from './editor/card-grid';
+export {
   EDITOR_MODE_CONFIG,
   EDITOR_MODES,
   type EditorMode,

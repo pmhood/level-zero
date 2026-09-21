@@ -7,6 +7,7 @@ import { Markdown } from '@tiptap/markdown';
 import StarterKit from '@tiptap/starter-kit';
 
 import { Callout, CalloutBody, CalloutTitle } from './callout';
+import { CardGrid, CardGridCard, CardGridCardBody, CardGridCardTitle } from './card-grid';
 import { FindInDocument } from './find-in-document';
 import { MarkdownPaste } from './markdown-paste';
 import { PullQuote, PullQuoteAttribution, PullQuoteText } from './pull-quote';
@@ -78,6 +79,12 @@ export function createEditorExtensions({
     StepFlowStepBody,
     StepFlowStep,
     StepFlow,
+    // The card grid (#263) — a repeatable grid of icon/title/body cards, same
+    // reasoning as the callout above: every surface gets it.
+    CardGridCardTitle,
+    CardGridCardBody,
+    CardGridCard,
+    CardGrid,
     // Markdown is an import/export format, never the stored one: documents are
     // persisted as TipTap JSON (`editor.getJSON()`).
     Markdown,

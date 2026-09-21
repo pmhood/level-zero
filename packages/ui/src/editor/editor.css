@@ -304,6 +304,87 @@
   align-self: flex-start;
 }
 
+/*
+ * Card grid (issue #263) — a repeatable grid of icon/title/body cards, Design
+ * Pillars in the mockup. Fixed shape: one responsive column count, no
+ * per-card styling. The "+ Add card" control and each card's move/remove
+ * controls sit outside the grid's own content so they never get search- or
+ * export-visible text of their own.
+ */
+.tiptap-surface .lz-card-grid-wrapper {
+  margin: 0;
+}
+
+.tiptap-surface .lz-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75em;
+}
+
+.tiptap-surface .lz-card-grid-add {
+  margin-top: 0.6em;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: 8px;
+  padding: 0.5em 0.9em;
+  font-size: 0.85em;
+  color: var(--color-muted-foreground);
+}
+
+.tiptap-surface .lz-card-grid-add:hover {
+  color: var(--color-foreground);
+  border-color: var(--color-border);
+}
+
+.tiptap-surface .lz-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  padding: 0.9em 1em;
+  background-color: var(--color-raised);
+}
+
+.tiptap-surface .lz-card-icon {
+  color: var(--color-primary);
+}
+
+.tiptap-surface .lz-card-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--color-foreground);
+}
+
+.tiptap-surface .lz-card-body {
+  color: var(--color-muted-foreground);
+}
+
+.tiptap-surface .lz-card-body > * + * {
+  margin-top: 0.5em;
+}
+
+.tiptap-surface .lz-card-controls {
+  position: absolute;
+  top: 0.4em;
+  right: 0.4em;
+  display: flex;
+  gap: 0.15em;
+}
+
+.tiptap-surface .lz-card-controls button {
+  border-radius: 4px;
+  padding: 0.05em 0.35em;
+  font-size: 0.85em;
+  line-height: 1.4;
+  color: var(--color-faint-foreground);
+}
+
+.tiptap-surface .lz-card-controls button:hover {
+  color: var(--color-foreground);
+  background-color: var(--color-hover);
+}
+
 .tiptap-surface code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.9em;

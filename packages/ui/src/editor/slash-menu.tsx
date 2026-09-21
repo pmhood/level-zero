@@ -6,6 +6,7 @@ import * as React from 'react';
 
 import { cn } from '../cn';
 import { CALLOUT_VARIANT_CONFIG, CALLOUT_VARIANTS, insertCallout } from './callout';
+import { insertCardGrid } from './card-grid';
 import { insertPullQuote } from './pull-quote';
 import { insertStepFlow } from './step-flow';
 
@@ -94,6 +95,13 @@ export const BASE_EDITOR_COMMANDS: EditorCommand[] = [
     hint: 'An ordered sequence of steps, connected by arrows',
     keywords: ['steps', 'sequence', 'flow', 'core loop', 'process'],
     run: (editor, range) => insertStepFlow(editor, range),
+  },
+  {
+    id: 'card-grid',
+    title: 'Card grid',
+    hint: 'A repeatable grid of icon, title and body cards',
+    keywords: ['cards', 'grid', 'pillars'],
+    run: (editor, range) => insertCardGrid(editor, range),
   },
   {
     id: 'code-block',
