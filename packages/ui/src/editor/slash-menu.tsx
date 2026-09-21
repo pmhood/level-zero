@@ -6,6 +6,7 @@ import * as React from 'react';
 
 import { cn } from '../cn';
 import { CALLOUT_VARIANT_CONFIG, CALLOUT_VARIANTS, insertCallout } from './callout';
+import { insertCardGrid } from './card-grid';
 import { insertPullQuote } from './pull-quote';
 
 export interface EditorCommand {
@@ -86,6 +87,13 @@ export const BASE_EDITOR_COMMANDS: EditorCommand[] = [
     hint: 'A quotation with an attribution',
     keywords: ['quote', 'blockquote', 'attribution', 'pullquote'],
     run: (editor, range) => insertPullQuote(editor, range),
+  },
+  {
+    id: 'card-grid',
+    title: 'Card grid',
+    hint: 'A repeatable grid of icon, title and body cards',
+    keywords: ['cards', 'grid', 'pillars'],
+    run: (editor, range) => insertCardGrid(editor, range),
   },
   {
     id: 'code-block',

@@ -5,6 +5,7 @@ import * as React from 'react';
 import { Button, type ButtonProps } from '../button';
 import { cn } from '../cn';
 import { insertCallout } from './callout';
+import { insertCardGrid } from './card-grid';
 import type { ToolbarGroup } from './editor-modes';
 import { insertPullQuote } from './pull-quote';
 
@@ -209,6 +210,7 @@ export function EditorToolbar({ editor, groups, actions }: EditorToolbarProps) {
           Callout
         </ToolbarButton>
         <ToolbarButton onClick={() => editor && insertPullQuote(editor)}>Pull-quote</ToolbarButton>
+        <ToolbarButton onClick={() => editor && insertCardGrid(editor)}>Card grid</ToolbarButton>
       </>
     ),
     export: (
