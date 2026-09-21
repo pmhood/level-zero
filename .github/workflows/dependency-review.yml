@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/dependency-review-action@v4
+      - uses: actions/dependency-review-action@v5
         with:
           # Moderate and below are reported in the summary but do not fail the
           # run. Raising this to `moderate` is a one-word change if the noise
