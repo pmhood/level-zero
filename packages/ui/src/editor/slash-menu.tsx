@@ -7,6 +7,7 @@ import * as React from 'react';
 import { cn } from '../cn';
 import { CALLOUT_VARIANT_CONFIG, CALLOUT_VARIANTS, insertCallout } from './callout';
 import { insertPullQuote } from './pull-quote';
+import { insertStepFlow } from './step-flow';
 
 export interface EditorCommand {
   id: string;
@@ -86,6 +87,13 @@ export const BASE_EDITOR_COMMANDS: EditorCommand[] = [
     hint: 'A quotation with an attribution',
     keywords: ['quote', 'blockquote', 'attribution', 'pullquote'],
     run: (editor, range) => insertPullQuote(editor, range),
+  },
+  {
+    id: 'step-flow',
+    title: 'Step flow',
+    hint: 'An ordered sequence of steps, connected by arrows',
+    keywords: ['steps', 'sequence', 'flow', 'core loop', 'process'],
+    run: (editor, range) => insertStepFlow(editor, range),
   },
   {
     id: 'code-block',

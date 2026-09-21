@@ -191,6 +191,119 @@
   content: '\2014\a0';
 }
 
+/*
+ * Step flow (issue #264) — an ordered sequence of titled steps (design
+ * system spec §35's Core Loop example: Explore → Salvage → Upgrade → Go
+ * Deeper). The arrow connectors are CSS only, drawn from the steps' document
+ * order — nothing about them is stored, so reordering a step just moves
+ * where the arrow points from.
+ */
+.tiptap-surface .lz-step-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75em;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tiptap-surface .lz-step-flow-steps {
+  display: flex;
+  align-items: stretch;
+  gap: 2.5em;
+  overflow-x: auto;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.tiptap-surface .lz-step-flow-step {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  min-width: 9rem;
+  flex-direction: column;
+  gap: 0.5em;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background-color: var(--color-surface);
+  padding: 0.75em;
+}
+
+.tiptap-surface .lz-step-flow-step:not(:last-child)::after {
+  content: '\2192';
+  position: absolute;
+  top: 50%;
+  right: -1.75em;
+  transform: translateY(-50%);
+  color: var(--color-faint-foreground);
+  font-size: 1.1em;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.tiptap-surface .lz-step-flow-step-controls {
+  position: absolute;
+  top: 0.4em;
+  right: 0.4em;
+  display: flex;
+  gap: 0.15em;
+  z-index: 1;
+}
+
+.tiptap-surface .lz-step-flow-step-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5em;
+  height: 1.5em;
+  border-radius: 4px;
+  color: var(--color-faint-foreground);
+  background-color: var(--color-raised);
+}
+
+.tiptap-surface .lz-step-flow-step-controls button:hover:not(:disabled) {
+  color: var(--color-foreground);
+  background-color: var(--color-hover);
+}
+
+.tiptap-surface .lz-step-flow-step-controls button:disabled {
+  opacity: 0.35;
+}
+
+.tiptap-surface .lz-step-flow-step-content {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.35em;
+}
+
+.tiptap-surface .lz-step-flow-step-content > img:first-child {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  margin: 0;
+}
+
+.tiptap-surface .lz-step-flow-step-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--color-foreground);
+}
+
+.tiptap-surface .lz-step-flow-step-body {
+  color: var(--color-muted-foreground);
+}
+
+.tiptap-surface .lz-step-flow-step-body > * + * {
+  margin-top: 0.35em;
+}
+
+.tiptap-surface .lz-step-flow-add {
+  align-self: flex-start;
+}
+
 .tiptap-surface code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.9em;

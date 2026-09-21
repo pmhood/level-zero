@@ -7,6 +7,7 @@ import { cn } from '../cn';
 import { insertCallout } from './callout';
 import type { ToolbarGroup } from './editor-modes';
 import { insertPullQuote } from './pull-quote';
+import { insertStepFlow } from './step-flow';
 
 /**
  * The design system's small ghost button (spec section 14/16), plus the one
@@ -209,6 +210,7 @@ export function EditorToolbar({ editor, groups, actions }: EditorToolbarProps) {
           Callout
         </ToolbarButton>
         <ToolbarButton onClick={() => editor && insertPullQuote(editor)}>Pull-quote</ToolbarButton>
+        <ToolbarButton onClick={() => editor && insertStepFlow(editor)}>Step flow</ToolbarButton>
       </>
     ),
     export: (
