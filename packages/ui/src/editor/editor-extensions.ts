@@ -13,6 +13,7 @@ import { MarkdownPaste } from './markdown-paste';
 import { PullQuote, PullQuoteAttribution, PullQuoteText } from './pull-quote';
 import { SectionId } from './section-id';
 import { BASE_EDITOR_COMMANDS, createSlashMenuExtension, type EditorCommand } from './slash-menu';
+import { StepFlow, StepFlowStep, StepFlowStepBody, StepFlowStepTitle } from './step-flow';
 
 export interface EditorExtensionOptions {
   placeholder: string;
@@ -71,6 +72,13 @@ export function createEditorExtensions({
     PullQuoteText,
     PullQuoteAttribution,
     PullQuote,
+    // The step flow (#264): an ordered sequence of titled steps, connected by
+    // arrows in the editor and by plain sequence in export. Same reasoning as
+    // the callout and pull-quote above — every surface gets it.
+    StepFlowStepTitle,
+    StepFlowStepBody,
+    StepFlowStep,
+    StepFlow,
     // The card grid (#263) — a repeatable grid of icon/title/body cards, same
     // reasoning as the callout above: every surface gets it.
     CardGridCardTitle,

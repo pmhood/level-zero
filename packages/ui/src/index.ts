@@ -91,6 +91,17 @@ export {
   insertPullQuote,
 } from './editor/pull-quote';
 export {
+  STEP_FLOW_NODE,
+  STEP_FLOW_STEP_BODY_NODE,
+  STEP_FLOW_STEP_NODE,
+  STEP_FLOW_STEP_TITLE_NODE,
+  StepFlow,
+  StepFlowStep,
+  StepFlowStepBody,
+  StepFlowStepTitle,
+  insertStepFlow,
+} from './editor/step-flow';
+export {
   CARD_BODY_NODE,
   CARD_GRID_NODE,
   CARD_ICONS,
