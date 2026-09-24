@@ -385,6 +385,75 @@
   background-color: var(--color-hover);
 }
 
+/*
+ * Tabbed block (issue #265) — named tabs, each holding its own document
+ * content (design system spec §18's tab styling). `packages/ui/src/tabs.tsx`
+ * renders the strip itself; this file only lays out the "+ Add tab" control
+ * beside it and each tab's own panel. Every panel is an ordinary sibling in
+ * document order — only the active one is visible in the live editor (the
+ * `hidden` attribute `TabbedBlockTabView` sets), so a static export, which
+ * carries no "active" state, shows every tab's content in sequence.
+ */
+.tiptap-surface .lz-tabbed-block {
+  margin: 0;
+}
+
+.tiptap-surface .lz-tabbed-block-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5em;
+}
+
+/*
+ * Reorder/remove/add for the active tab. These live beside the strip, not on
+ * each tab's own panel, because only the active panel is ever visible — a
+ * control on a hidden panel would be unreachable without first switching to
+ * it, so managing a tab always means managing whichever one is showing.
+ */
+.tiptap-surface .lz-tabbed-block-tab-controls {
+  display: flex;
+  flex: none;
+  gap: 0.15em;
+}
+
+.tiptap-surface .lz-tabbed-block-tab-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75em;
+  height: 1.75em;
+  border-radius: 4px;
+  color: var(--color-faint-foreground);
+}
+
+.tiptap-surface .lz-tabbed-block-tab-controls button:hover:not(:disabled) {
+  color: var(--color-foreground);
+  background-color: var(--color-hover);
+}
+
+.tiptap-surface .lz-tabbed-block-tab-controls button:disabled {
+  opacity: 0.35;
+}
+
+.tiptap-surface .lz-tabbed-block-panels {
+  margin-top: 0.75em;
+}
+
+.tiptap-surface .lz-tabbed-block-tab-title {
+  margin: 0 0 0.35em;
+  font-weight: 600;
+  color: var(--color-foreground);
+}
+
+.tiptap-surface .lz-tabbed-block-tab-body {
+  color: var(--color-muted-foreground);
+}
+
+.tiptap-surface .lz-tabbed-block-tab-body > * + * {
+  margin-top: 0.5em;
+}
+
 .tiptap-surface code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.9em;
