@@ -1,7 +1,9 @@
 import type { AiCapability } from '@level-zero/ai';
 import type { EntityType } from '@level-zero/domain';
 
-import type { AiSubject } from './ai-subject';
+import type { RunAiActionInput } from '@/lib/api';
+
+import { subjectContext, type AiSubject } from './ai-subject';
 
 /**
  * One contextual AI action the inspector can run on what is selected.
@@ -261,6 +263,25 @@ export function actionsFor(subject: AiSubject): readonly AiInspectorAction[] {
     case 'entity':
       return ENTITY_TYPE_ACTIONS[subject.entity.type] ?? ENTITY_ACTIONS;
   }
+}
+
+/**
+ * The one shape every `useRunAiAction` mutation sends, whichever panel built
+ * the action — the generic Ask AI form and the drafting panel's tabs and
+ * standing suggestions alike (#167: one request path, not four pipelines).
+ */
+export function runAiActionInput(
+  action: AiInspectorAction,
+  subject: AiSubject,
+  relatedDepth: number,
+): RunAiActionInput {
+  return {
+    action: action.id,
+    capability: action.capability,
+    instruction: action.instruction,
+    ...subjectContext(subject),
+    relatedDepth,
+  };
 }
 
 /**

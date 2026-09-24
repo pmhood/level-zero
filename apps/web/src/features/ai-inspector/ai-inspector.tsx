@@ -6,18 +6,13 @@ import { useId, useState } from 'react';
 
 import { apiErrorMessage, type AiActionResult } from '@/lib/api';
 
-import {
-  acceptedIdeaName,
-  subjectContext,
-  subjectKey,
-  subjectLabel,
-  type AiSubject,
-} from './ai-subject';
+import { acceptedIdeaName, subjectKey, subjectLabel, type AiSubject } from './ai-subject';
 import {
   ASK_ACTION_ID,
   ASK_CAPABILITY,
   actionsFor,
   capabilityAvailable,
+  runAiActionInput,
   type AiInspectorAction,
 } from './inspector-actions';
 import { ResolvedContextDisclosure } from './resolved-context-disclosure';
@@ -79,21 +74,12 @@ function ContextualAi({ projectId, subject }: AiInspectorProps) {
   function run(action: AiInspectorAction): void {
     setAnswer(null);
     setKept(null);
-    runAction.mutate(
-      {
-        action: action.id,
-        capability: action.capability,
-        instruction: action.instruction,
-        ...subjectContext(subject),
-        relatedDepth: includeRelated ? 1 : 0,
+    runAction.mutate(runAiActionInput(action, subject, includeRelated ? 1 : 0), {
+      onSuccess: (result) => {
+        setAnswer({ action, result });
+        setIdeaName(acceptedIdeaName(subject, action.label));
       },
-      {
-        onSuccess: (result) => {
-          setAnswer({ action, result });
-          setIdeaName(acceptedIdeaName(subject, action.label));
-        },
-      },
-    );
+    });
   }
 
   function ask(): void {
