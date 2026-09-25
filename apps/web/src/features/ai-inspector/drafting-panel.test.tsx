@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type { ResolvedContext } from '@level-zero/ai';
 import type { Entity } from '@level-zero/domain';
+import type { AcceptedAiEdit } from '@level-zero/ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -46,14 +47,18 @@ function context(): ResolvedContext {
   };
 }
 
-function renderPanel() {
+function renderPanel(onInsert: (edit: Omit<AcceptedAiEdit, 'replaced'>) => void = vi.fn()) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <DraftingPanel projectId="prj_1" subject={{ kind: 'entity', entity: document() }} />
+      <DraftingPanel
+        projectId="prj_1"
+        subject={{ kind: 'entity', entity: document() }}
+        onInsert={onInsert}
+      />
     </QueryClientProvider>,
   );
 }
@@ -162,6 +167,47 @@ describe('DraftingPanel', () => {
       expect(writeText).toHaveBeenCalledWith('**Player Fantasy**\n\nSomething wondrous.'),
     );
     expect(await screen.findByText('Copied.')).toBeTruthy();
+  });
+
+  it('inserts the answer with its provenance, on an explicit click and not before', async () => {
+    const onInsert = vi.fn();
+    renderPanel(onInsert);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Summarize all design decisions' }));
+    await screen.findByText('Player Fantasy');
+
+    // Getting an answer back is not itself acceptance — nothing is inserted
+    // until the writer explicitly asks for it.
+    expect(onInsert).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Insert to Document' }));
+
+    expect(onInsert).toHaveBeenCalledExactlyOnceWith({
+      // The action id and output come from the generation itself — what the
+      // API actually answered with — not from which button asked for it.
+      action: 'draft-chat',
+      label: 'Summarize all design decisions',
+      instruction: expect.stringContaining('every design decision'),
+      accepted: '**Player Fantasy**\n\nSomething wondrous.',
+      generationId: 'gen_1',
+    });
+    expect(await screen.findByText('Inserted.')).toBeTruthy();
+  });
+
+  it('leaves no trace of an answer nobody accepted', async () => {
+    const onInsert = vi.fn();
+    renderPanel(onInsert);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Summarize all design decisions' }));
+    await screen.findByText('Player Fantasy');
+
+    // A second request replaces the first answer without ever inserting it.
+    fireEvent.click(screen.getByRole('tab', { name: 'Chat' }));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Something else' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    await waitFor(() => expect(api.runAiAction).toHaveBeenCalledTimes(2));
+    expect(onInsert).not.toHaveBeenCalled();
   });
 
   it('reports a failed request and keeps the panel usable', async () => {

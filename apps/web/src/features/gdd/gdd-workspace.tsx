@@ -184,6 +184,23 @@ function GddDocumentEditor({
     [projectId, documentId, recordAiEdit],
   );
 
+  // The drafting panel's insert (#261): the answer lands at the cursor as an
+  // ordinary editor transaction — the same `onUpdate` path that reports every
+  // other edit to autosave — and is then versioned exactly like an accepted
+  // inline edit, through the same `recordAiEdit`. Markdown is only ever the
+  // wire format in; `contentType: 'markdown'` parses it into the structured
+  // nodes the document actually stores.
+  const insertAiAnswer = useCallback(
+    (edit: Omit<AcceptedAiEdit, 'replaced'>) => {
+      const editor = editorRef.current;
+      if (!editor) return;
+
+      editor.chain().focus().insertContent(edit.accepted, { contentType: 'markdown' }).run();
+      void recordAiEdit({ ...edit, replaced: '' });
+    },
+    [recordAiEdit],
+  );
+
   function handleChange(next: JSONContent) {
     setContent(next);
     autosave.onChange(next);
@@ -493,6 +510,7 @@ function GddDocumentEditor({
             <DraftingPanel
               projectId={projectId}
               subject={{ kind: 'entity', entity: designDocument.entity }}
+              onInsert={insertAiAnswer}
             />
           </Inspector>
         )}

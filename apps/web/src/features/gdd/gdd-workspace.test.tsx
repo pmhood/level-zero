@@ -33,6 +33,8 @@ vi.mock('@/lib/api', () => ({
   saveDocumentContent: vi.fn(),
   snapshotDocument: vi.fn(),
   suggestDocumentEdit: vi.fn(),
+  listAiCapabilities: vi.fn(),
+  runAiAction: vi.fn(),
   listEntities: vi.fn(),
   getProject: vi.fn(),
   listCommentThreads: vi.fn(),
@@ -493,5 +495,132 @@ describe('GddWorkspace — archived documents', () => {
 
     expect(await screen.findByLabelText('Reviewing')).toBeDefined();
     expect(await screen.findByRole('button', { name: 'Approve' })).toBeDefined();
+  });
+});
+
+describe('GddWorkspace — inserting a drafted answer (#261)', () => {
+  // Long enough to clear `MIN_AI_EDIT_VERSION_LENGTH`, so the insert earns a
+  // version rather than being left to autosave alone.
+  const DRAFTED_ANSWER =
+    'The salvage crew works the wreck in shifts, racing a tide that reclaims the ' +
+    'hull twice a day. Each shift banks air, tools and nerve against the next, ' +
+    'and a bad dive costs the whole crew the time it takes to recover the diver. ' +
+    'Nobody dives alone, and nobody surfaces without a full count.';
+
+  // jsdom does not compute real layout, so a `Range`'s rect methods do not
+  // exist at all; the same gap the find-in-document tests above work around
+  // for `scrollIntoView`. Inserting content moves the selection, which makes
+  // TipTap's own `focus()` command try to scroll it into view.
+  const getClientRects = Range.prototype.getClientRects;
+  const getBoundingClientRect = Range.prototype.getBoundingClientRect;
+
+  beforeEach(() => {
+    Range.prototype.getClientRects = () => ({ length: 0 }) as unknown as DOMRectList;
+    Range.prototype.getBoundingClientRect = () => new DOMRect();
+
+    vi.mocked(api.listAiCapabilities).mockResolvedValue({ capabilities: ['text.generate'] });
+    vi.mocked(api.runAiAction).mockResolvedValue({
+      generationId: 'gen_1',
+      action: 'draft-chat',
+      capability: 'text.generate',
+      output: DRAFTED_ANSWER,
+      context: {
+        project: { id: 'prj_1', name: 'Driftwake', description: null },
+        instruction: 'irrelevant',
+        entities: [],
+        assets: [],
+        lineage: null,
+        truncated: false,
+      },
+    });
+    vi.mocked(api.saveDocumentContent).mockResolvedValue(document());
+  });
+
+  afterEach(() => {
+    Range.prototype.getClientRects = getClientRects;
+    Range.prototype.getBoundingClientRect = getBoundingClientRect;
+  });
+
+  it('lands the answer at the cursor, saves it through autosave, and versions it with provenance', async () => {
+    vi.mocked(api.getDocument).mockResolvedValue(
+      document({
+        content: {
+          type: 'doc',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Existing prose.' }] }],
+        },
+      }),
+    );
+    vi.mocked(api.snapshotDocument).mockResolvedValue({
+      id: 'ver_1',
+      documentId: 'doc_1',
+      versionNumber: 1,
+      name: 'AI edit — Chat',
+      reason: 'ai_edit',
+      generationId: 'gen_1',
+      parentVersionId: null,
+      createdBy: null,
+      createdAt: new Date('2026-03-01T00:00:00.000Z'),
+      isCurrent: true,
+    });
+
+    renderWorkspace({ projectId: 'prj_1', documentId: 'doc_1' });
+
+    fireEvent.click(await screen.findByRole('button', { name: /Ask AI/ }));
+    fireEvent.change(screen.getByLabelText('Chat'), { target: { value: 'Write the intro' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Insert to Document' }));
+
+    // Structured content, next to what was already there — not a second copy
+    // of the document and not rendered HTML. Scoped to the editor surface:
+    // the panel is still showing the same answer, so an unscoped match would
+    // be ambiguous between the two.
+    expect(await screen.findByText('Existing prose.')).toBeDefined();
+    expect(
+      await screen.findByText(DRAFTED_ANSWER, { selector: '.tiptap-surface *' }),
+    ).toBeDefined();
+
+    // The insert is an edit like any other: it flows through autosave.
+    await waitFor(() =>
+      expect(api.saveDocumentContent).toHaveBeenCalledWith(
+        'prj_1',
+        'doc_1',
+        expect.objectContaining({
+          type: 'doc',
+          content: expect.arrayContaining([
+            expect.objectContaining({
+              content: [expect.objectContaining({ text: DRAFTED_ANSWER })],
+            }),
+          ]),
+        }),
+      ),
+    );
+
+    // And it earns a version on the same terms an accepted inline edit does,
+    // with the generation that produced it recorded.
+    await waitFor(() =>
+      expect(api.snapshotDocument).toHaveBeenCalledWith('prj_1', 'doc_1', {
+        reason: 'ai_edit',
+        name: 'AI edit — Chat',
+        generationId: 'gen_1',
+      }),
+    );
+  });
+
+  it('leaves the document untouched until the answer is actually inserted', async () => {
+    vi.mocked(api.getDocument).mockResolvedValue(document());
+
+    renderWorkspace({ projectId: 'prj_1', documentId: 'doc_1' });
+
+    fireEvent.click(await screen.findByRole('button', { name: /Ask AI/ }));
+    fireEvent.change(screen.getByLabelText('Chat'), { target: { value: 'Write the intro' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    // The answer is drawn in the panel, not the document.
+    await screen.findByText(DRAFTED_ANSWER, { selector: 'article *' });
+    expect(screen.queryByText(DRAFTED_ANSWER, { selector: '.tiptap-surface *' })).toBeNull();
+
+    expect(api.saveDocumentContent).not.toHaveBeenCalled();
+    expect(api.snapshotDocument).not.toHaveBeenCalled();
   });
 });
