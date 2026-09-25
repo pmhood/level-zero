@@ -1,7 +1,7 @@
 'use client';
 
 import type { Entity } from '@level-zero/domain';
-import { Button, Field, SparklesIcon, Tabs, Textarea } from '@level-zero/ui';
+import { Button, Field, SparklesIcon, Tabs, Textarea, type AcceptedAiEdit } from '@level-zero/ui';
 import { useId, useState } from 'react';
 
 import { apiErrorMessage, type AiActionResult } from '@/lib/api';
@@ -26,11 +26,22 @@ import { useAiCapabilities, useRunAiAction } from './use-ai-inspector';
 export interface DraftingPanelProps {
   projectId: string;
   subject: { kind: 'entity'; entity: Entity; excerpt?: string | null };
+  /**
+   * Puts the current answer into the document at the cursor (#261). The
+   * panel never touches the editor itself — the feature that owns the
+   * document supplies this, the same seam the inline layer's `onAccept`
+   * uses, so an insert is versioned through `recordAcceptedAiEdit` rather
+   * than a second path beside it.
+   */
+  onInsert: (edit: Omit<AcceptedAiEdit, 'replaced'>) => void;
 }
 
 /** One drafted answer, held here until the next request replaces it. */
 interface DraftAnswer {
   result: AiActionResult;
+  /** The action's own label — what an inserted answer is versioned under. */
+  label: string;
+  instruction: string;
 }
 
 /**
@@ -39,10 +50,12 @@ interface DraftAnswer {
  * second AI system next to it (#167 — the tabs are framings of one request,
  * not four pipelines).
  *
- * "Insert to Document" and thumbs up/down are later issues: an answer stays
- * here, formatted and copyable, until the next request replaces it.
+ * Thumbs up/down are a later issue. An answer stays here, formatted, copyable
+ * and insertable, until the next request replaces it or the writer ignores
+ * it — either way, nothing reaches the document until Insert to Document is
+ * pressed (#261).
  */
-export function DraftingPanel({ projectId, subject }: DraftingPanelProps) {
+export function DraftingPanel({ projectId, subject, onInsert }: DraftingPanelProps) {
   const capabilitiesQuery = useAiCapabilities(projectId);
   const runAction = useRunAiAction(projectId);
 
@@ -50,6 +63,7 @@ export function DraftingPanel({ projectId, subject }: DraftingPanelProps) {
   const [request, setRequest] = useState('');
   const [answer, setAnswer] = useState<DraftAnswer | null>(null);
   const [copied, setCopied] = useState(false);
+  const [inserted, setInserted] = useState(false);
 
   const askId = useId();
   const label = subjectLabel(subject);
@@ -58,9 +72,23 @@ export function DraftingPanel({ projectId, subject }: DraftingPanelProps) {
 
   function runInstruction(action: AiInspectorAction): void {
     setCopied(false);
+    setInserted(false);
     runAction.mutate(runAiActionInput(action, subject, 1), {
-      onSuccess: (result) => setAnswer({ result }),
+      onSuccess: (result) =>
+        setAnswer({ result, label: action.label, instruction: action.instruction }),
     });
+  }
+
+  function insertAnswer(): void {
+    if (!answer) return;
+    onInsert({
+      action: answer.result.action,
+      label: answer.label,
+      instruction: answer.instruction,
+      accepted: answer.result.output,
+      generationId: answer.result.generationId,
+    });
+    setInserted(true);
   }
 
   function submit(): void {
@@ -94,7 +122,8 @@ export function DraftingPanel({ projectId, subject }: DraftingPanelProps) {
           AI Drafting Assistant
         </h3>
         <p className="mt-0.5 text-xs text-faint-foreground">
-          Turn ideas into {label}. Nothing is written to the document until you copy an answer in.
+          Turn ideas into {label}. Nothing is written to the document until you copy or insert an
+          answer.
         </p>
       </header>
 
@@ -123,9 +152,17 @@ export function DraftingPanel({ projectId, subject }: DraftingPanelProps) {
           <ResolvedContextDisclosure context={answer.result.context} />
 
           <div className="flex flex-wrap items-center gap-1.5">
+            <Button size="sm" onClick={insertAnswer}>
+              Insert to Document
+            </Button>
             <Button variant="ai" size="sm" onClick={copyAnswer}>
               Copy
             </Button>
+            {inserted && (
+              <span role="status" className="text-xs text-muted-foreground">
+                Inserted.
+              </span>
+            )}
             {copied && (
               <span role="status" className="text-xs text-muted-foreground">
                 Copied.
