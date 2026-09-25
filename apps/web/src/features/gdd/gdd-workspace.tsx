@@ -25,7 +25,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { AiInspector } from '@/features/ai-inspector/ai-inspector';
+import { DraftingPanel } from '@/features/ai-inspector/drafting-panel';
 import { matchEntities, referencedEntityIds } from '@/features/entities/entity-reference';
 import { EntityVersionCompare } from '@/features/entities/entity-version-compare';
 import { EntityReferenceProvider } from '@/features/entities/entity-reference-context';
@@ -490,7 +490,7 @@ function GddDocumentEditor({
             description="Design document"
             onClose={() => setAskingAi(false)}
           >
-            <AiInspector
+            <DraftingPanel
               projectId={projectId}
               subject={{ kind: 'entity', entity: designDocument.entity }}
             />
