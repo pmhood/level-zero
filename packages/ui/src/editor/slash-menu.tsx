@@ -9,6 +9,7 @@ import { CALLOUT_VARIANT_CONFIG, CALLOUT_VARIANTS, insertCallout } from './callo
 import { insertCardGrid } from './card-grid';
 import { insertPullQuote } from './pull-quote';
 import { insertStepFlow } from './step-flow';
+import { insertTabbedBlock } from './tabbed-block';
 
 export interface EditorCommand {
   id: string;
@@ -102,6 +103,13 @@ export const BASE_EDITOR_COMMANDS: EditorCommand[] = [
     hint: 'A repeatable grid of icon, title and body cards',
     keywords: ['cards', 'grid', 'pillars'],
     run: (editor, range) => insertCardGrid(editor, range),
+  },
+  {
+    id: 'tabbed-block',
+    title: 'Tabbed block',
+    hint: 'Named tabs, each holding its own content',
+    keywords: ['tabs', 'tabbed', 'panel'],
+    run: (editor, range) => insertTabbedBlock(editor, range),
   },
   {
     id: 'code-block',
