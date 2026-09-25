@@ -9,7 +9,7 @@ This file covers what a README reader still gets wrong.
 
 ## Commands
 
-`pnpm dev` / `build` / `typecheck` / `lint` / `test` run across the workspace via Turborepo. The
+`pnpm dev` / `build` / `typecheck` / `test` run across the workspace via Turborepo. The
 full table, including the `db:*` and `infra:*` commands, is in `README.md`.
 
 ```bash
@@ -17,6 +17,9 @@ pnpm turbo run test --filter=@level-zero/api                     # one workspace
 pnpm turbo run test --filter=@level-zero/ui -- src/ui.test.tsx   # one file
 pnpm turbo run test --filter=@level-zero/ui -- -t "renders"      # one test by name
 ```
+
+`pnpm lint` is not a Turborepo task — it runs `eslint .` over the entire repository and has no
+per-package filtering equivalent.
 
 Always go through `pnpm turbo run test --filter=...`, never `pnpm --filter <pkg> test` or
 `pnpm --filter <pkg> exec vitest` directly. Those invoke the workspace's own script and bypass
