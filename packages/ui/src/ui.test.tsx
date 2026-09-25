@@ -125,6 +125,46 @@ describe('Tabs', () => {
     );
     expect(screen.getByRole('tab', { name: 'Ideas' }).getAttribute('aria-selected')).toBe('false');
   });
+
+  it('keeps a roving tabIndex, so only the active tab is a Tab stop', () => {
+    render(<ControlledTabs />);
+
+    expect(screen.getByRole('tab', { name: 'Ideas' }).getAttribute('tabindex')).toBe('0');
+    expect(screen.getByRole('tab', { name: 'Archived' }).getAttribute('tabindex')).toBe('-1');
+  });
+
+  it('moves focus and activates with the arrow keys, wrapping at either end', () => {
+    render(<ControlledTabs />);
+
+    const ideas = screen.getByRole('tab', { name: 'Ideas' });
+    const archived = screen.getByRole('tab', { name: 'Archived' });
+
+    ideas.focus();
+    fireEvent.keyDown(ideas, { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(archived);
+    expect(archived.getAttribute('aria-selected')).toBe('true');
+
+    fireEvent.keyDown(archived, { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(ideas);
+    expect(ideas.getAttribute('aria-selected')).toBe('true');
+
+    fireEvent.keyDown(ideas, { key: 'ArrowLeft' });
+    expect(document.activeElement).toBe(archived);
+  });
+
+  it('jumps to the ends with Home and End', () => {
+    render(<ControlledTabs />);
+
+    const ideas = screen.getByRole('tab', { name: 'Ideas' });
+    const archived = screen.getByRole('tab', { name: 'Archived' });
+
+    ideas.focus();
+    fireEvent.keyDown(ideas, { key: 'End' });
+    expect(document.activeElement).toBe(archived);
+
+    fireEvent.keyDown(archived, { key: 'Home' });
+    expect(document.activeElement).toBe(ideas);
+  });
 });
 
 describe('EmptyState', () => {

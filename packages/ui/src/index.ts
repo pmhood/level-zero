@@ -118,6 +118,21 @@ export {
   type CardIcon,
 } from './editor/card-grid';
 export {
+  TABBED_BLOCK_NODE,
+  TABBED_BLOCK_TAB_BODY_NODE,
+  TABBED_BLOCK_TAB_NODE,
+  TABBED_BLOCK_TAB_TITLE_NODE,
+  TabbedBlock,
+  TabbedBlockTab,
+  TabbedBlockTabBody,
+  TabbedBlockTabTitle,
+  addTab,
+  insertTabbedBlock,
+  moveTab,
+  removeTab,
+  setActiveTab,
+} from './editor/tabbed-block';
+export {
   EDITOR_MODE_CONFIG,
   EDITOR_MODES,
   type EditorMode,

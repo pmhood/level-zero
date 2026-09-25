@@ -14,6 +14,12 @@ import { PullQuote, PullQuoteAttribution, PullQuoteText } from './pull-quote';
 import { SectionId } from './section-id';
 import { BASE_EDITOR_COMMANDS, createSlashMenuExtension, type EditorCommand } from './slash-menu';
 import { StepFlow, StepFlowStep, StepFlowStepBody, StepFlowStepTitle } from './step-flow';
+import {
+  TabbedBlock,
+  TabbedBlockTab,
+  TabbedBlockTabBody,
+  TabbedBlockTabTitle,
+} from './tabbed-block';
 
 export interface EditorExtensionOptions {
   placeholder: string;
@@ -85,6 +91,12 @@ export function createEditorExtensions({
     CardGridCardBody,
     CardGridCard,
     CardGrid,
+    // The tabbed block (#265) — named tabs, each holding ordinary document
+    // content, same reasoning as the callout above: every surface gets it.
+    TabbedBlockTabTitle,
+    TabbedBlockTabBody,
+    TabbedBlockTab,
+    TabbedBlock,
     // Markdown is an import/export format, never the stored one: documents are
     // persisted as TipTap JSON (`editor.getJSON()`).
     Markdown,
